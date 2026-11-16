@@ -10,7 +10,7 @@ import { CareerMode } from '../modes/CareerMode';
 import { clear, h, toast } from '../ui/dom';
 import { openSettingsDialog } from '../ui/SettingsDialog';
 import { openGarage } from '../ui/garage/GarageDialog';
-import { LAB_CARS } from '../data/cars/index';
+import { CAR_GROUPS } from '../data/cars/index';
 import { TouchControls } from '../ui/TouchControls';
 import { VehicleSound } from '../audio/core/VehicleSound';
 import type { AppContext, Mode } from './Mode';
@@ -173,7 +173,7 @@ export class App {
     if (!m) return;
     const label: Record<string, string> = { sandbox: 'Usar no Sandbox', race: 'Usar na corrida', dyno: 'Levar ao dinamômetro' };
     openGarage({
-      cars: LAB_CARS,
+      cars: CAR_GROUPS.flatMap((group) => group.cars),
       current: m.currentCar?.() ?? null,
       useLabel: label[m.id] ?? 'Usar este carro',
       onUse: (id, paint) => {

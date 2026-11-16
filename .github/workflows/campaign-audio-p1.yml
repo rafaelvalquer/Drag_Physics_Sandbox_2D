@@ -1,0 +1,68 @@
+name: P1 Brazilian cars and audio
+on:
+  push:
+    branches: [feature/p1-brazilian-cars-sandbox-audio]
+  pull_request:
+    branches: [main]
+jobs:
+  validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+  sandbox-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sandbox-brazilian-browser-evidence
+          path: test-results/
+          if-no-files-found: ignore
+
+  acoustic-matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        quality: [high, low]
+        rate: [48000, 44100]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Campaign stock acoustic reports
+        run: npx tsx scripts/audio-calibrate.ts --scope campaign --variant stock --quality ${{ matrix.quality }} --rate ${{ matrix.rate }} --short --tag calibrated --report artifacts/audio-campaign
+      - name: Prepared turbo acoustic reports
+        if: matrix.quality == 'high' && matrix.rate == 48000
+        run: npx tsx scripts/audio-calibrate.ts --scope campaign --variant turbo-build --quality high --rate 48000 --short --tag calibrated --report artifacts/audio-campaign --wav artifacts/audio-campaign
+      - name: Original campaign WAVs
+        if: matrix.quality == 'high' && matrix.rate == 48000
+        run: npx tsx scripts/audio-calibrate.ts --scope campaign --variant stock --quality high --rate 48000 --short --tag calibrated --wav artifacts/audio-campaign --report artifacts/audio-campaign
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: campaign-acoustics-${{ matrix.quality }}-${{ matrix.rate }}
+          path: artifacts/audio-campaign/
+          if-no-files-found: ignore

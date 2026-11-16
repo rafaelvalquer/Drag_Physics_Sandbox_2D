@@ -59,7 +59,7 @@ export const CAR_GM_CELTA_2003: CarConfig = {
     tempSensitivityPerC: 0.0018,
   },
   exhaust: periodStockExhaust(0.34, 32, { tailpipeDiameterMm: 44, mufflerAbsorption: 0.66, outputGain: 0.78 }),
-  acoustic: periodAcoustic({ intakeGain: 0.7, blockGain: 0.58, mechanicalNoise: 0.5, gearTeeth: 19 }),
+  acoustic: periodAcoustic({ exhaustGain: 1.02, intakeGain: 0.7, blockGain: 0.58, mechanicalNoise: 0.5, gearTeeth: 19 }),
   visual: {
     bodyStyle: 'celta03',
     color: '#c21d24',

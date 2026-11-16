@@ -63,7 +63,7 @@ export const CAR_VW_SAVEIRO_GL_1994: CarConfig = {
     tempSensitivityPerC: 0.0018,
   },
   exhaust: periodStockExhaust(0.32, 34, { tailpipeDiameterMm: 48, collectorLengthM: 2.2, outputGain: 0.78 }),
-  acoustic: periodAcoustic({ intakeGain: 0.85, blockGain: 0.62, mechanicalNoise: 0.72, gearTeeth: 17 }),
+  acoustic: periodAcoustic({ exhaustGain: 1.14, intakeGain: 0.85, blockGain: 0.62, mechanicalNoise: 0.72, gearTeeth: 17 }),
   visual: {
     bodyStyle: 'saveiroGl94',
     color: '#e9e9e4',

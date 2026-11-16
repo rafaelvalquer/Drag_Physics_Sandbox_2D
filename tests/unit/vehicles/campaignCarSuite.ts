@@ -5,7 +5,7 @@
  * campaignTargets.ts), and the car's own side art.
  */
 import { beforeAll, describe, expect, it } from 'vitest';
-import { CARS, LAB_CARS } from '../../../src/data/cars/index';
+import { CARS, LAB_CARS, SANDBOX_CARS } from '../../../src/data/cars/index';
 import { CAMPAIGN_CARS, findCampaignCar } from '../../../src/data/cars/campaign';
 import { CAMPAIGN_SOURCES } from '../../../src/data/cars/campaignSources';
 import { CAMPAIGN_TARGETS } from '../../../src/data/cars/campaignTargets';
@@ -39,12 +39,13 @@ export function campaignCarSuite(s: CampaignCarSpec): void {
   const tg = CAMPAIGN_TARGETS[car.id]!;
 
   describe(`${car.name} — registration, sources and data`, () => {
-    it('is a valid car, registered only in the campaign (not in the Sandbox lists)', () => {
+    it('shares the canonical factory car with free modes without changing the campaign catalogue', () => {
       expect(validateCar(car).errors).toEqual([]);
       expect(findCampaignCar(car.id)).toBe(car);
       expect(CAMPAIGN_CARS).toContain(car);
-      expect(CARS.map((c) => c.id)).not.toContain(car.id);
-      expect(LAB_CARS.map((c) => c.id)).not.toContain(car.id);
+      expect(SANDBOX_CARS.filter((c) => c.id === car.id)).toEqual([car]);
+      expect(LAB_CARS.filter((c) => c.id === car.id)).toEqual([car]);
+      expect(CARS.map((c) => c.id).includes(car.id)).toBe(car.id === 'vw-gol-gts-1988');
     });
 
     it('every cited source exists, with URL, model year and access date', () => {

@@ -8,7 +8,7 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { LAB_CARS } from '../src/data/cars/index';
+import { listCalibrationCases } from '../src/audio/analysis/calibrationCases';
 import { carToAcousticConfig } from '../src/audio/dsp/AcousticConfig';
 import { encodeWavMono } from '../src/audio/core/wav';
 import { firingHz } from '../src/audio/analysis/exhaustLab';
@@ -37,15 +37,19 @@ function levelMatch(x: Float32Array, targetRms = 0.1): Float32Array {
   return y;
 }
 
-for (const car of LAB_CARS) {
-  if (which !== 'all' && car.id !== which) continue;
+for (const sample of listCalibrationCases({
+  scope: (val('--scope') ?? 'all') as 'all' | 'campaign' | 'fictional' | 'lab' | 'general',
+  car: val('--car') ?? which,
+  variant: (val('--variant') ?? 'stock') as 'stock' | 'aspirated-build' | 'turbo-build' | 'all',
+})) {
+  const car = sample.car;
   const cfg = carToAcousticConfig(car, quality, 1);
   const red = car.engine.redlineRpm;
   const turbo = car.engine.induction === 'turbo';
   const boost = turbo ? 80000 : 0;
   const rpms = onlyRpm ? [onlyRpm] : [1000, 2000, 3000, 4000, 5000, 6000, red - 150].filter((r, i, a) => r < red && a.indexOf(r) === i);
   const loads = onlyLoad !== undefined ? [onlyLoad] : [0.25, 0.5, 0.75, 1];
-  console.log(`\n=== ${car.id} (${car.engine.cylinders} cil, ${car.engine.induction}, redline ${red}) intake @ ${fs} Hz, ${quality} ===`);
+  console.log(`\n=== ${sample.id} (${car.engine.cylinders} cil, ${car.engine.induction}, redline ${red}) intake @ ${fs} Hz, ${quality} ===`);
   console.log('rpm  load | tone.rms hiss.rms roar.rms noise/tone dB | norm.rms norm.pk sat% | fin.rms fin.pk | <500 .5-1.5k 1.5-4k >4k  harm  cent step');
   for (const rpm of rpms) {
     for (const load of loads) {
@@ -64,8 +68,8 @@ for (const car of LAB_CARS) {
     const parts = [['full', sweep.final], ['pulses', sweep.tone], ['hiss', sweep.hiss], ['roar', sweep.roar]] as const;
     for (const [name, sig] of parts) {
       if (source && source !== name && !(source === 'tone' && name === 'pulses')) continue;
-      writeFileSync(join(wavDir, `intake-${tag}-${car.id}-${name}.wav`), encodeWavMono(levelMatch(sig), fs));
+      writeFileSync(join(wavDir, `intake-${tag}-${sample.id}-${name}.wav`), encodeWavMono(levelMatch(sig), fs));
     }
-    console.log(`wrote ${wavDir}/intake-${tag}-${car.id}-{full,pulses,hiss,roar}.wav`);
+    console.log(`wrote ${wavDir}/intake-${tag}-${sample.id}-{full,pulses,hiss,roar}.wav`);
   }
 }

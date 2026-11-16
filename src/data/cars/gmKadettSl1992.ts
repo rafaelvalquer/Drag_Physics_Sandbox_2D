@@ -57,7 +57,7 @@ export const CAR_GM_KADETT_SL_1992: CarConfig = {
     tempSensitivityPerC: 0.0018,
   },
   exhaust: periodStockExhaust(0.34, 36, { tailpipeDiameterMm: 48, outputGain: 0.8 }),
-  acoustic: periodAcoustic({ intakeGain: 0.8, blockGain: 0.62, mechanicalNoise: 0.55, gearTeeth: 18 }),
+  acoustic: periodAcoustic({ exhaustGain: 1.09, intakeGain: 0.8, blockGain: 0.62, mechanicalNoise: 0.55, gearTeeth: 18 }),
   visual: {
     bodyStyle: 'kadettSl92',
     color: '#1f2a33',
