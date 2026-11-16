@@ -58,9 +58,15 @@ jobs:
       - run: npm ci
       - name: Campaign stock acoustic reports
         run: npx tsx scripts/audio-calibrate.ts --scope campaign --variant stock --quality ${{ matrix.quality }} --rate ${{ matrix.rate }} --short --tag calibrated --report artifacts/audio-campaign
-      - name: Prepared turbo acoustic reports
+      - name: Aspirated preparation acoustic matrix
+        run: npx tsx scripts/audio-calibrate.ts --scope campaign --variant aspirated-build --quality ${{ matrix.quality }} --rate ${{ matrix.rate }} --short --tag calibrated --report artifacts/audio-campaign
+      - name: Turbo preparation acoustic matrix
+        run: npx tsx scripts/audio-calibrate.ts --scope campaign --variant turbo-build --quality ${{ matrix.quality }} --rate ${{ matrix.rate }} --short --tag calibrated --report artifacts/audio-campaign
+      - name: Export prepared builds WAVs
         if: matrix.quality == 'high' && matrix.rate == 48000
-        run: npx tsx scripts/audio-calibrate.ts --scope campaign --variant turbo-build --quality high --rate 48000 --short --tag calibrated --report artifacts/audio-campaign --wav artifacts/audio-campaign
+        run: |
+          npx tsx scripts/audio-calibrate.ts --scope campaign --variant aspirated-build --quality high --rate 48000 --short --tag calibrated --report artifacts/audio-campaign --wav artifacts/audio-campaign
+          npx tsx scripts/audio-calibrate.ts --scope campaign --variant turbo-build --quality high --rate 48000 --short --tag calibrated --report artifacts/audio-campaign --wav artifacts/audio-campaign
       - name: Original campaign WAVs
         if: matrix.quality == 'high' && matrix.rate == 48000
         run: npx tsx scripts/audio-calibrate.ts --scope campaign --variant stock --quality high --rate 48000 --short --tag calibrated --wav artifacts/audio-campaign --report artifacts/audio-campaign
