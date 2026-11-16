@@ -7,7 +7,8 @@ import { CAR_VW_SAVEIRO_GL_1994 } from '../../../src/data/cars/vwSaveiroGl1994';
 import { CAR_GM_CELTA_2003 } from '../../../src/data/cars/gmCelta2003';
 import type { CarConfig } from '../../../src/data/schema';
 import { buildKey, resolveBuild, resolveBuildOrThrow } from '../../../src/game/career/tuning/BuildResolver';
-import { PARTS } from '../../../src/game/career/tuning/parts';
+import { CATEGORY_ORDER, PARTS, WORKSHOP_TABS, findPart } from '../../../src/game/career/tuning/parts';
+import { isPartUnlocked, partStatus } from '../../../src/game/career/CareerProgression';
 import { EngineDyno } from '../../../src/physics/engine/EngineDyno';
 
 const at = (car: CarConfig, rpm: number): number => new MonotoneCubic(car.engine.torqueCurve.rpm, car.engine.torqueCurve.torqueNm).evaluate(rpm);
@@ -20,7 +21,7 @@ const ok = (base: CarConfig, ids: string[]) => {
 describe('parts catalogue', () => {
   it('has the brief prices and describes the physics of every part', () => {
     const price = Object.fromEntries(PARTS.map((p) => [p.id, p.price]));
-    expect(price).toEqual({
+    expect(price).toMatchObject({
       'filter-sport': 250,
       'exhaust-sport': 450,
       'manifold-sport': 650,
@@ -148,5 +149,62 @@ describe('physical effects', () => {
     expect(c.transmission.clutch.maxTorqueNm).toBe(Math.round(235 * 1.5));
     expect(c.transmission.finalDrive).toBeCloseTo(4.111 * 1.12, 3);
     expect(c.engine.torqueCurve).toEqual(base.engine.torqueCurve);
+  });
+});
+
+describe('expanded premium workshop', () => {
+  it('has nine navigable systems and uniquely grouped subcategories', () => {
+    expect(WORKSHOP_TABS.map((t) => t.label)).toEqual([
+      'Motor', 'Admissão', 'Escape', 'Transmissão', 'Pneus', 'Turbo', 'Eletrônica', 'Arrefecimento', 'Estrutura',
+    ]);
+    const all = WORKSHOP_TABS.flatMap((t) => t.categories);
+    expect(new Set(all).size).toBe(all.length);
+    expect(all).toEqual(CATEGORY_ORDER);
+    expect(PARTS.length).toBeGreaterThan(60);
+    for (const part of PARTS) expect(all).toContain(part.category);
+  });
+
+  it('locks chapter 2 and 3 entries while keeping chapter 1 unlock conditions', () => {
+    const completedEventIds = ['night-1'];
+    const p = findPart('cam-street-strong')!;
+    expect(isPartUnlocked({ completedEventIds }, p)).toBe(false);
+    const status = partStatus(
+      { completedEventIds, credits: 100000, inventoryPartIds: [] },
+      { baseCarId: CAR_VW_GOL_GTS_1988.id, installedParts: [] }, p,
+    );
+    expect(status.state).toBe('locked');
+    expect(status.label).toContain('Capítulo 2');
+  });
+
+  it('changes throttle dimensions without an arbitrary advertised-power factor', () => {
+    const car = ok(CAR_VW_GOL_GTS_1988, ['throttle-rework']).car;
+    expect(car.engine.throttle.bodyDiameterMm).toBe(CAR_VW_GOL_GTS_1988.engine.throttle.bodyDiameterMm + 2);
+    expect(car.engine.throttle.responseTimeS).toBeLessThan(CAR_VW_GOL_GTS_1988.engine.throttle.responseTimeS);
+  });
+
+  it('flywheel alters inertia, weight removal alters mass, not the base torque curve', () => {
+    const base = ok(CAR_VW_GOL_GTS_1988, []).car;
+    const fw = ok(CAR_VW_GOL_GTS_1988, ['flywheel-light']).car;
+    expect(fw.engine.inertiaKgM2).toBeLessThan(base.engine.inertiaKgM2);
+    const light = ok(CAR_VW_GOL_GTS_1988, ['weight-light']).car;
+    expect(light.massKg).toBe(base.massKg - 18);
+    expect(light.engine.torqueCurve).toEqual(base.engine.torqueCurve);
+  });
+
+  it('separates turbo hardware from turbo kit and prevents duplicate slots', () => {
+    const noKit = resolveBuild(CAR_VW_GOL_GTS_1988, ['ic-small']);
+    expect(noKit.ok).toBe(false);
+    const duplicates = resolveBuild(CAR_VW_GOL_GTS_1988, ['throttle-rework', 'throttle-large']);
+    expect(duplicates.ok).toBe(false);
+    const boosted = ok(CAR_VW_GOL_GTS_1988, ['turbo-basic', 'clutch-reinforced', 'ic-small']);
+    const basic = ok(CAR_VW_GOL_GTS_1988, ['turbo-basic', 'clutch-reinforced']);
+    expect(boosted.car.massKg).toBe(basic.car.massKg + 3);
+    expect(boosted.car.engine.torqueCurve.torqueNm).not.toEqual(basic.car.engine.torqueCurve.torqueNm);
+  });
+
+  it('keeps base chapter 1 Gol turbo range near established balancing targets', () => {
+    const r = ok(CAR_VW_GOL_GTS_1988, ['turbo-basic', 'clutch-reinforced', 'filter-sport', 'exhaust-sport']);
+    expect(r.peakPowerCv).toBeGreaterThan(140);
+    expect(r.peakPowerCv).toBeLessThan(185);
   });
 });
