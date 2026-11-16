@@ -156,12 +156,12 @@ export class VehicleVisualController {
         const o = set.meta.bodyOriginPx;
         const bodyFrame = set.frames.body;
         const layer = (frame: FrameName): Phaser.GameObjects.Image => img(frame).setOrigin(o.x / bodyFrame.w, o.y / bodyFrame.h).setScale(s);
-        const wheel = (): WheelSprites => ({ hub: img('hub').setScale(s), sharp: img('wheel').setScale(s), soft: img('wheelSoft').setScale(s).setAlpha(0), full: img('wheelFull').setScale(s).setAlpha(0) });
+        const wheel = (hub: FrameName): WheelSprites => ({ hub: img(hub).setScale(s), sharp: img('wheel').setScale(s), soft: img('wheelSoft').setScale(s).setAlpha(0), full: img('wheelFull').setScale(s).setAlpha(0) });
         const shadow = img('shadow').setScale(s);
         const beam = this.scene.add.image(0, 0, FX_TEXTURE, 'beam').setOrigin(0.02, 0.5).setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
         const under = layer('under');
-        const rear = wheel();
-        const front = wheel();
+        const rear = wheel('hubRear');
+        const front = wheel('hub');
         const body = layer('body');
         const gloss = layer('gloss');
         const lights = layer('lights').setBlendMode(Phaser.BlendModes.ADD).setVisible(false);

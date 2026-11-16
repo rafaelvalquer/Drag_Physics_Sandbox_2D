@@ -37,6 +37,7 @@ Abra o endereço que o Vite mostrar e clique em **Ativar som e começar**: o nav
 | `npm run bench` | benchmark de física e áudio (Node) |
 | `npm run assets` | exporta as camadas SVG da arte de cada carro e um manifesto com os metadados visuais para `dist-assets/sprites` |
 | `npm run calibrate:audio` | recalibra os fatores de escala Pa → saída digital do áudio |
+| `npm run calibrate:vehicle` | teste de aceleração de fábrica (0–80/100/120 km/h, 400 m, 1000 m, velocidade máxima) com a física real, comparado com as metas do Gol GTS 1988; aceita `-- <id-do-carro> [id-da-pista]` |
 
 ## Controles
 
@@ -108,8 +109,11 @@ O botão **Garagem** abre uma prévia grande de cada carro em estúdio, com fich
 | Kronos V8 | 5,7 L V8 cross-plane | aspirado | traseira |
 | Tempest V8 | 4,0 L V8 flat-plane | aspirado | traseira |
 | Aurora V12 (lab) | 6,5 L V12 | aspirado | traseira |
+| Volkswagen Gol GTS 1988 — AP 1.8S Original | 1,8 L I4 a etanol (AP 1.8S) | aspirado | dianteira |
 
-Todos os carros são fictícios. O Aurora V12 é um carro de laboratório e só aparece no Sandbox e no dinamômetro.
+Os sete primeiros carros são fictícios. O Aurora V12 é um carro de laboratório e só aparece no Sandbox e no dinamômetro.
+
+O **Gol GTS 1988** é um carro real em configuração original de fábrica. Os dados vêm do manual do proprietário, com a procedência de cada valor documentada. O desempenho foi calibrado contra as metas do manual (0–100 km/h, 400 m, 1000 m e velocidade máxima, todos a menos de 3 %). Detalhes em [docs/vehicles/vw-gol-gts-1988.md](docs/vehicles/vw-gol-gts-1988.md).
 
 | Pista | Condições |
 |---|---|
@@ -125,6 +129,7 @@ Todos os carros são fictícios. O Aurora V12 é um carro de laboratório e só 
 - [Modelo acústico](docs/ACOUSTIC_MODEL.md): o que é validado matematicamente e o que exigiria calibração real
 - [Sistema visual](docs/VISUAL_SYSTEM.md): pipeline de arte, animações, pista, cenários, câmera, instrumentos e perfis gráficos
 - [Integração open source](docs/OPEN_SOURCE_INTEGRATION.md)
+- [Volkswagen Gol GTS 1988](docs/vehicles/vw-gol-gts-1988.md): fontes, procedência dos dados, calibração e parâmetros ainda estimados
 - [Controles](docs/CONTROLS.md) · [Sandbox](docs/SANDBOX.md) · [Testes](docs/TESTING.md)
 - [Limitações conhecidas](docs/LIMITATIONS.md)
 

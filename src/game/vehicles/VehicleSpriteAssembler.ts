@@ -13,7 +13,7 @@ import { buildWheelArt } from './art/wheelArt';
  *
  * Nothing here runs per frame: sprite sets are cached by a signature of the visual inputs.
  */
-export type FrameName = 'under' | 'body' | 'gloss' | 'lights' | 'brake' | 'shadow' | 'hub' | 'wheel' | 'wheelSoft' | 'wheelFull';
+export type FrameName = 'under' | 'body' | 'gloss' | 'lights' | 'brake' | 'shadow' | 'hub' | 'hubRear' | 'wheel' | 'wheelSoft' | 'wheelFull';
 
 export interface AtlasFrame {
   x: number;
@@ -89,6 +89,7 @@ export function buildVehicleLayers(car: CarConfig, pxPerM: number): VehicleLayer
       { name: 'brake', svg: body.brake, ...frame },
       { name: 'shadow', svg: body.shadow.svg, w: body.shadow.w, h: body.shadow.h },
       { name: 'hub', svg: wheel.hubSvg, w: wheel.size, h: wheel.size },
+      { name: 'hubRear', svg: wheel.hubRearSvg, w: wheel.size, h: wheel.size },
       { name: 'wheel', svg: wheel.wheelSvg, w: wheel.size, h: wheel.size },
     ],
     meta: {
@@ -193,7 +194,7 @@ export function assembleVehicleSprites(car: CarConfig, pxPerM: number): Promise<
     // pack: tall frames stacked, wheels on one row
     const PAD = 2;
     const order: FrameName[] = ['under', 'body', 'gloss', 'lights', 'brake', 'shadow'];
-    const row: FrameName[] = ['hub', 'wheel', 'wheelSoft', 'wheelFull'];
+    const row: FrameName[] = ['hub', 'hubRear', 'wheel', 'wheelSoft', 'wheelFull'];
     let width = 0;
     let y = PAD;
     const frames = {} as Record<FrameName, AtlasFrame>;

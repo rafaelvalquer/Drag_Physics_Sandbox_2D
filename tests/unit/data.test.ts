@@ -4,7 +4,7 @@ import { TRACKS } from '../../src/data/tracks/index';
 import { validateCar, validateTrack } from '../../src/data/schema';
 
 describe('content data', () => {
-  it('ships the six fictional cars of the plan with the specified engines and masses', () => {
+  it('ships the six fictional cars of the plan and the Gol GTS 1988 with their engines and masses', () => {
     const expected: Record<string, { cyl: number; cv: number; kg: number; induction: string }> = {
       'arco-1600': { cyl: 4, cv: 120, kg: 1050, induction: 'NA' },
       'vetra-rs': { cyl: 4, cv: 280, kg: 1260, induction: 'turbo' },
@@ -12,6 +12,8 @@ describe('content data', () => {
       'orion-xr': { cyl: 6, cv: 420, kg: 1480, induction: 'turbo' },
       'kronos-v8': { cyl: 8, cv: 430, kg: 1590, induction: 'NA' },
       'tempest-v8': { cyl: 8, cv: 500, kg: 1390, induction: 'NA' },
+      // real car: 930 kg tare (factory) + 75 kg driver + 22 kg fuel
+      'vw-gol-gts-1988': { cyl: 4, cv: 99, kg: 1027, induction: 'NA' },
     };
     expect(CARS.map((c) => c.id).sort()).toEqual(Object.keys(expected).sort());
     for (const c of CARS) {

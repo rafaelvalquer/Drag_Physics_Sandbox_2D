@@ -37,15 +37,15 @@ export function composeVehicle(ctx: CanvasRenderingContext2D, set: VehicleSprite
     drawFrame(ctx, set, 'shadow', midX - (sh.w * k) / 2, groundY - (sh.h * k) / 2 - 0.06 * px, k);
   }
   drawFrame(ctx, set, 'under', ox, oy, k);
-  const wheels: [typeof m.wheelCentres.rear, number, 'wheel' | 'wheelSoft' | 'wheelFull'][] = [
-    [m.wheelCentres.rear, o.rearAngle ?? 0, o.rearFrame ?? 'wheel'],
-    [m.wheelCentres.front, o.frontAngle ?? 0, o.frontFrame ?? 'wheel'],
+  const wheels: [typeof m.wheelCentres.rear, number, 'wheel' | 'wheelSoft' | 'wheelFull', 'hub' | 'hubRear'][] = [
+    [m.wheelCentres.rear, o.rearAngle ?? 0, o.rearFrame ?? 'wheel', 'hubRear'],
+    [m.wheelCentres.front, o.frontAngle ?? 0, o.frontFrame ?? 'wheel', 'hub'],
   ];
-  for (const [c, angle, frame] of wheels) {
+  for (const [c, angle, frame, hub] of wheels) {
     const wf = set.frames.wheel;
     const cx = x + c.x * px;
     const cy = groundY - c.y * px;
-    drawFrame(ctx, set, 'hub', cx - (wf.w * k) / 2, cy - (wf.h * k) / 2, k);
+    drawFrame(ctx, set, hub, cx - (wf.w * k) / 2, cy - (wf.h * k) / 2, k);
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(angle);

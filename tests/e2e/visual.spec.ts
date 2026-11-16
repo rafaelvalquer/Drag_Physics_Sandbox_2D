@@ -359,6 +359,102 @@ test('dyno: test cell with the car on the rollers and the measured curves', asyn
   expect(cam).toBe(false);
 });
 
+test('Gol GTS 1988: garage, sandbox launch, race with results and dyno', async ({ page }) => {
+  const GOL = 'vw-gol-gts-1988';
+  await boot(page);
+  // garage: the option, the technical sheet read from the configuration, choose it
+  await page.getByTestId('garage-open').click();
+  await page.getByTestId(`garage-car-${GOL}`).click();
+  await expect(page.getByTestId('garage')).toContainText('Volkswagen Gol GTS 1988 — AP 1.8S Original');
+  const specs = page.getByTestId('garage-specs');
+  await expect(specs).toContainText('99 cv');
+  await expect(specs).toContainText('146 N·m a 3200 rpm');
+  await expect(specs).toContainText('5 marchas');
+  await expect(specs).toContainText('dianteira');
+  await page.waitForTimeout(400);
+  await shot(page, `garage-${GOL}`);
+  await page.getByTestId('garage-use').click();
+  await expect.poll(() => mode<string>(page, 'm.runner.player.sim.car.id')).toBe(GOL);
+
+  // sandbox: idle, launch (front wheels spin), second gear
+  await waitEngineRunning(page);
+  let v = await waitArt(page);
+  await page.waitForTimeout(500);
+  v = await visual(page);
+  await shot(page, 'gol-sandbox-idle');
+  expectSound(v);
+  expect(v.vehicles[0]!.lengthM).toBeCloseTo(3.849, 6);
+  expect(v.vehicles[0]!.wheelbaseM).toBeCloseTo(2.358, 6);
+  await page.locator('#game').click({ position: { x: 50, y: 50 } });
+  await page.keyboard.press('e');
+  await expect.poll(() => mode<number>(page, 'm.runner.player.sim.gear')).toBe(1);
+  await page.keyboard.down('w');
+  await expect.poll(async () => (await visual(page)).particles.emitted.smoke, { timeout: 8000 }).toBeGreaterThan(5);
+  await page.waitForTimeout(250);
+  v = await visual(page);
+  await shot(page, 'gol-sandbox-launch');
+  expectSound(v);
+  // front-wheel drive: the front (driven) wheel turns faster than the rear one while spinning
+  const spin = await mode<{ driven: number; free: number }>(page, '({ driven: m.runner.player.sim.telemetry.wheelOmegaDriven, free: m.runner.player.sim.telemetry.wheelOmegaFree })');
+  expect(spin.driven).toBeGreaterThan(spin.free);
+  await expect.poll(() => mode<number>(page, 'm.runner.player.sim.engine.rpm'), { timeout: 10_000 }).toBeGreaterThan(5800);
+  await page.keyboard.press('e');
+  await expect.poll(() => mode<number>(page, 'm.runner.player.sim.gear'), { timeout: 5000 }).toBe(2);
+  await page.waitForTimeout(600);
+  await shot(page, 'gol-sandbox-second');
+  expectSound(await visual(page));
+  await page.keyboard.up('w');
+
+  // race: the Gol against the AI over an eighth of a mile, HUD and results
+  await page.locator('#topbar button[data-mode=race]').click();
+  await page.getByTestId('race-car').selectOption(GOL);
+  await page.getByTestId('race-distance').selectOption('eighth');
+  await expect.poll(() => mode<string>(page, 'm.runner.player.sim.car.id')).toBe(GOL);
+  await page.waitForFunction(() => (window as unknown as { __app: { debug: { current: { runner: { player: { sim: { engine: { runState: string } } } } } } } }).__app.debug.current.runner.player.sim.engine.runState === 'RUNNING');
+  await waitArt(page);
+  await page.locator('#game').click({ position: { x: 50, y: 50 } });
+  await page.keyboard.press('e');
+  await page.waitForFunction(() => {
+    const r = (window as unknown as { __app: { debug: { current: { race: { greenAt: number | null; time: number } } } } }).__app.debug.current.race;
+    return r.greenAt !== null && r.time >= r.greenAt;
+  }, undefined, { timeout: 20_000 });
+  await page.keyboard.down('w');
+  await page.waitForTimeout(900);
+  await shot(page, 'gol-race-launch');
+  expectSound(await visual(page));
+  const deadline = Date.now() + 60_000;
+  while (Date.now() < deadline) {
+    const s = await mode<{ phase: string; gear: number; rpm: number; red: number; locked: boolean; n: number }>(
+      page,
+      '({ phase: m.race.phase, gear: m.runner.player.sim.gear, rpm: m.runner.player.sim.engine.rpm, red: m.runner.player.sim.car.engine.redlineRpm, locked: m.runner.player.sim.clutchCtl.mode === "LOCKED", n: m.runner.player.sim.gearbox.gearCount })',
+    );
+    if (s.phase === 'finished') break;
+    if (s.locked && s.gear < s.n && s.rpm > s.red - 300) await page.keyboard.press('e');
+    await page.waitForTimeout(50);
+  }
+  await page.keyboard.up('w');
+  await expect(page.getByTestId('result-card')).toBeVisible();
+  await shot(page, 'gol-race-results');
+
+  // dyno: the same engine measured on the bench
+  await page.locator('#topbar button[data-mode=dyno]').click();
+  await page.getByTestId('dyno-car').selectOption(GOL);
+  await expect.poll(() => mode<string>(page, 'm.car.id')).toBe(GOL);
+  await expect.poll(() => mode<string>(page, 'm.bench.engine.runState'), { timeout: 15_000 }).toBe('RUNNING');
+  await page.getByTestId('dyno-sweep').click();
+  await expect(page.getByTestId('dyno-status')).toContainText('Torque máx.', { timeout: 90_000 });
+  await page.waitForTimeout(300);
+  await shot(page, 'gol-dyno-measured');
+  const peak = await mode<{ t: number; tRpm: number; p: number; pRpm: number }>(
+    page,
+    '(() => { let t = { v: 0, r: 0 }, p = { v: 0, r: 0 }; for (const x of m.points) { if (x.torqueNm > t.v) t = { v: x.torqueNm, r: x.rpm }; if (x.powerCv > p.v) p = { v: x.powerCv, r: x.rpm }; } return { t: t.v, tRpm: t.r, p: p.v, pRpm: p.r }; })()',
+  );
+  expect(Math.abs(peak.t - 146) / 146).toBeLessThan(0.02);
+  expect(Math.abs(peak.p - 99) / 99).toBeLessThan(0.02);
+  expect(Math.abs(peak.tRpm - 3200)).toBeLessThanOrEqual(400);
+  expect(Math.abs(peak.pRpm - 5600)).toBeLessThanOrEqual(400);
+});
+
 test('no texture leak when cars, tracks and lighting change', async ({ page }) => {
   await boot(page, false);
   await waitArt(page);

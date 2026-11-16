@@ -21,6 +21,7 @@ const pxPerM = Number(process.argv[3] ?? 144);
 mkdirSync(outDir, { recursive: true });
 
 const manifest: Record<string, unknown>[] = [];
+let layerCount = 0;
 for (const car of LAB_CARS) {
   const v = validateCar(car);
   if (!v.ok) throw new Error(`${car.id}: invalid configuration – ${v.errors.join('; ')}`);
@@ -30,8 +31,9 @@ for (const car of LAB_CARS) {
     const file = `${car.id}.${l.name}.svg`;
     writeFileSync(join(outDir, file), l.svg);
     files[l.name] = { file, sizePx: [l.w, l.h] };
+    layerCount++;
   }
   manifest.push({ id: car.id, name: car.name, bodyStyle: car.visual.bodyStyle, layers: files, meta });
 }
 writeFileSync(join(outDir, 'manifest.json'), `${JSON.stringify({ generator: 'drag-physics-sandbox-2d asset pipeline', pxPerMetre: pxPerM, cars: manifest }, null, 2)}\n`);
-console.log(`${manifest.length} cars, ${manifest.length * 8} SVG layers → ${outDir}`);
+console.log(`${manifest.length} cars, ${layerCount} SVG layers → ${outDir}`);

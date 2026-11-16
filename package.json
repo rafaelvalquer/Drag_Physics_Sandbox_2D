@@ -15,6 +15,7 @@
     "test:e2e": "playwright test",
     "test:e2e:build": "node -e \"process.env.E2E_BUILD='1';require('child_process').execSync('npx playwright test',{stdio:'inherit'})\"",
     "calibrate:audio": "tsx scripts/audio-calibrate.ts",
+    "calibrate:vehicle": "tsx scripts/calibrate-vehicle.ts",
     "bench": "tsx scripts/bench/benchmark.ts",
     "assets": "tsx scripts/assets/export-sprites.ts"
   },

@@ -10,8 +10,29 @@ export interface WheelArt {
   /** Square frame size (px). */
   size: number;
   wheelSvg: string;
+  /** Front hub: brake disc and caliper. */
   hubSvg: string;
+  /** Rear hub: the same disc and caliper, or a drum when the design says so. */
+  hubRearSvg: string;
   rimRadiusPx: number;
+}
+
+/**
+ * One teardrop hole of a dish wheel, pointing at the centre: round end of radius `a` centred at
+ * `rc`, tip at `rt` (all relative to the rim radius q), rotated by `ang` around (cx, cy).
+ */
+function teardrop(cx: number, cy: number, q: number, ang: number, rc = 0.67, a = 0.105, rt = 0.4): string {
+  const d = (rc - rt) * q;
+  const beta = Math.acos((a * q) / d);
+  const rot = (x: number, y: number): [number, number] => [cx + x * Math.cos(ang) - y * Math.sin(ang), cy + x * Math.sin(ang) + y * Math.cos(ang)];
+  const [tx, ty] = rot(rt * q, 0);
+  const [p0x, p0y] = rot(rc * q + a * q * Math.cos(Math.PI + beta), a * q * Math.sin(Math.PI + beta));
+  const [p1x, p1y] = rot(rc * q + a * q * Math.cos(Math.PI - beta), a * q * Math.sin(Math.PI - beta));
+  return `M${f2(tx)} ${f2(ty)}L${f2(p0x)} ${f2(p0y)}A${f2(a * q)} ${f2(a * q)} 0 1 1 ${f2(p1x)} ${f2(p1y)}Z`;
+}
+
+function circlePath(cx: number, cy: number, r: number): string {
+  return `M${f1(cx - r)} ${f1(cy)}a${f1(r)} ${f1(r)} 0 1 0 ${f1(2 * r)} 0a${f1(r)} ${f1(r)} 0 1 0 ${f1(-2 * r)} 0Z`;
 }
 
 const FINISH = {
@@ -77,6 +98,8 @@ function spokePaths(d: WheelDesign, q: number): string[] {
       const k = polar(0, 0, r0, 0.3);
       return [`M${f2(a[0])} ${f2(a[1])}Q${f2(b[0])} ${f2(b[1])} ${f2(c[0])} ${f2(c[1])}L${f2(e[0])} ${f2(e[1])}Q${f2(g[0])} ${f2(g[1])} ${f2(k[0])} ${f2(k[1])}Z`];
     }
+    case 'teardrop':
+      return []; // a pierced dish, drawn in one piece by buildWheelArt
   }
 }
 
@@ -139,6 +162,22 @@ export function buildWheelArt(d: WheelDesign, tyreRadiusM: number, pxPerM: numbe
   w.push(`<path fill-rule="evenodd" fill="url(#lip)" d="${ring(c, q * 0.905, q)}"/>`);
   w.push(`<circle cx="${f1(c)}" cy="${f1(c)}" r="${f1(q)}" fill="none" stroke="#000000" stroke-opacity="0.75" stroke-width="${f1(Math.max(1, q * 0.02))}"/>`);
   w.push(`<circle cx="${f1(c)}" cy="${f1(c)}" r="${f1(q * 0.905)}" fill="none" stroke="#000000" stroke-opacity="0.45" stroke-width="${f1(Math.max(0.8, q * 0.012))}"/>`);
+  // dish wheels: one face pierced by the holes (even-odd), with a machined bevel around each hole
+  if (d.style === 'teardrop') {
+    w.push(`<defs><linearGradient id="dish" gradientUnits="userSpaceOnUse" x1="${f1(c - q)}" y1="${f1(c - q)}" x2="${f1(c + q)}" y2="${f1(c + q)}">
+      <stop offset="0" stop-color="${fin.hi}"/><stop offset="0.45" stop-color="${fin.mid}"/><stop offset="0.7" stop-color="${shade(fin.mid, 0.12)}"/><stop offset="1" stop-color="${fin.lo}"/>
+    </linearGradient></defs>`);
+    const holes: string[] = [];
+    for (let i = 0; i < d.count; i++) holes.push(teardrop(c, c, q, (i / d.count) * Math.PI * 2 - Math.PI / 2));
+    w.push(`<path fill-rule="evenodd" fill="url(#dish)" d="${circlePath(c, c, q * 0.905)}${holes.join('')}"/>`);
+    for (const hp of holes) {
+      w.push(`<path d="${hp}" fill="none" stroke="${fin.lo}" stroke-opacity="0.95" stroke-width="${f1(Math.max(0.8, q * 0.03))}" stroke-linejoin="round"/>`);
+      w.push(`<path d="${hp}" fill="none" stroke="${fin.hi}" stroke-opacity="0.35" stroke-width="${f1(Math.max(0.5, q * 0.01))}" stroke-linejoin="round"/>`);
+    }
+    // raised outer ring and the recessed centre around the nuts
+    w.push(`<circle cx="${f1(c)}" cy="${f1(c)}" r="${f1(q * 0.83)}" fill="none" stroke="#ffffff" stroke-opacity="0.22" stroke-width="${f1(Math.max(0.6, q * 0.012))}"/>`);
+    w.push(`<circle cx="${f1(c)}" cy="${f1(c)}" r="${f1(q * 0.32)}" fill="none" stroke="#000000" stroke-opacity="0.3" stroke-width="${f1(Math.max(0.6, q * 0.02))}"/>`);
+  }
   // spokes
   const paths = spokePaths(d, q);
   for (let i = 0; i < d.count; i++) {
@@ -158,8 +197,9 @@ export function buildWheelArt(d: WheelDesign, tyreRadiusM: number, pxPerM: numbe
     w.push(`<polygon points="${hexPts.join(' ')}" fill="${capColor}" stroke="#000000" stroke-opacity="0.5" stroke-width="${f1(Math.max(0.6, q * 0.01))}"/>`);
     w.push(`<circle cx="${f1(c)}" cy="${f1(c)}" r="${f1(q * 0.06)}" fill="${shade(capColor, -0.5)}"/>`);
   } else {
-    for (let i = 0; i < 5; i++) {
-      const [x, y] = polar(c, c, q * 0.155, (i / 5) * Math.PI * 2 - Math.PI / 2 + Math.PI / 5);
+    const lugs = d.lugs ?? 5;
+    for (let i = 0; i < lugs; i++) {
+      const [x, y] = polar(c, c, q * 0.155, (i / lugs) * Math.PI * 2 - Math.PI / 2 + Math.PI / lugs);
       w.push(`<circle cx="${f1(x)}" cy="${f1(y)}" r="${f1(q * 0.034)}" fill="#1b1d1f" stroke="${fin.hi}" stroke-opacity="0.5" stroke-width="${f1(Math.max(0.5, q * 0.008))}"/>`);
     }
     w.push(`<circle cx="${f1(c)}" cy="${f1(c)}" r="${f1(q * 0.085)}" fill="${shade(capColor, -0.15)}" stroke="${fin.hi}" stroke-opacity="0.6" stroke-width="${f1(Math.max(0.5, q * 0.01))}"/>`);
@@ -190,10 +230,7 @@ export function buildWheelArt(d: WheelDesign, tyreRadiusM: number, pxPerM: numbe
   for (const k of [0.56, 0.68, 0.8, 0.92]) {
     h.push(`<circle cx="${f1(c)}" cy="${f1(c)}" r="${f1(rd * k)}" fill="none" stroke="#000000" stroke-opacity="0.16" stroke-width="${f1(Math.max(0.5, rd * 0.012))}"/>`);
   }
-  for (const [rr, n, ph] of [
-    [0.62, 14, 0],
-    [0.82, 14, 0.22],
-  ] as const) {
+  for (const [rr, n, ph] of d.discDrilled === false ? [] : ([[0.62, 14, 0], [0.82, 14, 0.22]] as const)) {
     for (let i = 0; i < n; i++) {
       const [x, y] = polar(c, c, rd * rr, (i / n) * Math.PI * 2 + ph);
       h.push(`<circle cx="${f1(x)}" cy="${f1(y)}" r="${f1(Math.max(0.7, rd * 0.028))}" fill="#25282b"/>`);
@@ -208,5 +245,30 @@ export function buildWheelArt(d: WheelDesign, tyreRadiusM: number, pxPerM: numbe
     h.push(`<circle cx="${f1(x)}" cy="${f1(y)}" r="${f1(Math.max(0.7, rd * 0.04))}" fill="#15171a"/>`);
   }
 
-  return { size, wheelSvg: svgDoc(size, size, w.join('')), hubSvg: svgDoc(size, size, h.join('')), rimRadiusPx: q };
+  const hubSvg = svgDoc(size, size, h.join(''));
+
+  // ---------------------------------------------------------------- rear hub: drum brake
+  let hubRearSvg = hubSvg;
+  if (d.rearBrake === 'drum') {
+    const dr: string[] = [];
+    const rr = 0.8 * q;
+    dr.push(`<defs><radialGradient id="drum" gradientUnits="userSpaceOnUse" cx="${f1(c - rr * 0.2)}" cy="${f1(c - rr * 0.25)}" r="${f1(rr * 1.2)}">
+      <stop offset="0" stop-color="#5d6268"/><stop offset="0.6" stop-color="#3a3e43"/><stop offset="1" stop-color="#1d1f22"/>
+    </radialGradient></defs>`);
+    dr.push(`<circle cx="${f1(c)}" cy="${f1(c)}" r="${f1(q * 0.975)}" fill="#07080a"/>`);
+    dr.push(`<circle cx="${f1(c)}" cy="${f1(c)}" r="${f1(rr)}" fill="url(#drum)"/>`);
+    // cooling ribs on the drum skirt, the hub face and the adjuster inspection hole
+    for (const k of [0.94, 0.86]) {
+      dr.push(`<circle cx="${f1(c)}" cy="${f1(c)}" r="${f1(rr * k)}" fill="none" stroke="#000000" stroke-opacity="0.35" stroke-width="${f1(Math.max(0.6, rr * 0.03))}"/>`);
+    }
+    dr.push(`<circle cx="${f1(c)}" cy="${f1(c)}" r="${f1(rr * 0.55)}" fill="none" stroke="#ffffff" stroke-opacity="0.12" stroke-width="${f1(Math.max(0.6, rr * 0.02))}"/>`);
+    dr.push(`<circle cx="${f1(c)}" cy="${f1(c)}" r="${f1(rr * 0.38)}" fill="#26292d"/>`);
+    {
+      const [x, y] = polar(c, c, rr * 0.68, 2.4);
+      dr.push(`<circle cx="${f1(x)}" cy="${f1(y)}" r="${f1(Math.max(0.8, rr * 0.05))}" fill="#0b0c0e"/>`);
+    }
+    hubRearSvg = svgDoc(size, size, dr.join(''));
+  }
+
+  return { size, wheelSvg: svgDoc(size, size, w.join('')), hubSvg, hubRearSvg, rimRadiusPx: q };
 }

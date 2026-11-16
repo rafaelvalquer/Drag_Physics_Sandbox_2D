@@ -11,7 +11,7 @@ npm test
 | Arquivo | O que verifica |
 |---|---|
 | `tests/unit/core.test.ts` | cv = W/735,49875; rpm ↔ rad/s; densidade do ar e velocidade do som pela lei dos gases; distâncias oficiais; filtro de primeira ordem exato; interpolação cúbica monotônica sem overshoot; PRNG determinístico |
-| `tests/unit/data.test.ts` | os seis carros e as quatro pistas do plano; tabelas de ignição cobrindo 720° com cada cilindro uma vez; mensagens de validação legíveis; cópia profunda independente |
+| `tests/unit/data.test.ts` | os seis carros fictícios do plano, o Gol GTS 1988 e as quatro pistas; tabelas de ignição cobrindo 720° com cada cilindro uma vez; mensagens de validação legíveis; cópia profunda independente |
 | `tests/unit/input.test.ts` | exatamente três ações de condução (sem embreagem, sem freio); troca dispara uma vez por toque, sem repetição; pedal progressivo (≈ 0,09 s para subir, ≈ 0,07 s para descer); perda de foco solta o acelerador; remapeamento com conflitos e teclas reservadas |
 | `tests/unit/storage.test.ts` | criação e leitura do IndexedDB; migração v1 → v2 sem perda; fallback em memória; configurações validadas campo a campo; atalhos com conflito rejeitados |
 | `tests/unit/race.test.ts` | IA estagia sozinha e termina; árvore pro (0,4 s) e sportsman (0,5 s por âmbar); RT = saída do feixe − verde, parciais interpoladas e coerentes; queima de largada perde; DNF por tempo; frenagem automática depois da chegada |
@@ -21,6 +21,7 @@ npm test
 | `tests/unit/physics/semiauto.test.ts` | os **dez testes** da alteração do plano (ver abaixo) e a frenagem automática depois da chegada |
 | `tests/unit/audio/acoustics.test.ts` | tom e periodicidade por arquitetura a 44,1 e 48 kHz; independência da taxa de amostragem; caráter cross-plane × flat-plane; ordem de ignição; corte de faísca total e parcial; carga; presets de escapamento; robustez (não finitos, telemetria aleatória, cliques, perda e reset); determinismo; qualidade baixa; integração com a física. Detalhes em [ACOUSTIC_MODEL.md](ACOUSTIC_MODEL.md) |
 | `tests/unit/visual.test.ts` | lógica da camada visual: um desenho por carro; metadados visuais iguais à geometria física; para-lamas livres dos pneus; estágios de desfoque das rodas sem transparência; suspensão visual (mola amortecida, troca de marcha, independência da taxa de quadros); condição de fumaça; câmera (enquadramento, zoom, sem saltos, limites, adversário e árvore em quadro); iluminação; escala do conta-giros por motor; luzes de troca por carro; indicador de marcha |
+| `tests/unit/vehicles/vw-gol-gts-1988.test.ts` | os **15 testes de aceitação** do Gol GTS 1988 (AP 1.8S original): listas de carros; dimensões e massa do manual; sprite próprio; 1781 cm³; 146 N·m a 3200 rpm e 99 cv a 5600 rpm medidos no dinamômetro; acelerador; mesma curva no dinamômetro e na corrida; 5 marchas e diferencial 4,11; trocas só com W/E/Q; tração dianteira e rodas pela velocidade física; ordem 1-3-4-2 e frequência de ignição no som; canal turbo em silêncio; 0–80/100/120 km/h, 400 m, 1000 m e velocidade máxima a menos de 5 % do manual; procedência dos dados. Ver [vehicles/vw-gol-gts-1988.md](vehicles/vw-gol-gts-1988.md) |
 | `tests/integration/runner.test.ts` | resultado independente da taxa de quadros (30/60/144 fps); quadro longo limitado e tempo perdido informado; uma amostra de telemetria por passo, com perdas declaradas no CSV |
 
 ### Os dez testes do câmbio semiautomático
@@ -112,7 +113,19 @@ Com `--wav <pasta>`, grava a mixagem em WAV. Foi assim que as escalas `CHANNEL_N
 npm run assets
 ```
 
-Exporta as oito camadas SVG da arte de cada carro (assoalho, carroceria, brilhos, luzes, freio, sombra, cubo e roda) e um `manifest.json` com os metadados visuais, em `dist-assets/sprites`. É o mesmo gerador usado pelo jogo.
+Exporta as nove camadas SVG da arte de cada carro (assoalho, carroceria, brilhos, luzes, freio, sombra, cubo dianteiro, cubo traseiro e roda) e um `manifest.json` com os metadados visuais, em `dist-assets/sprites`. É o mesmo gerador usado pelo jogo.
+
+```bash
+npm run calibrate:vehicle
+```
+
+Roda o teste de aceleração de fábrica ([src/game/race/accelerationTest.ts](../src/game/race/accelerationTest.ts)) com a física real e a IA avançada:
+
+- **condições:** motor ligado, 1ª engatada, plena carga, relógio a partir do primeiro movimento;
+- **saída:** imprime 0–80/100/120 km/h, 400 m, 1000 m, velocidade máxima, trocas, patinagem e a carga no eixo motriz;
+- **metas:** para o Gol GTS 1988, compara com o manual.
+
+Só mede, não altera o carro. Com `-- <id-do-carro> [id-da-pista]` mede outro carro ou outra pista.
 
 ## Checagem de tipos e build
 

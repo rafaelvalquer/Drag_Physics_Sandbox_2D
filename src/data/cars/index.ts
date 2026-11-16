@@ -9,10 +9,16 @@ import {
   ENGINE_VETRA_I4T,
 } from '../engines';
 import { exhaustPreset } from '../exhaustPresets';
+import { CAR_VW_GOL_GTS_1988 } from './vwGolGts1988';
+
+export { CAR_VW_GOL_GTS_1988 } from './vwGolGts1988';
 
 /**
  * Fictional cars. Masses, ratios, aerodynamics and power targets are illustrative values for a
  * game sandbox, not certified manufacturer data. No real brand, logo or body design is used.
+ *
+ * The one real car, the Volkswagen Gol GTS 1988, lives in its own module (vwGolGts1988.ts) with
+ * the factory data of its owner's manual and the provenance of every value.
  */
 
 const acoustic = (over: Partial<AcousticConfig> = {}): AcousticConfig => ({
@@ -348,6 +354,7 @@ export const CARS: readonly CarConfig[] = [
   CAR_ORION_XR,
   CAR_KRONOS_V8,
   CAR_TEMPEST_V8,
+  CAR_VW_GOL_GTS_1988,
 ];
 
 export const LAB_CARS: readonly CarConfig[] = [...CARS, CAR_AURORA_V12_LAB];

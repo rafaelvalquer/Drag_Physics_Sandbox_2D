@@ -1,5 +1,8 @@
 import type { EngineConfig } from '../schema';
 import { curveForTargetPower, firingAngles, fmepFriction } from './builders';
+import { ENGINE_VW_AP18S_1988 } from './vwAp18s1988';
+
+export { ENGINE_VW_AP18S_1988 } from './vwAp18s1988';
 
 /**
  * Fictional engines. All values are illustrative starting configurations chosen to be plausible,
@@ -379,4 +382,5 @@ export const ENGINES: readonly EngineConfig[] = [
   ENGINE_KRONOS_V8,
   ENGINE_TEMPEST_V8,
   ENGINE_AURORA_V12,
+  ENGINE_VW_AP18S_1988,
 ];

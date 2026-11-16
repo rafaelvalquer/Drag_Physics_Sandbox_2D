@@ -56,8 +56,8 @@ describe('vehicle artwork pipeline', () => {
       // the wheel sprite is exactly the tyre diameter (plus the antialiasing margin)
       const wheel = layers.find((l) => l.name === 'wheel')!;
       expect(wheel.w).toBe(Math.ceil(2 * car.tires.radiusM * 100) + 6);
-      // eight layers, all well-formed SVG documents
-      expect(layers.map((l) => l.name)).toEqual(['under', 'body', 'gloss', 'lights', 'brake', 'shadow', 'hub', 'wheel']);
+      // nine layers (front and rear hubs differ when the rear axle has drums), all well-formed SVG documents
+      expect(layers.map((l) => l.name)).toEqual(['under', 'body', 'gloss', 'lights', 'brake', 'shadow', 'hub', 'hubRear', 'wheel']);
       for (const l of layers) {
         expect(l.svg.startsWith('<svg ')).toBe(true);
         expect(l.svg.endsWith('</svg>')).toBe(true);
@@ -105,7 +105,7 @@ describe('vehicle artwork pipeline', () => {
     expect(artSignature(stretched)).not.toBe(sig);
     // an edited car is still a valid configuration and still produces artwork
     expect(validateCar(painted).ok).toBe(true);
-    expect(buildVehicleLayers(painted, 80).layers).toHaveLength(8);
+    expect(buildVehicleLayers(painted, 80).layers).toHaveLength(9);
   });
 });
 

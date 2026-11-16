@@ -10,7 +10,8 @@ import type { P } from './svg';
  * always agrees with the physics geometry. A third value of 1 marks a sharp corner.
  */
 export interface WheelDesign {
-  style: 'five' | 'twin' | 'multi' | 'split' | 'turbine';
+  /** Spoke style; 'teardrop' is a flat dish pierced by `count` teardrop holes. */
+  style: 'five' | 'twin' | 'multi' | 'split' | 'turbine' | 'teardrop';
   count: number;
   /** Rim radius / tyre radius (sidewall height). */
   rim: number;
@@ -19,6 +20,12 @@ export interface WheelDesign {
   caliper: 'paint' | 'accent' | 'grey';
   lettering: 'subtle' | 'white';
   centreLock: boolean;
+  /** Wheel nuts (default 5). */
+  lugs?: number;
+  /** Cross-drilled brake discs (default true); period cars have solid discs. */
+  discDrilled?: boolean;
+  /** Rear brake seen through the wheel: disc and caliper (default) or a drum. */
+  rearBrake?: 'disc' | 'drum';
 }
 
 export interface VehicleDesign {
@@ -44,7 +51,9 @@ export interface VehicleDesign {
   /** Height (v) of the black lower cladding; 0 = body-coloured sills. */
   cladding: number;
   stripe: 'none' | 'sill' | 'pin' | 'rally';
-  spoiler: 'none' | 'roof' | 'roofBig' | 'lip' | 'ducktail' | 'wing';
+  spoiler: 'none' | 'roof' | 'roofBig' | 'hatchLip' | 'lip' | 'ducktail' | 'wing';
+  /** Spoiler finish (default: paint). */
+  spoilerColor?: 'paint' | 'black';
   /** Where the spoiler attaches (u, v). */
   spoilerAt: [number, number];
   /** Bonnet scoop between these u positions. */
@@ -54,7 +63,28 @@ export interface VehicleDesign {
   exhaust: { u: number; v: number; side: boolean };
   fuelDoor?: [number, number];
   /** Side repeater lamp. */
-  marker: [number, number];
+  marker?: [number, number];
+  /** Amber indicator wrapping around the front corner, seen from the side. */
+  cornerLamp?: P[];
+  /** Horizontal ribs moulded in the tail lamp lens. */
+  tailRibs?: number;
+  /**
+   * Period plastic trim: wrap-around bumpers (rear: u ≤ rearU, front: u ≥ frontU) and a side
+   * protection panel between the arches, in one dark colour, with an optional pinstripe in the
+   * accent colour along its top edge.
+   */
+  lowerTrim?: {
+    color: string;
+    bumperTop: number;
+    bumperBottom: number;
+    rearU: number;
+    frontU: number;
+    sideTop: number;
+    sideBottom: number;
+    pinstripe: boolean;
+  };
+  /** Lettering on the body (model badges). */
+  badges?: { text: string; u: number; v: number; size: number; color: string }[];
   /** Seat backs visible through the glass (u). */
   seats: number[];
   /** Steering wheel position (u). */
@@ -941,7 +971,134 @@ const prototype: VehicleDesign = {
   flare: 0.014,
 };
 
-export const DESIGNS: Record<BodyStyle, VehicleDesign> = { hatch, hotHatch, coupe, sedan, muscle, supercar, prototype };
+/**
+ * Volkswagen Gol GTS 1988 (first generation, "Gol quadrado", two-door hatch, original). Drawn
+ * from the factory dimensions (3849 × 1350 mm, wheelbase 2358 mm) and period photographs used as
+ * reference only: wedge bonnet over a longitudinal engine, steep flat-faced nose, raked
+ * windscreen, flat roof, raked hatch with a slim black spoiler at the roof edge, large door glass
+ * and a rear quarter glass behind a black B-pillar, crisp shoulder crease, graphite wrap-around
+ * bumpers joined by the side protection panel with a red pinstripe, amber indicator wrapping the
+ * front corner, ribbed tail lamps, GTS lettering and 14" "Pingo d'Água" (teardrop) alloy wheels
+ * with four nuts and drum brakes at the rear. No manufacturer logo is reproduced.
+ */
+const golGts88: VehicleDesign = {
+  outline: [
+    [0.014, 0.03, 1],
+    [0.002, 0.07],
+    [0.0, 0.2],
+    [0.002, 0.3, 1],
+    [0.014, 0.325, 1],
+    [0.022, 0.5],
+    [0.03, 0.6, 1],
+    [0.08, 0.77],
+    [0.135, 0.93],
+    [0.16, 0.978],
+    [0.185, 0.996],
+    [0.3, 1.0],
+    [0.45, 1.0],
+    [0.495, 0.99],
+    [0.515, 0.968, 1],
+    [0.66, 0.63, 1],
+    [0.75, 0.603],
+    [0.88, 0.548],
+    [0.965, 0.497],
+    [0.981, 0.482, 1],
+    [0.987, 0.41],
+    [0.99, 0.335, 1],
+    [0.998, 0.312],
+    [1.0, 0.22],
+    [0.999, 0.08],
+    [0.986, 0.022, 1],
+  ],
+  glass: [
+    [
+      [0.152, 0.648, 1],
+      [0.204, 0.912],
+      [0.232, 0.946],
+      [0.48, 0.952],
+      [0.5, 0.942],
+      [0.629, 0.66, 1],
+    ],
+  ],
+  pillars: [{ u: 0.356, lean: 0.006, w: 0.07 }],
+  screens: [
+    [
+      [0.521, 0.958],
+      [0.655, 0.638],
+    ],
+    [
+      [0.036, 0.618],
+      [0.152, 0.958],
+    ],
+  ],
+  shoulder: [
+    [0.026, 0.578],
+    [0.4, 0.592],
+    [0.7, 0.586],
+    [0.976, 0.468],
+  ],
+  creases: [
+    [
+      [0.285, 0.4],
+      [0.5, 0.394],
+      [0.69, 0.398],
+    ],
+  ],
+  cuts: [
+    [
+      [0.676, 0.628],
+      [0.679, 0.4],
+      [0.674, 0.02],
+    ],
+    [
+      [0.356, 0.645],
+      [0.356, 0.02],
+    ],
+    [
+      [0.03, 0.598],
+      [0.024, 0.45],
+      [0.016, 0.33],
+    ],
+  ],
+  handles: [[0.388, 0.585]],
+  mirror: [0.646, 0.664],
+  headlight: [
+    [0.993, 0.365],
+    [0.99, 0.462],
+    [0.982, 0.466],
+    [0.984, 0.365],
+  ],
+  cornerLamp: [
+    [0.953, 0.365, 1],
+    [0.955, 0.452, 1],
+    [0.981, 0.466, 1],
+    [0.983, 0.365, 1],
+  ],
+  taillight: [
+    [0.016, 0.345, 1],
+    [0.025, 0.55, 1],
+    [0.052, 0.552, 1],
+    [0.05, 0.345, 1],
+  ],
+  tailRibs: 4,
+  vents: [],
+  cladding: 0,
+  stripe: 'none',
+  spoiler: 'hatchLip',
+  spoilerColor: 'black',
+  spoilerAt: [0.172, 0.985],
+  exhaust: { u: 0.035, v: 0.02, side: false },
+  seats: [0.31, 0.5],
+  wheelU: 0.6,
+  beltV: 0.645,
+  wheel: { style: 'teardrop', count: 10, rim: 0.63, finish: 'silver', caliper: 'grey', lettering: 'subtle', centreLock: false, lugs: 4, rearBrake: 'drum', discDrilled: false },
+  archGap: 0.05,
+  flare: 0.01,
+  lowerTrim: { color: '#3b3e42', bumperTop: 0.315, bumperBottom: -0.05, rearU: 0.088, frontU: 0.882, sideTop: 0.29, sideBottom: 0.045, pinstripe: true },
+  badges: [{ text: 'GTS', u: 0.282, v: 0.13, size: 0.075, color: '#dfe2e5' }],
+};
+
+export const DESIGNS: Record<BodyStyle, VehicleDesign> = { hatch, hotHatch, coupe, sedan, muscle, supercar, prototype, golGts88 };
 
 /** Height of the upper outline (v) at position u, measured on the roof side of the silhouette. */
 export function outlineV(d: VehicleDesign, u: number): number {

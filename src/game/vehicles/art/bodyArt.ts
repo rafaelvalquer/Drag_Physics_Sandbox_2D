@@ -191,6 +191,34 @@ export function buildBodyArt(car: CarConfig, S: number): BodyArt {
       );
     }
   }
+  if (d.lowerTrim) {
+    const t = d.lowerTrim;
+    const trim = t.color;
+    const block = (u0: number, u1: number, vv: number): string =>
+      `<rect x="${f1(U(u0))}" y="${f1(V(vv))}" width="${f1(U(u1) - U(u0))}" height="${f1(Hp - V(vv))}" fill="${trim}"/>`;
+    // wrap-around bumpers (drawn to the frame edge; the body clip shapes them)
+    b.push(block(-0.05, t.rearU, t.bumperTop), block(t.frontU, 1.05, t.bumperTop));
+    // side protection panel between the arches (the arch cut-outs lie outside the clip)
+    const sx0 = X(xR);
+    const sx1 = X(xF);
+    b.push(`<rect x="${f1(sx0)}" y="${f1(V(t.sideTop))}" width="${f1(sx1 - sx0)}" height="${f1(V(t.sideBottom) - V(t.sideTop))}" fill="${trim}"/>`);
+    // moulded ribs, so the plastic reads as textured rather than painted
+    for (const k of [0.33, 0.62]) {
+      const vv = t.sideBottom + (t.sideTop - t.sideBottom) * k;
+      b.push(`<rect x="${f1(sx0)}" y="${f1(V(vv))}" width="${f1(sx1 - sx0)}" height="${sw(0.006, 0.6)}" fill="#000000" fill-opacity="0.32"/>`);
+      b.push(`<rect x="${f1(sx0)}" y="${f1(V(vv) + m(0.006))}" width="${f1(sx1 - sx0)}" height="${sw(0.004, 0.5)}" fill="#ffffff" fill-opacity="0.08"/>`);
+    }
+    // top edges: highlight, shadow line and the accent pinstripe
+    for (const [x0, x1, vv] of [
+      [U(-0.05), U(t.rearU), t.bumperTop],
+      [sx0, sx1, t.sideTop],
+      [U(t.frontU), U(1.05), t.bumperTop],
+    ] as const) {
+      b.push(`<rect x="${f1(x0)}" y="${f1(V(vv))}" width="${f1(x1 - x0)}" height="${sw(0.012)}" fill="#ffffff" fill-opacity="0.16"/>`);
+      b.push(`<rect x="${f1(x0)}" y="${f1(V(vv) + m(0.012))}" width="${f1(x1 - x0)}" height="${sw(0.008)}" fill="#000000" fill-opacity="0.35"/>`);
+      if (t.pinstripe) b.push(`<rect x="${f1(x0)}" y="${f1(V(vv) + m(0.034))}" width="${f1(x1 - x0)}" height="${sw(0.009)}" fill="${accent}" fill-opacity="0.95"/>`);
+    }
+  }
   b.push('</g>');
   // wheel-arch lips
   const lipColor = d.cladding >= 0.09 ? '#15171a' : mix(paint, '#000000', 0.32);
@@ -273,8 +301,26 @@ export function buildBodyArt(car: CarConfig, S: number): BodyArt {
   b.push(`<circle cx="${f1(hlC[0])}" cy="${f1(hlC[1])}" r="${f1(m(0.014))}" fill="#8fa2b0"/>`);
   b.push(`<path d="${tlPath}" fill="url(#tl)" stroke="#23080a" stroke-width="${sw(0.01)}" stroke-linejoin="round"/>`);
   b.push(`<path d="${smoothPath(scaleAbout(tlPx, tlC, 0.55), true)}" fill="#ff6a60" fill-opacity="0.55"/>`);
+  if (d.tailRibs) {
+    const xs = tlPx.map((q) => q[0]);
+    const ys = tlPx.map((q) => q[1]);
+    const x0 = Math.min(...xs);
+    const y0 = Math.min(...ys);
+    const y1 = Math.max(...ys);
+    b.push(`<clipPath id="tlc"><path d="${tlPath}"/></clipPath><g clip-path="url(#tlc)">`);
+    for (let i = 1; i <= d.tailRibs; i++) {
+      const y = y0 + ((y1 - y0) * i) / (d.tailRibs + 1);
+      b.push(`<rect x="${f1(x0)}" y="${f1(y)}" width="${f1(Math.max(...xs) - x0)}" height="${sw(0.008, 0.6)}" fill="#3a0306" fill-opacity="0.75"/>`);
+    }
+    b.push('</g>');
+  }
+  if (d.cornerLamp) {
+    const cp = px(d.cornerLamp);
+    b.push(`<path d="${smoothPath(cp, true)}" fill="#f0a12a" stroke="#3d2608" stroke-width="${sw(0.008, 0.6)}" stroke-linejoin="round"/>`);
+    b.push(`<path d="${smoothPath(scaleAbout(cp, centroid(cp), 0.6), true)}" fill="#ffd27a" fill-opacity="0.55"/>`);
+  }
   // side repeater, fuel door, handles
-  {
+  if (d.marker) {
     const [mu, mv] = d.marker;
     b.push(`<rect x="${f1(U(mu) - m(0.035))}" y="${f1(V(mv) - m(0.011))}" width="${f1(m(0.07))}" height="${f1(m(0.022))}" rx="${f1(m(0.008))}" fill="#f2a52e" stroke="#5a3a10" stroke-width="${sw(0.004, 0.5)}"/>`);
   }
@@ -287,6 +333,12 @@ export function buildBodyArt(car: CarConfig, S: number): BodyArt {
     const hy = V(hv) - m(0.013);
     b.push(`<rect x="${f1(hx)}" y="${f1(hy + m(0.012))}" width="${f1(m(0.14))}" height="${f1(m(0.026))}" rx="${f1(m(0.012))}" fill="#000000" fill-opacity="0.35"/>`);
     b.push(`<rect x="${f1(hx)}" y="${f1(hy)}" width="${f1(m(0.14))}" height="${f1(m(0.026))}" rx="${f1(m(0.012))}" fill="${lum > 0.55 ? shade(paint, -0.28) : mix(paint, '#ffffff', 0.32)}"/>`);
+  }
+  for (const bd of d.badges ?? []) {
+    const fs = m(bd.size);
+    const attrs = `x="${f1(U(bd.u))}" y="${f1(V(bd.v))}" font-family="Arial Black, Arial, Helvetica, sans-serif" font-weight="900" font-style="italic" font-size="${f1(fs)}" letter-spacing="${f1(fs * 0.06)}"`;
+    b.push(`<text ${attrs} fill="#000000" fill-opacity="0.55" transform="translate(${f1(m(0.004))} ${f1(m(0.004))})">${bd.text}</text>`);
+    b.push(`<text ${attrs} fill="${bd.color}">${bd.text}</text>`);
   }
   // door mirror
   {
@@ -307,7 +359,12 @@ export function buildBodyArt(car: CarConfig, S: number): BodyArt {
     const dark = shade(paint, -0.72);
     switch (d.spoiler) {
       case 'roof':
-        b.push(`<path d="${rel([[0.06, 0.012], [-0.07, -0.05], [-0.085, -0.03], [0.0, 0.045]])}" fill="${shade(paint, -0.18)}" stroke="${dark}" stroke-width="${sw(0.008)}" stroke-linejoin="round"/>`);
+        b.push(`<path d="${rel([[0.06, 0.012], [-0.07, -0.05], [-0.085, -0.03], [0.0, 0.045]])}" fill="${d.spoilerColor === 'black' ? '#141618' : shade(paint, -0.18)}" stroke="${dark}" stroke-width="${sw(0.008)}" stroke-linejoin="round"/>`);
+        break;
+      case 'hatchLip':
+        // slim lip that carries the roof line a few centimetres past the top of the hatch glass
+        b.push(`<path d="${rel([[0.07, 0.006], [-0.02, 0.008], [-0.09, -0.006], [-0.095, -0.024], [-0.02, -0.03], [0.04, -0.02]])}" fill="${d.spoilerColor === 'black' ? '#141618' : shade(paint, -0.18)}" stroke="${dark}" stroke-width="${sw(0.007)}" stroke-linejoin="round"/>`);
+        b.push(`<path d="${rel([[0.05, 0.003], [-0.02, 0.005], [-0.08, -0.006]])}" fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="${sw(0.006)}" stroke-linecap="round"/>`);
         break;
       case 'roofBig':
         b.push(`<path d="${rel([[0.08, 0.018], [-0.13, -0.075], [-0.165, -0.06], [-0.15, -0.02], [0.0, 0.055]])}" fill="${shade(paint, -0.1)}" stroke="${dark}" stroke-width="${sw(0.008)}" stroke-linejoin="round"/>`);

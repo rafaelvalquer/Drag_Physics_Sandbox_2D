@@ -70,14 +70,23 @@ CarConfig (dimensões reais, cores)
    └► desenho da carroceria (art/designs.ts: um por modelo)
         └► camadas SVG  (art/bodyArt.ts, art/wheelArt.ts)
              └► rasterização única, na resolução do perfil gráfico
-                  └► atlas de textura com 10 quadros + metadados
+                  └► atlas de textura com 11 quadros + metadados
                        └► pista, garagem e dinamômetro
 ```
 
 - **Autoria em SVG gerado por código.** O plano permite SVG como formato de autoria desde que a arte seja detalhada. Não há Blender nem arquivos de imagem: o pipeline é totalmente reproduzível, e a mesma configuração sempre gera os mesmos arquivos.
-- **Um desenho por modelo.** Os sete carros têm silhueta, vidros, cortes de porta, faróis, lanternas, aerodinâmica e rodas próprios. Um teste garante que nenhum par compartilha a silhueta.
+- **Um desenho por modelo.** Os oito carros têm silhueta, vidros, cortes de porta, faróis, lanternas, aerodinâmica e rodas próprios. Um teste garante que nenhum par compartilha a silhueta.
+- **Carro real (Gol GTS 1988, `golGts88`).** O desenho usa alguns recursos opcionais do formato de desenho, que nenhum carro fictício usa:
+  - `lowerTrim`: para-choques envolventes e molduras laterais escuras, com friso;
+  - `badges`: emblema de texto, aqui "GTS";
+  - `cornerLamp`: pisca dianteiro;
+  - `tailRibs`: nervuras da lanterna;
+  - aerofólio `hatchLip` no topo da tampa traseira;
+  - roda `teardrop` ("Pingo d'Água") com número de parafusos (`lugs`), disco liso (`discDrilled: false`) e tambor traseiro (`rearBrake: 'drum'`).
+
+  As proporções vêm das dimensões do manual. Ver [vehicles/vw-gol-gts-1988.md](vehicles/vw-gol-gts-1988.md).
 - **Geometria real.** Os desenhos são normalizados e esticados para o comprimento e a altura de cada carro; as caixas de roda são recortadas na posição real dos eixos e com o raio real do pneu. Um carro editado no Sandbox continua coerente com a física.
-- **Exportação:** `npm run assets` grava as 8 camadas SVG de cada carro e um `manifest.json` com os metadados em `dist-assets/sprites`.
+- **Exportação:** `npm run assets` grava as 9 camadas SVG de cada carro e um `manifest.json` com os metadados em `dist-assets/sprites`.
 - **Folha de contato:** abrir o jogo com `?artsheet` mostra todos os carros lado a lado; `?artsheet=night` mostra as luzes acesas.
 
 ### Camadas do atlas
@@ -86,7 +95,8 @@ CarConfig (dimensões reais, cores)
 |---|---|---|
 | `shadow` | sombra de contato difusa | sob o carro, não acompanha a suspensão |
 | `under` | caixas de roda, assoalho, ponteiras | atrás das rodas |
-| `hub` | disco de freio e pinça | parado, atrás da roda |
+| `hub` | disco de freio e pinça do eixo dianteiro | parado, atrás da roda |
+| `hubRear` | freio do eixo traseiro: igual a `hub`, ou um tambor quando o desenho pede `rearBrake: 'drum'` | parado, atrás da roda traseira |
 | `wheel` | pneu e aro, transparente entre os raios | gira |
 | `wheelSoft`, `wheelFull` | a roda com desfoque de rotação leve e total | geradas a partir de `wheel` |
 | `body` | pintura, painéis, vidros, faróis, frisos | sobre as rodas |
