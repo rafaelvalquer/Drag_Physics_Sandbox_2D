@@ -6,6 +6,7 @@ import { openStore, type Store } from '../storage/db';
 import { SandboxMode } from '../modes/SandboxMode';
 import { RaceMode } from '../modes/RaceMode';
 import { DynoMode } from '../modes/DynoMode';
+import { CareerMode } from '../modes/CareerMode';
 import { clear, h, toast } from '../ui/dom';
 import { openSettingsDialog } from '../ui/SettingsDialog';
 import { openGarage } from '../ui/garage/GarageDialog';
@@ -29,6 +30,7 @@ export class App {
     sandbox: () => new SandboxMode(),
     race: () => new RaceMode(),
     dyno: () => new DynoMode(),
+    career: () => new CareerMode(),
   };
   private readonly el = {
     app: document.getElementById('app')!,
@@ -61,6 +63,7 @@ export class App {
       store: this.store,
       settings: this.settings,
       updateSetting: (k, v) => this.updateSetting(k, v),
+      switchMode: (id) => this.switchMode(id),
     };
     this.buildTopbar();
     this.touch = new TouchControls(this.el.stage, this.input);
@@ -123,7 +126,7 @@ export class App {
     tb.append(
       h('span', { class: 'brand', title: 'Drag Physics Sandbox 2D' }, h('span', { class: 'long' }, 'DRAG PHYSICS SANDBOX 2D'), h('span', { class: 'short' }, 'DPS·2D')),
       ...Object.keys(this.modes).map((id) =>
-        h('button', { class: 'tab', 'data-mode': id, onclick: () => this.switchMode(id) }, { sandbox: 'Sandbox', race: 'Corrida', dyno: 'Dinamômetro' }[id] ?? id),
+        h('button', { class: 'tab', 'data-mode': id, onclick: () => this.switchMode(id) }, { sandbox: 'Sandbox', race: 'Corrida', dyno: 'Dinamômetro', career: 'Campanha' }[id] ?? id),
       ),
       h('button', { class: 'tab garage-btn', 'data-testid': 'garage-open', title: 'Ver os carros em detalhe e escolher um', onclick: () => this.openGarage() }, 'Garagem'),
       h('span', { class: 'spacer' }),

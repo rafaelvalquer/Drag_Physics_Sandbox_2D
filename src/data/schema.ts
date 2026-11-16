@@ -105,6 +105,24 @@ export const EngineSchema = z
       airboxVolumeL: finite(1, 30),
     }),
     cam: CamProfileSchema,
+    /**
+     * Optional breathing restrictions (career parts). Pressure drops grow with the square of the
+     * air mass flow (turbulent flow through a filter element / muffler):
+     *   Δp = Δp_ref · (ṁ / ṁ_ref)²
+     * Without this block the model keeps its original back-pressure law and no filter loss.
+     */
+    breathing: z
+      .object({
+        /** Air mass flow at which the reference drops are quoted (kg/s). */
+        referenceFlowKgS: finite(0.01, 1),
+        /** Air filter + airbox pressure drop at the reference flow (kPa). */
+        airFilterDropKPa: finite(0, 15),
+        /** Exhaust system back pressure above ambient at the reference flow (kPa). */
+        exhaustBackPressureKPa: finite(0, 80),
+      })
+      .optional(),
+    /** Fuel (display + knock limit of boosted builds). */
+    fuel: z.enum(['gasoline', 'ethanol']).optional(),
     combustion: z.object({
       burnDurationDeg: finite(25, 100),
       /** Cycle-to-cycle variation (coefficient of variation of the combustion pressure rise). */
@@ -248,7 +266,22 @@ export const AcousticSchema = z.object({
 });
 export type AcousticConfig = z.infer<typeof AcousticSchema>;
 
-export const BodyStyleSchema = z.enum(['hatch', 'hotHatch', 'coupe', 'sedan', 'muscle', 'supercar', 'prototype', 'golGts88']);
+export const BodyStyleSchema = z.enum([
+  'hatch',
+  'hotHatch',
+  'coupe',
+  'sedan',
+  'muscle',
+  'supercar',
+  'prototype',
+  'golGts88',
+  'unoMille95',
+  'chevetteSl88',
+  'celta03',
+  'corsaGl96',
+  'kadettSl92',
+  'saveiroGl94',
+]);
 export type BodyStyle = z.infer<typeof BodyStyleSchema>;
 
 export const VisualSchema = z.object({
@@ -259,6 +292,15 @@ export const VisualSchema = z.object({
   heightM: finite(1, 1.6),
   frontOverhangM: finite(0.5, 1.3),
   rideHeightM: finite(0.08, 0.25),
+  /** Parts that show on the body (career builds). Absent on catalogue cars. */
+  mods: z
+    .object({
+      intercooler: z.boolean(),
+      sportTip: z.boolean(),
+      /** Tyre sidewall lettering / tread of performance tyres. */
+      tyre: z.enum(['stock', 'sport', 'semiSlick']),
+    })
+    .optional(),
 });
 export type VisualConfig = z.infer<typeof VisualSchema>;
 
@@ -296,7 +338,7 @@ export type CarConfig = z.infer<typeof CarSchema>;
 export const TrackSchema = z.object({
   id: z.string(),
   name: z.string(),
-  theme: z.enum(['testTrack', 'desert', 'nightIndustrial', 'airfield']),
+  theme: z.enum(['testTrack', 'desert', 'nightIndustrial', 'airfield', 'distritoIndustrial', 'baixada', 'avenidaNorte']),
   surfaceGrip: finite(0.5, 1.3),
   rollingResistanceFactor: finite(0.5, 2),
   surfaceTempC: finite(-10, 70),

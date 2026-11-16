@@ -15,6 +15,12 @@ export interface AccelerationOptions {
   maxS?: number;
   level?: AiLevel;
   seed?: number;
+  /**
+   * Extra mass carried during the test (kg). Period press tests ran with a second occupant and the
+   * instrumentation (fifth wheel, recorder): the campaign cars whose targets come from press
+   * sheets are tested with that payload; the Gol's manual figures are tested without it.
+   */
+  payloadKg?: number;
 }
 
 export interface AccelerationResult {
@@ -42,7 +48,7 @@ export function runAccelerationTest(car: CarConfig, track: TrackConfig, opts: Ac
   const speeds = [...(opts.speedsKmh ?? [80, 100, 120])].sort((a, b) => a - b);
   const distances = [...(opts.distancesM ?? [400, 1000])].sort((a, b) => a - b);
   const maxS = opts.maxS ?? 120;
-  const sim = new VehicleSimulation(car, track);
+  const sim = new VehicleSimulation(opts.payloadKg ? { ...car, massKg: car.massKg + opts.payloadKg } : car, track);
   const ai = new DragAI(car, opts.level ?? 'advanced', opts.seed ?? 7);
 
   // ---- start the engine, select first gear, let everything settle

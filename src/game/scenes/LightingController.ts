@@ -41,7 +41,14 @@ export const THEME_TIME: Record<TrackConfig['theme'], TimeOfDay> = {
   desert: 'dusk',
   nightIndustrial: 'night',
   airfield: 'day',
+  // campaign scenes: always night
+  distritoIndustrial: 'night',
+  baixada: 'night',
+  avenidaNorte: 'night',
 };
+
+/** Themes that are only ever lit at night (the campaign's street scenes). */
+export const NIGHT_ONLY_THEMES: ReadonlySet<TrackConfig['theme']> = new Set(['distritoIndustrial', 'baixada', 'avenidaNorte']);
 
 const BASE: Record<TimeOfDay, LightingState> = {
   day: {
@@ -110,6 +117,22 @@ function themed(theme: TrackConfig['theme'], s: LightingState): LightingState {
     // city glow on the horizon
     out.sky = ['#04060d', '#101a30', '#2c3148'];
     out.haze = '#1a2032';
+  } else if (theme === 'distritoIndustrial') {
+    // sodium-vapour city glow: warm, yellowish haze
+    out.sky = ['#05050a', '#16141c', '#3a2e22'];
+    out.haze = '#2a2218';
+    out.ambient = '#d9b98a';
+  } else if (theme === 'baixada') {
+    // cold mercury/LED light under the viaduct
+    out.sky = ['#03060c', '#0a1424', '#1a2a3c'];
+    out.haze = '#13202e';
+    out.ambient = '#9fc0e8';
+  } else if (theme === 'avenidaNorte') {
+    // open avenue: mixed street light, brighter horizon from the city
+    out.sky = ['#04050c', '#121a2e', '#33324a'];
+    out.haze = '#1d1f32';
+    out.ambient = '#c4c4e0';
+    out.intensity = 0.66;
   } else if (theme === 'airfield' && s.time === 'day') {
     out.sky = ['#3b7cc2', '#8fbfe6', '#e2eef6'];
     out.haze = '#d3e2ec';
@@ -118,6 +141,7 @@ function themed(theme: TrackConfig['theme'], s: LightingState): LightingState {
 }
 
 export function resolveTime(theme: TrackConfig['theme'], setting: TimeOfDaySetting): TimeOfDay {
+  if (NIGHT_ONLY_THEMES.has(theme)) return 'night';
   return setting === 'track' ? THEME_TIME[theme] : setting;
 }
 

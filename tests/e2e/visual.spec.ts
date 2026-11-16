@@ -604,3 +604,32 @@ test('camera stability: the car does not shake on screen while accelerating (fol
     }
   }
 });
+
+test('hud: turbo gauge only on turbo cars, reads the simulated boost', async ({ page }) => {
+  await boot(page, false);
+  await waitEngineRunning(page);
+  // naturally aspirated car: no gauge, no placeholder
+  await expect(page.getByTestId('turbo-gauge')).toBeHidden();
+  await shot(page, 'hud-na');
+  await page.getByTestId('garage-open').click();
+  await page.getByTestId('garage-car-vetra-rs').click();
+  await page.getByTestId('garage-use').click();
+  await expect.poll(() => mode<string>(page, 'm.runner.player.sim.car.id')).toBe('vetra-rs');
+  await waitEngineRunning(page);
+  await expect(page.getByTestId('turbo-gauge')).toBeVisible();
+  const size = async (sel: string): Promise<number> => (await page.locator(sel).first().boundingBox())!.width;
+  expect(await size('[data-testid=turbo-gauge]')).toBeLessThan((await size('.rhud .tach')) * 0.6);
+  await shot(page, 'hud-turbo-idle');
+  await page.locator('#game').click({ position: { x: 50, y: 50 } });
+  await page.keyboard.down('w');
+  await expect.poll(() => mode<number>(page, 'm.runner.player.sim.engine.turbo.boostPa'), { timeout: 8000 }).toBeGreaterThan(5000);
+  await page.waitForTimeout(500);
+  await shot(page, 'hud-turbo-boost');
+  const shown = Number(await page.getByTestId('hud-boost').textContent());
+  expect(shown).toBeGreaterThan(0.04);
+  await page.keyboard.up('w');
+  // the HUD stays inside the stage with the gauge present
+  const hud = await page.getByTestId('hud').boundingBox();
+  const stage = await page.locator('#stage').boundingBox();
+  expect(hud!.x + hud!.width).toBeLessThanOrEqual(stage!.x + stage!.width + 1);
+});

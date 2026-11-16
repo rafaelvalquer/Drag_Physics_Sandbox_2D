@@ -16,6 +16,8 @@ export interface AppContext {
   readonly settings: AppSettings;
   /** Persists one setting and notifies the modes. */
   updateSetting<K extends keyof AppSettings>(key: K, value: AppSettings[K]): void;
+  /** Switches to another mode (e.g. the campaign's "back" button). */
+  switchMode?(id: string): void;
 }
 
 /**

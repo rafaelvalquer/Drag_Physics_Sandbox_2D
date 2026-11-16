@@ -1,5 +1,6 @@
 import type { BodyStyle } from '../../../data/schema';
 import type { P } from './svg';
+import { celta03, chevetteSl88, corsaGl96, kadettSl92, saveiroGl94, unoMille95 } from './designsCampaign';
 
 /**
  * Side-view design of each body style. Original artwork for the fictional cars of this game.
@@ -1098,7 +1099,22 @@ const golGts88: VehicleDesign = {
   badges: [{ text: 'GTS', u: 0.282, v: 0.13, size: 0.075, color: '#dfe2e5' }],
 };
 
-export const DESIGNS: Record<BodyStyle, VehicleDesign> = { hatch, hotHatch, coupe, sedan, muscle, supercar, prototype, golGts88 };
+export const DESIGNS: Record<BodyStyle, VehicleDesign> = {
+  hatch,
+  hotHatch,
+  coupe,
+  sedan,
+  muscle,
+  supercar,
+  prototype,
+  golGts88,
+  unoMille95,
+  chevetteSl88,
+  celta03,
+  corsaGl96,
+  kadettSl92,
+  saveiroGl94,
+};
 
 /** Height of the upper outline (v) at position u, measured on the roof side of the silhouette. */
 export function outlineV(d: VehicleDesign, u: number): number {

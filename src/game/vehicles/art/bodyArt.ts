@@ -243,6 +243,19 @@ export function buildBodyArt(car: CarConfig, S: number): BodyArt {
     b.push(`<path d="${vp}" fill="url(#mesh)" fill-opacity="0.75"/>`);
     b.push(`<path d="${vp}" fill="url(#vsh)"/>`);
   }
+  // career parts that show on the body: front-mounted intercooler seen through the bumper opening
+  if (v.mods?.intercooler) {
+    const x0 = U(0.952);
+    const x1 = U(0.999);
+    const y0 = V(0.24);
+    const y1 = V(0.05);
+    b.push(`<rect x="${f1(x0)}" y="${f1(y0)}" width="${f1(x1 - x0)}" height="${f1(y1 - y0)}" rx="${f1(m(0.01))}" fill="#8e979f" stroke="#22262a" stroke-width="${sw(0.008)}"/>`);
+    for (let i = 1; i < 9; i++) {
+      const y = y0 + ((y1 - y0) * i) / 9;
+      b.push(`<rect x="${f1(x0)}" y="${f1(y)}" width="${f1(x1 - x0)}" height="${sw(0.006, 0.6)}" fill="#2b3035" fill-opacity="0.8"/>`);
+    }
+    b.push(`<rect x="${f1(x0)}" y="${f1(y0)}" width="${f1(x1 - x0)}" height="${sw(0.012)}" fill="#ffffff" fill-opacity="0.35"/>`);
+  }
   if (d.scoop) {
     const [u0, u1] = d.scoop;
     const base0 = outlineV(d, u0);
@@ -405,7 +418,12 @@ export function buildBodyArt(car: CarConfig, S: number): BodyArt {
   } else {
     const xe = U(d.exhaust.u) - m(0.05);
     const ye = V(d.exhaust.v);
-    for (let i = dual ? 1 : 0; i >= 0; i--) {
+    if (v.mods?.sportTip) {
+      // dimensioned sport tip: wider, longer, rolled edge, angled cut
+      tips.push(`<path d="${polyPath([[xe - m(0.07), ye - m(0.05)], [xe + m(0.18), ye - m(0.045)], [xe + m(0.18), ye + m(0.045)], [xe - m(0.04), ye + m(0.05)]])}" fill="url(#chrome)" stroke="#1b1d20" stroke-width="${sw(0.006, 0.6)}" stroke-linejoin="round"/>`);
+      tips.push(`<ellipse cx="${f1(xe - m(0.055))}" cy="${f1(ye)}" rx="${f1(m(0.018))}" ry="${f1(m(0.046))}" fill="#060606" stroke="#e6e9ec" stroke-width="${sw(0.007, 0.6)}"/>`);
+    }
+    for (let i = dual ? 1 : 0; i >= 0 && !v.mods?.sportTip; i--) {
       const ox = i * m(0.03);
       const oy = -i * m(0.082);
       tips.push(`<rect x="${f1(xe + ox)}" y="${f1(ye - m(0.034) + oy)}" width="${f1(m(0.16))}" height="${f1(m(0.068))}" rx="${f1(m(0.016))}" fill="url(#chrome)" stroke="#1b1d20" stroke-width="${sw(0.006, 0.6)}"/>`);

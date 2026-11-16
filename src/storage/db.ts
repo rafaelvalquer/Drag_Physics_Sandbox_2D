@@ -6,13 +6,14 @@
  *  - presets:  user car presets (CarConfig JSON, validated on load)
  *  - records:  best results per car / track / distance
  *  - runs:     recent race results (history)
+ *  - career:   campaign saves, one document per slot (v3)
  *
  * Every migration is idempotent and runs inside the `upgradeneeded` transaction. If IndexedDB is
  * not available (private mode, blocked storage) the app falls back to an in-memory store and
  * reports it (`persistent === false`) instead of failing.
  */
 export const DB_NAME = 'drag-physics-sandbox-2d';
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 type Migration = (db: IDBDatabase, tx: IDBTransaction) => void;
 
@@ -35,6 +36,10 @@ export const MIGRATIONS: Record<number, Migration> = {
       if (typeof v === 'string') settings.put(Math.min(1, Math.max(0, Number.parseFloat(v) / 100 || 0.5)), 'masterVolume');
     };
   },
+  3: (db) => {
+    // campaign: one save document per slot; the other stores are left untouched
+    if (!db.objectStoreNames.contains('career')) db.createObjectStore('career', { keyPath: 'slotId' });
+  },
 };
 
 export interface Store {
@@ -44,6 +49,11 @@ export interface Store {
   delete(store: string, key: IDBValidKey): Promise<void>;
   getAll<T>(store: string): Promise<T[]>;
   clear(store: string): Promise<void>;
+  /**
+   * Read-modify-write of one record in a single readwrite transaction (atomic: nothing is written
+   * if `fn` throws). `fn` must be synchronous. Resolves with the value written.
+   */
+  update<T>(store: string, key: IDBValidKey, fn: (current: T | undefined) => T): Promise<T>;
   close(): void;
 }
 
@@ -90,6 +100,30 @@ class IdbStore implements Store {
   async clear(store: string): Promise<void> {
     await promisify(this.os(store, 'readwrite').clear());
   }
+  update<T>(store: string, key: IDBValidKey, fn: (current: T | undefined) => T): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const tx = this.db.transaction(store, 'readwrite');
+      const os = tx.objectStore(store);
+      let next: T;
+      let failure: unknown = null;
+      const req = os.get(key);
+      req.onsuccess = () => {
+        try {
+          next = fn(req.result as T | undefined);
+          if (os.keyPath === null) os.put(next, key);
+          else os.put(next);
+        } catch (e) {
+          failure = e;
+          tx.abort();
+        }
+      };
+      tx.oncomplete = () => resolve(next);
+      tx.onabort = () => reject(failure ?? tx.error ?? new Error('transação abortada'));
+      tx.onerror = () => {
+        if (!failure) failure = tx.error;
+      };
+    });
+  }
   close(): void {
     this.db.close();
   }
@@ -99,7 +133,7 @@ class IdbStore implements Store {
 export class MemoryStore implements Store {
   persistent = false;
   private readonly data = new Map<string, Map<string, unknown>>();
-  private readonly keyPaths: Record<string, string | null> = { settings: null, presets: 'id', records: 'key', runs: 'id' };
+  private readonly keyPaths: Record<string, string | null> = { settings: null, presets: 'id', records: 'key', runs: 'id', career: 'slotId' };
   private autoId = 1;
   private m(store: string): Map<string, unknown> {
     let s = this.data.get(store);
@@ -130,6 +164,11 @@ export class MemoryStore implements Store {
   }
   async clear(store: string): Promise<void> {
     this.m(store).clear();
+  }
+  async update<T>(store: string, key: IDBValidKey, fn: (current: T | undefined) => T): Promise<T> {
+    const next = fn(structuredClone(this.m(store).get(String(key))) as T | undefined);
+    this.m(store).set(String(key), structuredClone(next));
+    return structuredClone(next);
   }
   close(): void {}
 }

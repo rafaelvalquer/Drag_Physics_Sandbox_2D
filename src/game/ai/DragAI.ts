@@ -122,8 +122,10 @@ export class DragAI {
     public readonly car: CarConfig,
     public readonly level: AiLevel,
     seed = 1234,
+    /** Driver skill of a named rival (career). Same controls and physics; only the driver differs. */
+    profile?: AiProfile,
   ) {
-    this.profile = AI_PROFILES[level];
+    this.profile = profile ?? AI_PROFILES[level];
     this.prng = new Prng(seed);
     this.shiftPoints = optimalShiftRpms(car);
     this.kappaPeak = peakSlipRatio(car);

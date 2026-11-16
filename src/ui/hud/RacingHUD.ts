@@ -2,6 +2,7 @@ import type { VehicleSimulation } from '../../physics/vehicle/VehicleSimulation'
 import { h, speedUnit } from '../dom';
 import { GearIndicator } from './GearIndicator';
 import { ShiftLights, shiftLightState, shiftTargets } from './ShiftLights';
+import { TurboGauge, turboGaugeState } from './TurboGauge';
 import { Tachometer, tachScale, type TachScale } from './Tachometer';
 
 /** Run information shown next to the gauges (computed by the mode). */
@@ -22,7 +23,7 @@ export interface HudInfo {
 
 /**
  * Driver instruments: analogue tachometer scaled to the engine, gear indicator, digital speed,
- * progressive shift lights, throttle, boost (turbo cars), run timer, distance, gap to the
+ * progressive shift lights, throttle, turbo gauge (turbo cars), run timer, distance, gap to the
  * opponent and tyre slip. Every value is read from the simulation; the only processing is a
  * short visual filter on the needle and the speed digits. Following the semi-automatic
  * transmission plan there is no clutch indicator.
@@ -37,9 +38,7 @@ export class RacingHUD {
   private readonly speedLabel: HTMLElement;
   private readonly throttle: HTMLElement;
   private readonly throttleText: HTMLElement;
-  private readonly boostRow: HTMLElement;
-  private readonly boost: HTMLElement;
-  private readonly boostText: HTMLElement;
+  private readonly turbo = new TurboGauge(78);
   private readonly msg: HTMLElement;
   private readonly dist: HTMLElement;
   private readonly time: HTMLElement;
@@ -66,9 +65,6 @@ export class RacingHUD {
     this.speedLabel = h('div', { class: 'unit' }, 'km/h');
     this.throttle = h('div', { class: 'fill' });
     this.throttleText = h('span', { class: 'val' }, '0 %');
-    this.boost = h('div', { class: 'fill boost' });
-    this.boostText = h('span', { class: 'val', 'data-testid': 'hud-boost' }, '0.00 bar');
-    this.boostRow = h('div', { class: 'bar-row' }, h('span', { class: 'k' }, 'turbo'), h('div', { class: 'hbar' }, this.boost), this.boostText);
     this.msg = h('div', { class: 'msg', 'data-testid': 'hud-msg' }, '');
     this.dist = h('span', { 'data-testid': 'hud-distance' }, '0.0 m');
     this.time = h('span', { 'data-testid': 'hud-time' }, '—');
@@ -89,9 +85,8 @@ export class RacingHUD {
         'div',
         { class: 'centre' },
         this.lights.el,
-        h('div', { class: 'speed' }, this.speed, this.speedLabel),
+        h('div', { class: 'speed-row' }, h('div', { class: 'speed' }, this.speed, this.speedLabel), this.turbo.el),
         h('div', { class: 'bar-row' }, h('span', { class: 'k' }, 'acel.'), h('div', { class: 'hbar' }, this.throttle), this.throttleText),
-        this.boostRow,
       ),
       h(
         'div',
@@ -138,13 +133,7 @@ export class RacingHUD {
     const pedal = Math.max(0, Math.min(1, sim.controls.pedal));
     this.throttle.style.width = `${(pedal * 100).toFixed(0)}%`;
     this.throttleText.textContent = `${(pedal * 100).toFixed(0)} %`;
-    if (sim.engine.turbo) {
-      this.boostRow.style.display = '';
-      const bar = sim.engine.turbo.boostPa / 1e5;
-      const max = Math.max(0.2, e.turbo?.maxBoostBar ?? 1);
-      this.boost.style.width = `${Math.max(0, Math.min(100, (bar / max) * 100)).toFixed(0)}%`;
-      this.boostText.textContent = `${bar.toFixed(2)} bar`;
-    } else this.boostRow.style.display = 'none';
+    this.turbo.update(turboGaugeState(sim), dt);
 
     this.msg.textContent = message || stateText(sim);
     const inf = info ?? { distanceM: sim.x, timeS: null, gapM: null };
@@ -166,6 +155,11 @@ export class RacingHUD {
   /** Current scale and shift target (for the tests). */
   get debug(): { maxRpm: number; redlineRpm: number; targets: (number | null)[]; shownRpm: number } {
     return { maxRpm: this.scale.maxRpm, redlineRpm: this.scale.redlineRpm, targets: this.targets, shownRpm: this.tach.shownRpm };
+  }
+
+  /** Turbo gauge state for the tests. */
+  get turboDebug(): { visible: boolean; shownBar: number } {
+    return { visible: this.turbo.isVisible, shownBar: this.turbo.shownBar };
   }
 
   dispose(): void {

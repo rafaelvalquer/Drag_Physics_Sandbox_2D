@@ -42,7 +42,7 @@ describe('IndexedDB store', () => {
     v1.close();
 
     const v2 = await openDatabase(factory, 'migr', 2);
-    expect(DB_VERSION).toBe(2);
+    expect(DB_VERSION).toBe(3);
     expect([...v2.objectStoreNames]).toContain('runs');
     expect(v2.transaction('runs').objectStore('runs').indexNames.contains('byDate')).toBe(true);
     const vol = await req(v2.transaction('settings').objectStore('settings').get('masterVolume'));

@@ -30,6 +30,10 @@ export const SURFACES: Record<Theme, Surface> = {
   desert: { asphalt: '#59524c', concrete: '#aaa192', line: '#f2efe2', centre: '#e6c04a', shoulder: '#b2946a', ground: '#c8a46d', dust: '#d2a874', cover: 'sand' },
   nightIndustrial: { asphalt: '#484b50', concrete: '#929394', line: '#e2dfc8', centre: '#dab23c', shoulder: '#64676d', ground: '#55595f', dust: null, cover: 'apron' },
   airfield: { asphalt: '#54575b', concrete: '#aaaba5', line: '#f4f4ee', centre: '#e8c040', shoulder: '#8b8c84', ground: '#7a8c60', dust: null, cover: 'grass' },
+  // campaign street scenes: worn asphalt, faded paint
+  distritoIndustrial: { asphalt: '#4a4744', concrete: '#8f8b84', line: '#d9d2b8', centre: '#c9a238', shoulder: '#5f5b55', ground: '#4f4b45', dust: null, cover: 'apron' },
+  baixada: { asphalt: '#43474d', concrete: '#8e9297', line: '#dfe3e6', centre: '#d0ae40', shoulder: '#5a5f66', ground: '#3f5a3c', dust: null, cover: 'grass' },
+  avenidaNorte: { asphalt: '#3f4246', concrete: '#9a9a97', line: '#eeeee6', centre: '#e0b43a', shoulder: '#66686c', ground: '#55585c', dust: null, cover: 'apron' },
 };
 
 export function canvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {

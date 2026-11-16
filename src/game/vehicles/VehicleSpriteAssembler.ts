@@ -76,7 +76,10 @@ export function buildVehicleLayers(car: CarConfig, pxPerM: number): VehicleLayer
   const d = DESIGNS[car.visual.bodyStyle];
   const body = buildBodyArt(car, pxPerM);
   const caliper = d.wheel.caliper === 'paint' ? car.visual.color : d.wheel.caliper === 'accent' ? car.visual.accent : '#5a6068';
-  const wheel = buildWheelArt(d.wheel, car.tires.radiusM, pxPerM, caliper, d.wheel.caliper === 'grey' ? car.visual.accent : caliper);
+  // performance tyres carry white sidewall lettering (the tread width is not visible side-on)
+  const tyre = car.visual.mods?.tyre ?? 'stock';
+  const wd = tyre === 'stock' ? d.wheel : { ...d.wheel, lettering: 'white' as const };
+  const wheel = buildWheelArt(wd, car.tires.radiusM, pxPerM, caliper, d.wheel.caliper === 'grey' ? car.visual.accent : caliper);
   const r = car.tires.radiusM;
   const wb = car.wheelbaseM;
   const frame = { w: body.w, h: body.h };

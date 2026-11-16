@@ -211,7 +211,15 @@ export class EngineModel {
     return this.geometry.displacement;
   }
   get upstreamPressure(): number {
-    return this.ambient.pressurePa + (this.turbo ? this.turbo.boostPa : 0);
+    return this.ambient.pressurePa + (this.turbo ? this.turbo.boostPa : 0) - this.filterDrop(this.airMassFlow);
+  }
+
+  /** Air filter / airbox pressure drop (Pa) at an air mass flow (zero without a breathing block). */
+  filterDrop(flow: number): number {
+    const b = this.cfg.breathing;
+    if (!b) return 0;
+    const r = flow / b.referenceFlowKgS;
+    return b.airFilterDropKPa * 1000 * r * r;
   }
 
   /** Friction torque magnitude (N·m) at angular speed ω (Coulomb + viscous + quadratic). */
@@ -227,7 +235,17 @@ export class EngineModel {
     return this.backPressureFor(this.ambient.pressurePa, this.airMassFlow, boost);
   }
 
-  private backPressureFor(ambientPa: number, flow: number, boostPa: number): number {
+  /**
+   * Exhaust back pressure (Pa abs) for a flow and boost. With a breathing block the system
+   * restriction is quadratic in the flow (Δp = Δp_ref·(ṁ/ṁ_ref)²); otherwise the original law.
+   * The turbine adds 0.55 Pa of back pressure per Pa of boost in both cases.
+   */
+  backPressureFor(ambientPa: number, flow: number, boostPa: number): number {
+    const b = this.cfg.breathing;
+    if (b) {
+      const r = flow / b.referenceFlowKgS;
+      return ambientPa + b.exhaustBackPressureKPa * 1000 * r * r + 0.55 * boostPa;
+    }
     return ambientPa + 0.04e5 * clamp01(flow / 0.4) + 0.55 * boostPa;
   }
 
@@ -268,13 +286,14 @@ export class EngineModel {
     return this.tableLookup(this.veTable, rpm);
   }
 
-  private cylinderMassFlow(pManifold: number, omega: number, tempK = this.manifoldTemperature()): number {
+  /** Air mass flow into the cylinders (kg/s) at a manifold pressure, speed and charge temperature. */
+  cylinderMassFlow(pManifold: number, omega: number, tempK = this.manifoldTemperature()): number {
     if (omega <= 0) return 0;
     const rho = pManifold / (R_AIR * tempK);
     return this.volumetricEfficiency(radSToRpm(omega)) * rho * this.geometry.displacement * (omega / FOUR_PI);
   }
 
-  private manifoldTemperatureFor(ambientK: number, boostPa: number): number {
+  manifoldTemperatureFor(ambientK: number, boostPa: number): number {
     return ambientK * (1 + 0.05 * (boostPa / 1e5));
   }
 
@@ -315,8 +334,14 @@ export class EngineModel {
     const tAtm = STANDARD_TEMPERATURE_K;
     const evaluate = (boost: number): { map: number; flow: number; target: number } => {
       const tM = this.manifoldTemperatureFor(tAtm, boost);
-      const map = this.steadyManifoldPressure(1, w, pAtm + boost, tM);
-      const flow = this.cylinderMassFlow(map, w, tM);
+      let map = this.steadyManifoldPressure(1, w, pAtm + boost, tM);
+      let flow = this.cylinderMassFlow(map, w, tM);
+      if (this.cfg.breathing) {
+        for (let k = 0; k < 3; k++) {
+          map = this.steadyManifoldPressure(1, w, pAtm + boost - this.filterDrop(flow), tM);
+          flow = this.cylinderMassFlow(map, w, tM);
+        }
+      }
       if (!this.turbo) return { map, flow, target: 0 };
       const e = this.cfg.egt;
       const load = map / this.referencePressure;
@@ -384,12 +409,42 @@ export class EngineModel {
     }
   }
 
+  /**
+   * Steady wide-open-throttle operating point at standard conditions (the point the torque curve
+   * is calibrated at): manifold pressure, air flow, steady boost, back pressure and the torque
+   * split. Used by the career tuning model and the tests; never by the step integration.
+   */
+  wotOperatingPoint(rpm: number): {
+    map: number;
+    flow: number;
+    boost: number;
+    back: number;
+    indicatedNm: number;
+    frictionNm: number;
+    pumpingNm: number;
+    brakeNm: number;
+  } {
+    const op = this.steadyWot(rpm);
+    const w = rpmToRadS(rpm);
+    const back = this.backPressureFor(ATMOSPHERIC_PRESSURE, op.flow, op.boost);
+    const indicatedNm = this.wotIndicatedTorque(rpm) * this.willansFactor(op.map);
+    const frictionNm = this.frictionTorque(w) + this.cfg.accessoriesNm;
+    const pumpingNm = this.pumpingLoss(op.map, back);
+    return { ...op, back, indicatedNm, frictionNm, pumpingNm, brakeNm: indicatedNm - frictionNm - pumpingNm };
+  }
+
   /** Steady-state net torque (no boost, combustion on) for an opening and speed. */
   steadyNetTorque(opening: number, rpm: number, boostPa = 0): number {
     const w = rpmToRadS(rpm);
     const tM = this.manifoldTemperatureFor(this.ambient.temperatureK, boostPa);
-    const p = this.steadyManifoldPressure(opening, w, this.ambient.pressurePa + boostPa, tM);
-    const flow = this.cylinderMassFlow(p, w, tM);
+    let p = this.steadyManifoldPressure(opening, w, this.ambient.pressurePa + boostPa, tM);
+    let flow = this.cylinderMassFlow(p, w, tM);
+    if (this.cfg.breathing) {
+      for (let k = 0; k < 2; k++) {
+        p = this.steadyManifoldPressure(opening, w, this.ambient.pressurePa + boostPa - this.filterDrop(flow), tM);
+        flow = this.cylinderMassFlow(p, w, tM);
+      }
+    }
     const back = this.backPressureFor(this.ambient.pressurePa, flow, boostPa);
     const pumping = this.pumpingLoss(p, back);
     return this.wotIndicatedTorque(rpm) * this.willansFactor(p) - this.frictionTorque(w) - this.cfg.accessoriesNm - pumping;
