@@ -2,6 +2,7 @@ import { Prng } from '../../core/prng';
 import { mix, shade } from '../vehicles/art/svg';
 import { litFar, type LightingState } from './LightingController';
 import { canvas, type Theme } from './trackArt';
+import { CAMPAIGN_LAYER_THEMES, buildCampaignLayer } from './environmentCampaign';
 
 /**
  * Scenery behind the track: sky, stars, clouds and three parallax layers per theme (distant
@@ -13,23 +14,23 @@ import { canvas, type Theme } from './trackArt';
 export const LAYER_W = 2048;
 export const LAYER_H = [400, 330, 270] as const;
 
-type Ctx = CanvasRenderingContext2D;
+export type Ctx = CanvasRenderingContext2D;
 
 /** Sum of sines with integer frequencies: periodic over the texture width. */
-function periodic(rng: Prng, terms: [number, number][], W: number): (x: number) => number {
+export function periodic(rng: Prng, terms: [number, number][], W: number): (x: number) => number {
   const ph = terms.map(() => rng.next() * Math.PI * 2);
   return (x) => terms.reduce((acc, [k, a], i) => acc + Math.sin((x / W) * Math.PI * 2 * k + ph[i]!) * a, 0);
 }
 
 /** Draws at x and at x ± W so nothing is cut at the tile seam. */
-function wrapped(W: number, x: number, halfWidth: number, draw: (x: number) => void): void {
+export function wrapped(W: number, x: number, halfWidth: number, draw: (x: number) => void): void {
   draw(x);
   if (x < halfWidth) draw(x + W);
   if (x > W - halfWidth) draw(x - W);
 }
 
 /** Relief with slope shading: faces turned to the light are brighter, the foot fades into `foot`. */
-function ridge(ctx: Ctx, W: number, H: number, top: (x: number) => number, light: string, dark: string, foot: string, sunRight: boolean, step = 2): void {
+export function ridge(ctx: Ctx, W: number, H: number, top: (x: number) => number, light: string, dark: string, foot: string, sunRight: boolean, step = 2): void {
   for (let x = 0; x < W; x += step) {
     const y = top(x);
     const slope = (top(x + step * 2) - top(x - step * 2)) / (step * 4);
@@ -42,7 +43,7 @@ function ridge(ctx: Ctx, W: number, H: number, top: (x: number) => number, light
   }
 }
 
-function crown(ctx: Ctx, rng: Prng, x: number, baseY: number, size: number, dark: string, light: string, sunRight: boolean): void {
+export function crown(ctx: Ctx, rng: Prng, x: number, baseY: number, size: number, dark: string, light: string, sunRight: boolean): void {
   const n = 5 + Math.floor(rng.next() * 4);
   const blobs: [number, number, number][] = [];
   for (let i = 0; i < n; i++) blobs.push([x + (rng.next() - 0.5) * size * 1.1, baseY - size * (0.5 + rng.next() * 0.75), size * (0.32 + rng.next() * 0.3)]);
@@ -81,7 +82,7 @@ function conifer(ctx: Ctx, x: number, baseY: number, h: number, dark: string, li
   }
 }
 
-function building(ctx: Ctx, rng: Prng, x: number, baseY: number, w: number, h: number, wall: string, l: LightingState, lightsOn: number): void {
+export function building(ctx: Ctx, rng: Prng, x: number, baseY: number, w: number, h: number, wall: string, l: LightingState, lightsOn: number): void {
   const g = ctx.createLinearGradient(x, 0, x + w, 0);
   g.addColorStop(0, shade(wall, 0.08));
   g.addColorStop(1, shade(wall, -0.18));
@@ -172,6 +173,7 @@ export function buildLayer(theme: Theme, layer: 0 | 1 | 2, l: LightingState, sca
   const W = Math.round(LAYER_W * scale);
   const H = Math.round(LAYER_H[layer] * scale);
   const [c, ctx] = canvas(W, H);
+  if (CAMPAIGN_LAYER_THEMES.has(theme)) return buildCampaignLayer(theme, layer, l, scale);
   const rng = new Prng(17 + layer * 101 + theme.length * 7);
   const sunRight = l.orb.x > 0.5;
   const dist = [0.95, 0.6, 0.22][layer]!;

@@ -486,3 +486,80 @@ th.win {
     grid-template-columns: 72px 1fr;
   }
 }
+/* workshop: state pill of each part (state read from the save) */
+.ws-part-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.pill {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.pill.installed {
+  background: color-mix(in srgb, var(--ok) 22%, transparent);
+  border-color: var(--ok);
+  color: #b9f5cc;
+}
+.pill.installed::before {
+  content: '● ';
+  color: var(--ok);
+}
+.pill.owned {
+  background: color-mix(in srgb, var(--accent-2) 20%, transparent);
+  border-color: var(--accent-2);
+  color: #cdeeff;
+}
+.pill.available {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  color: var(--accent);
+  font-family: var(--mono);
+}
+.pill.unaffordable {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--muted);
+  font-family: var(--mono);
+  text-decoration: line-through;
+}
+.pill.locked {
+  background: var(--panel);
+  border-color: var(--line);
+  color: var(--muted);
+}
+.pill.locked::before {
+  content: '🔒 ';
+}
+.ws-parts li.installed {
+  border-color: color-mix(in srgb, var(--ok) 55%, var(--line));
+}
+.ws-parts li.installed.sel,
+.ws-parts li.owned.sel {
+  border-color: var(--accent);
+}
+/* factory part of each slot: free, always available */
+.pill.stock {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--text);
+}
+.ws-parts li.stock {
+  background: var(--panel);
+  border-style: dashed;
+}
+.ws-parts li.stock.installed {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--ok) 55%, var(--line));
+}
+.ws-parts li.stock.sel {
+  border-color: var(--accent);
+}

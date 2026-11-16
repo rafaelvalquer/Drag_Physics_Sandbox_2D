@@ -6,7 +6,7 @@ import { CAREER_TRACKS, findCareerTrack } from '../data/tracks/career';
 import { AI_PROFILES, DragAI } from '../game/ai/DragAI';
 import { CareerController, parseInventoryEntry } from '../game/career/CareerController';
 import { CHAPTER_1_TITLE, EVENTS, REGIONS, findEvent, rivalOf, type CareerEventDef, type RivalDef } from '../game/career/CareerEvents';
-import { eventStatus, isChapterComplete, isPartUnlocked, nextEvent, canTuneBoost, partRequirements, unlocksOf } from '../game/career/CareerProgression';
+import { eventStatus, isChapterComplete, isPartUnlocked, nextEvent, partStatus, stockStatus, canTuneBoost, partRequirements, unlocksOf } from '../game/career/CareerProgression';
 import { CareerRepository, CareerTabLock } from '../game/career/CareerRepository';
 import { evaluateRace, type Comment } from '../game/career/CareerResultEvaluator';
 import { DEFAULT_SLOT, STARTER_CARS, type CareerRaceResult, type OutcomeSchema, type OwnedCar, type RunSummary } from '../game/career/CareerState';
@@ -15,7 +15,7 @@ import type { RaceRecord } from '../game/career/CareerController';
 import { TelemetryProbe, runHeadlessRace } from '../game/career/headlessRace';
 import { ownedCarBuild, ownedCarConfig, rivalBuild, rivalCar } from '../game/career/RivalBuildFactory';
 import { BUILD_RESOLVER_VERSION, resolveBuild, type BuildResult } from '../game/career/tuning/BuildResolver';
-import { CATEGORY_LABEL, PARTS, UNLOCK_LABEL, WORKSHOP_TABS, findPart, type PartDef } from '../game/career/tuning/parts';
+import { CATEGORY_LABEL, PARTS, UNLOCK_LABEL, WORKSHOP_TABS, findPart, type PartCategory, type PartDef } from '../game/career/tuning/parts';
 import { RACE_DISTANCES, RaceController, type LaneResult, type RaceLane } from '../game/race/RaceController';
 import { runAccelerationTest } from '../game/race/accelerationTest';
 import type { CameraMode, RenderVehicle, TrackMarker, TreeLights } from '../game/scenes/RaceScene';
@@ -330,7 +330,7 @@ export class CareerMode implements Mode {
         { class: 'career-card starter', 'data-testid': `starter-${s.baseCarId}` },
         this.preview(car, 360, 170),
         h('h3', {}, car.name),
-        h('div', { class: 'spec' }, `${car.engine.ratedPowerCv} cv · ${Math.max(...car.engine.torqueCurve.torqueNm).toFixed(0)} N·m · ${car.massKg} kg · tração ${car.drivenAxle === 'rear' ? 'traseira' : 'dianteira'}`),
+        h('div', { class: 'spec' }, `${car.engine.ratedPowerCv.toLocaleString('pt-BR')} cv · ${Math.max(...car.engine.torqueCurve.torqueNm).toFixed(0)} N·m · ${car.massKg} kg · tração ${car.drivenAxle === 'rear' ? 'traseira' : 'dianteira'}`),
         h('p', { class: 'hint' }, car.description),
         h('div', { class: 'price' }, cr(s.price)),
         h('button', { class: 'primary', 'data-testid': `choose-${s.baseCarId}`, onclick: () => void this.startCareer(s.baseCarId) }, 'Comprar este carro'),
@@ -557,7 +557,8 @@ export class CareerMode implements Mode {
     const tab = WORKSHOP_TABS.find((t) => t.id === this.workshopTab) ?? WORKSHOP_TABS[0]!;
     const before = ownedCarBuild(car);
     const parts = PARTS.filter((p) => tab.categories.includes(p.category));
-    const sel = this.selectedPart ? findPart(this.selectedPart) : parts[0];
+    const stockSel = this.selectedPart?.startsWith('stock:') ? (this.selectedPart.slice(6) as PartCategory) : null;
+    const sel = stockSel ? undefined : this.selectedPart ? findPart(this.selectedPart) : parts[0];
     const left = h(
       'div',
       { class: 'ws-left' },
@@ -594,40 +595,108 @@ export class CareerMode implements Mode {
       h(
         'ul',
         { class: 'ws-parts' },
-        parts.map((p) => {
-          const installed = car.installedParts.includes(p.id);
-          const owned = s.inventoryPartIds.some((e) => e === `${p.id}@${car.baseCarId}`);
-          const unlocked = isPartUnlocked(s, p);
-          const state = installed ? 'instalada' : owned ? 'no estoque' : unlocked ? cr(p.price) : 'bloqueada';
+        tab.categories.flatMap((cat) => [this.stockItem(car, cat, stockSel === cat), ...parts.filter((x) => x.category === cat).map((p) => {
+          const st = partStatus(s, car, p);
           return h(
             'li',
             {
-              class: `${sel?.id === p.id ? 'sel' : ''} ${unlocked ? '' : 'locked'}`,
+              class: `${sel?.id === p.id ? 'sel' : ''} ${st.state === 'locked' ? 'locked' : ''} ${st.state}`,
               'data-testid': `ws-part-${p.id}`,
+              'data-state': st.state,
+              title: st.detail,
               onclick: () => {
                 this.selectedPart = p.id;
                 this.show('workshop');
               },
             },
-            h('span', {}, p.name),
-            h('small', {}, `${CATEGORY_LABEL[p.category]} · ${state}`),
+            h('div', { class: 'ws-part-head' }, h('span', {}, p.name), h('span', { class: `pill ${st.state}`, 'data-testid': `ws-pill-${p.id}` }, st.label)),
+            h('small', {}, st.state === 'locked' ? `${CATEGORY_LABEL[p.category]} · ${st.detail}` : CATEGORY_LABEL[p.category]),
           );
-        }),
+        })]),
       ),
     );
-    const right = h('div', { class: 'ws-right' }, sel ? this.partDetail(sel, car, before) : h('div', { class: 'hint' }, 'Escolha uma peça.'));
-    return this.frame('Oficina', 'career-workshop', h('div', { class: 'ws' }, left, center, right), this.nav(['Dinamômetro', 'ws-dyno', () => this.show('dyno')], ['Voltar à garagem', 'ws-back', () => this.show('garage'), true]));
+    const right = h('div', { class: 'ws-right' }, stockSel ? this.stockDetail(stockSel, car, before) : sel ? this.partDetail(sel, car, before) : h('div', { class: 'hint' }, 'Escolha uma peça.'));
+    return this.frame(
+      'Oficina',
+      'career-workshop',
+      h('div', { class: 'ws' }, left, center, right),
+      this.nav(
+        ['Dinamômetro', 'ws-dyno', () => this.show('dyno')],
+        ...((car.installedParts.length ? [['Restaurar tudo ao original', 'ws-restore-all', () => void this.restoreAll(car.installedParts.length)]] : []) as [string, string, () => void][]),
+        ['Voltar à garagem', 'ws-back', () => this.show('garage'), true],
+      ),
+    );
   }
 
-  private partDetail(p: PartDef, car: OwnedCar, before: BuildResult): HTMLElement {
-    const s = this.controller.save!;
-    const installed = car.installedParts.includes(p.id);
-    const owned = s.inventoryPartIds.includes(`${p.id}@${car.baseCarId}`);
-    const unlocked = isPartUnlocked(s, p);
-    const nextParts = installed ? car.installedParts.filter((x) => x !== p.id) : CareerController.withPart(car.installedParts, p.id).parts;
-    const tune = nextParts.includes('turbo-basic') ? (car.tune ?? {}) : {};
-    const after = resolveBuild(findCampaignCar(car.baseCarId)!, nextParts, tune);
-    const reqs = partRequirements(p).map((u) => `${UNLOCK_LABEL[u]}${unlocksOf(s).has(u) ? ' ✓' : ''}`);
+  private async restoreAll(n: number): Promise<void> {
+    if (!this.guard()) return;
+    if (!confirm(`Voltar o carro ao original? ${n === 1 ? 'A peça vai' : `As ${n} peças vão`} para o estoque e pode${n === 1 ? '' : 'm'} ser reinstalada${n === 1 ? '' : 's'} depois.`)) return;
+    const r = await this.controller.restoreStock();
+    if (!r.ok) toast(r.error, 'error');
+    else toast('Carro de volta ao original. As peças estão no estoque.');
+    this.selectedPart = null;
+    this.show('workshop');
+  }
+
+  /** List entry of the factory part of a slot. */
+  private stockItem(car: OwnedCar, cat: PartCategory, selected: boolean): HTMLElement {
+    const st = stockStatus(car, cat, (id) => findPart(id)?.category);
+    return h(
+      'li',
+      {
+        class: `stock ${selected ? 'sel' : ''} ${st.state}`,
+        'data-testid': `ws-stock-${cat}`,
+        'data-state': st.state,
+        title: st.detail,
+        onclick: () => {
+          this.selectedPart = `stock:${cat}`;
+          this.show('workshop');
+        },
+      },
+      h('div', { class: 'ws-part-head' }, h('span', {}, `${CATEGORY_LABEL[cat]} original`), h('span', { class: `pill ${st.state}`, 'data-testid': `ws-stock-pill-${cat}` }, st.label)),
+      h('small', {}, 'De fábrica · grátis'),
+    );
+  }
+
+  /** Detail of the factory part of a slot: what the car had from the factory, and the way back. */
+  private stockDetail(cat: PartCategory, car: OwnedCar, before: BuildResult): HTMLElement {
+    const base = findCampaignCar(car.baseCarId)!;
+    const inSlot = car.installedParts.filter((id) => findPart(id)?.category === cat);
+    const nextParts = car.installedParts.filter((id) => !inSlot.includes(id));
+    const after = resolveBuild(base, nextParts, nextParts.includes('turbo-basic') ? (car.tune ?? {}) : {});
+    const button = inSlot.length
+      ? h(
+          'button',
+          {
+            class: 'primary',
+            'data-testid': 'ws-install-stock',
+            disabled: !after.ok,
+            onclick: () =>
+              void (async () => {
+                if (!this.guard()) return;
+                const r = await this.controller.restoreStock(cat);
+                if (!r.ok) toast(r.error, 'error');
+                else toast(`${CATEGORY_LABEL[cat]} original instalado. ${inSlot.map((id) => findPart(id)!.name).join(', ')} foi para o estoque.`);
+                this.show('workshop');
+              })(),
+          },
+          'Instalar original (grátis)',
+        )
+      : h('div', { class: 'hint', 'data-testid': 'ws-stock-in-use' }, 'Em uso: o carro está com a peça de fábrica neste item.');
+    return h(
+      'div',
+      { class: 'ws-detail', 'data-testid': 'ws-detail' },
+      h('h3', {}, `${CATEGORY_LABEL[cat]} original`),
+      h('div', { class: 'price' }, 'Grátis'),
+      h('p', {}, stockSpec(base, cat)),
+      h('p', { class: 'physics' }, h('b', {}, 'Efeito físico: '), 'nenhuma modificação neste item — o resolvedor devolve exatamente a física de fábrica dele. As peças retiradas ficam no estoque deste carro.'),
+      inSlot.length ? this.compareTable(before, after, 'Original') : null,
+      h('div', { class: 'row' }, button),
+    );
+  }
+
+  /** Before/after table with simulated estimates (computed lazily and cached by build key). */
+  private compareTable(before: BuildResult, after: BuildResult, afterLabel: string): HTMLElement {
     const cmpHost = h('div', { class: 'ws-compare', 'data-testid': 'ws-compare' });
     const renderCompare = (): void => {
       clear(cmpHost);
@@ -649,13 +718,13 @@ export class CareerMode implements Mode {
         h(
           'table',
           { class: 'results' },
-          h('tr', {}, h('th', {}, ''), h('th', {}, 'Antes'), h('th', {}, installed ? 'Sem a peça' : 'Depois')),
-          row('Potência', `${before.peakPowerCv.toFixed(1)} cv`, `${after.peakPowerCv.toFixed(1)} cv`),
-          row('Torque', `${before.peakTorqueNm.toFixed(1)} N·m`, `${after.peakTorqueNm.toFixed(1)} N·m`),
+          h('tr', {}, h('th', {}, ''), h('th', {}, 'Antes'), h('th', {}, afterLabel)),
+          row('Potência', `${f1(before.peakPowerCv)} cv`, `${f1(after.peakPowerCv)} cv`),
+          row('Torque', `${f1(before.peakTorqueNm)} N·m`, `${f1(after.peakTorqueNm)} N·m`),
           row('Faixa útil (90 % do torque)', range(before), range(after)),
           row('Embreagem', `${before.car.transmission.clutch.maxTorqueNm} N·m`, `${after.car.transmission.clutch.maxTorqueNm} N·m`),
-          row('Aderência (μ pico)', before.car.tires.muPeak.toFixed(2), after.car.tires.muPeak.toFixed(2)),
-          row('Relação final', before.car.transmission.finalDrive.toFixed(3), after.car.transmission.finalDrive.toFixed(3)),
+          row('Aderência (μ pico)', f2(before.car.tires.muPeak), f2(after.car.tires.muPeak)),
+          row('Relação final', f3(before.car.transmission.finalDrive), f3(after.car.transmission.finalDrive)),
           row('0–100 km/h (estimativa)', eb ? `${f2(eb.t100)} s` : '…', ea ? `${f2(ea.t100)} s` : '…'),
           row('402 m (estimativa)', eb ? `${f2(eb.t402)} s` : '…', ea ? `${f2(ea.t402)} s` : '…'),
         ),
@@ -669,6 +738,19 @@ export class CareerMode implements Mode {
         }, 30);
     };
     renderCompare();
+    return cmpHost;
+  }
+
+  private partDetail(p: PartDef, car: OwnedCar, before: BuildResult): HTMLElement {
+    const s = this.controller.save!;
+    const installed = car.installedParts.includes(p.id);
+    const owned = s.inventoryPartIds.includes(`${p.id}@${car.baseCarId}`);
+    const unlocked = isPartUnlocked(s, p);
+    const nextParts = installed ? car.installedParts.filter((x) => x !== p.id) : CareerController.withPart(car.installedParts, p.id).parts;
+    const tune = nextParts.includes('turbo-basic') ? (car.tune ?? {}) : {};
+    const after = resolveBuild(findCampaignCar(car.baseCarId)!, nextParts, tune);
+    const reqs = partRequirements(p).map((u) => `${UNLOCK_LABEL[u]}${unlocksOf(s).has(u) ? ' ✓' : ''}`);
+    const cmpHost = this.compareTable(before, after, installed ? 'Sem a peça' : 'Depois');
     const act = async (fn: () => Promise<{ ok: boolean; error?: string }>, okMsg: string): Promise<void> => {
       if (!this.guard()) return;
       const r = await fn();
@@ -1140,7 +1222,7 @@ export class CareerMode implements Mode {
       h(
         'div',
         { class: 'career-ending' },
-        h('div', { class: 'ending-shop' }, this.preview(ownedCarConfig(car), 760, 300, 'studio'), h('div', { class: 'ending-title', 'data-testid': 'ending-title' }, 'Rei da Madrugada')),
+        h('div', { class: 'ending-shop' }, this.preview(ownedCarConfig(car), 620, 260, 'studio'), h('div', { class: 'ending-title', 'data-testid': 'ending-title' }, 'Rei da Madrugada')),
         h(
           'dl',
           { class: 'career-stats' },
@@ -1271,4 +1353,27 @@ function portraitEl(id: Parameters<typeof portraitSvg>[0]): HTMLElement {
   const d = h('div', { class: 'portrait', 'data-portrait': id });
   d.innerHTML = portraitSvg(id);
   return d;
+}
+
+/** What the factory fitted in a slot, from the catalogue car (never mutated). */
+function stockSpec(car: CarConfig, cat: PartCategory): string {
+  const e = car.engine;
+  switch (cat) {
+    case 'intake-filter':
+      return 'Filtro de ar de papel na caixa de ar original de fábrica.';
+    case 'intake-manifold':
+      return 'Coletor de admissão original, com os dutos e o plenum de fábrica.';
+    case 'camshaft':
+      return `Comando de válvulas original; corte de giro de fábrica em ${e.revLimitRpm} rpm.`;
+    case 'exhaust':
+      return 'Escapamento original de fábrica, com os abafadores da época.';
+    case 'turbo':
+      return e.induction === 'turbo' ? 'Turbo original de fábrica.' : 'Motor aspirado, como saiu de fábrica.';
+    case 'clutch':
+      return `Embreagem original: ${car.transmission.clutch.maxTorqueNm} N·m de capacidade.`;
+    case 'differential':
+      return `Relação final original: ${car.transmission.finalDrive.toFixed(3).replace('.', ',')}.`;
+    case 'tires':
+      return `Pneus de rua originais (μ de pico ${car.tires.muPeak.toFixed(2).replace('.', ',')}).`;
+  }
 }

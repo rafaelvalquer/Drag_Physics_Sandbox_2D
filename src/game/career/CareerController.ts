@@ -184,6 +184,35 @@ export class CareerController {
     }
   }
 
+  /**
+   * Puts the factory part back in one slot (category), or in every slot when `category` is omitted.
+   * The factory part is free and always available: it is simply the absence of a modification, so
+   * the resolver returns the factory physics for that slot. The removed parts go to the stock of
+   * this car (nothing is sold or lost) and can be reinstalled later.
+   */
+  async restoreStock(category?: PartCategory): Promise<OpResult> {
+    const car = this.activeCar;
+    if (!this.save || !car) return fail('nenhum carro ativo');
+    const removed = car.installedParts.filter((id) => category === undefined || findPart(id)?.category === category);
+    if (!removed.length) return fail(category ? 'a peça original já está em uso' : 'o carro já está original');
+    const parts = car.installedParts.filter((id) => !removed.includes(id));
+    const chk = this.checkBuild(car, parts, tuneFor(car, parts));
+    if (!chk.ok) return fail(`não dá para voltar ao original: ${chk.error}`);
+    try {
+      return {
+        ok: true,
+        value: await this.commit((n) => {
+          const c = n.ownedCars.find((x) => x.id === car.id)!;
+          c.installedParts = parts;
+          c.tune = tuneFor(c, parts);
+          for (const id of removed) n.inventoryPartIds.push(inventoryEntry(id, c.baseCarId));
+        }),
+      };
+    } catch (e) {
+      return fail((e as Error).message);
+    }
+  }
+
   /** Engine tuners: wastegate setting on the dyno (undefined = kit default). */
   async setBoost(boostBar: number | undefined): Promise<OpResult> {
     const s = this.save;

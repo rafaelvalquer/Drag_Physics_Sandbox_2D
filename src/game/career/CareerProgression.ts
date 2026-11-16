@@ -1,6 +1,6 @@
 import { EVENTS, type CareerEventDef } from './CareerEvents';
 import type { CareerSave } from './CareerState';
-import type { PartDef, UnlockId } from './tuning/parts';
+import type { PartCategory, PartDef, UnlockId } from './tuning/parts';
 
 /** What the chapter's progress has unlocked so far (derived from the completed events). */
 export function unlocksOf(save: Pick<CareerSave, 'completedEventIds'>): Set<UnlockId> {
@@ -45,4 +45,46 @@ export function isPartUnlocked(save: Pick<CareerSave, 'completedEventIds'>, p: P
 
 export function canTuneBoost(save: Pick<CareerSave, 'completedEventIds'>): boolean {
   return unlocksOf(save).has('engine-tuners');
+}
+
+export type PartState = 'installed' | 'owned' | 'available' | 'unaffordable' | 'locked' | 'stock';
+
+export interface PartStatus {
+  state: PartState;
+  /** Short pill text (pt-BR). */
+  label: string;
+  /** Longer explanation (tooltip / locked reason). */
+  detail: string;
+}
+
+/**
+ * Shop state of a part for one owned car, derived only from the save (installed build, inventory,
+ * credits, completed events) — never from a UI flag.
+ */
+export function partStatus(
+  save: Pick<CareerSave, 'completedEventIds' | 'inventoryPartIds' | 'credits'>,
+  car: { baseCarId: string; installedParts: readonly string[] },
+  p: PartDef,
+): PartStatus {
+  if (car.installedParts.includes(p.id)) return { state: 'installed', label: 'Em uso', detail: 'Instalada neste carro.' };
+  if (save.inventoryPartIds.includes(`${p.id}@${car.baseCarId}`))
+    return { state: 'owned', label: 'Comprada', detail: 'No estoque deste carro: instale sem pagar de novo.' };
+  if (!isPartUnlocked(save, p)) {
+    const have = unlocksOf(save);
+    const missing = partRequirements(p).find((r) => !have.has(r))!;
+    const ev = EVENTS.find((e) => e.unlocks.includes(missing));
+    return { state: 'locked', label: ev ? `Noite ${ev.order}` : 'Bloqueada', detail: ev ? `Vença a noite ${ev.order} (${ev.title}) para liberar.` : 'Ainda bloqueada.' };
+  }
+  const price = `${p.price.toLocaleString('pt-BR')} CR`;
+  if (save.credits < p.price)
+    return { state: 'unaffordable', label: price, detail: `Faltam ${(p.price - save.credits).toLocaleString('pt-BR')} CR.` };
+  return { state: 'available', label: price, detail: 'Disponível para compra.' };
+}
+
+/** Shop state of the factory part of a slot: "Em uso" when no modification occupies the slot. */
+export function stockStatus(car: { installedParts: readonly string[] }, category: PartCategory, findCategory: (id: string) => PartCategory | undefined): PartStatus {
+  const occupied = car.installedParts.some((id) => findCategory(id) === category);
+  return occupied
+    ? { state: 'stock', label: 'Original', detail: 'Peça de fábrica: grátis, sempre disponível.' }
+    : { state: 'installed', label: 'Em uso', detail: 'O carro está com a peça de fábrica neste item.' };
 }

@@ -5,14 +5,15 @@ import { findCampaignCar } from '../../../src/data/cars/campaign';
 import { CAR_VW_GOL_GTS_1988 } from '../../../src/data/cars/vwGolGts1988';
 import { EVENTS, RIVALS, findEvent } from '../../../src/game/career/CareerEvents';
 import { CareerController, inventoryEntry } from '../../../src/game/career/CareerController';
-import { eventStatus, isPartUnlocked, nextEvent } from '../../../src/game/career/CareerProgression';
+import { eventStatus, isPartUnlocked, nextEvent, partStatus, stockStatus } from '../../../src/game/career/CareerProgression';
 import { CareerConflictError, CareerRepository } from '../../../src/game/career/CareerRepository';
 import { evaluateRace } from '../../../src/game/career/CareerResultEvaluator';
 import { CHAPTER_REPUTATION_CAP } from '../../../src/game/career/CareerRewards';
 import { START_CREDITS, STARTER_CARS, type CareerRaceResult, type RunSummary } from '../../../src/game/career/CareerState';
 import { NINA, STORY_SCENES, pendingScenes } from '../../../src/game/career/CareerStory';
 import { rivalBuild, rivalCar } from '../../../src/game/career/RivalBuildFactory';
-import { BUILD_RESOLVER_VERSION } from '../../../src/game/career/tuning/BuildResolver';
+import { BUILD_RESOLVER_VERSION, resolveBuild } from '../../../src/game/career/tuning/BuildResolver';
+import { ownedCarBuild } from '../../../src/game/career/RivalBuildFactory';
 import { findPart } from '../../../src/game/career/tuning/parts';
 import { MemoryStore, openDatabase, openStore } from '../../../src/storage/db';
 
@@ -121,6 +122,26 @@ describe('workshop transactions', () => {
     await winUpTo(c, 1);
     expect(isPartUnlocked(c.save!, findPart('filter-sport')!)).toBe(true);
     expect(isPartUnlocked(c.save!, findPart('manifold-sport')!)).toBe(false);
+  });
+
+  it('workshop pill state comes from the save: locked → price → in use → bought → in use', async () => {
+    const st = (id: string) => partStatus(c.save!, c.activeCar!, findPart(id)!);
+    expect(st('exhaust-sport')).toMatchObject({ state: 'locked', label: 'Noite 1' });
+    expect(st('exhaust-sport').detail).toContain('Primeira Noite');
+    await winUpTo(c, 1);
+    expect(st('exhaust-sport')).toMatchObject({ state: 'available', label: '450 CR' });
+    expect((await c.buyPart('exhaust-sport')).ok).toBe(true);
+    expect(st('exhaust-sport')).toMatchObject({ state: 'installed', label: 'Em uso' });
+    expect((await c.removePart('exhaust-sport')).ok).toBe(true);
+    expect(st('exhaust-sport')).toMatchObject({ state: 'owned', label: 'Comprada' });
+    expect((await c.installFromInventory('exhaust-sport')).ok).toBe(true);
+    expect(st('exhaust-sport').state).toBe('installed');
+    // bought for another car: still for sale on this one
+    expect(partStatus(c.save!, { baseCarId: 'gm-chevette-sl-1988', installedParts: [] }, findPart('exhaust-sport')!).state).toBe('available');
+    // not enough credits
+    const poor = await c.repo.transact(c.save!.revision, (x) => ({ ...x!, credits: 100 }));
+    c.save = poor;
+    expect(st('filter-sport')).toMatchObject({ state: 'unaffordable', label: '250 CR' });
   });
 
   it('buys and installs atomically; refuses without credits and never goes negative', async () => {
@@ -325,5 +346,73 @@ describe('story and debrief', () => {
     expect(bog.map((x) => x.id)).toContain('bog');
     // same input → same comments
     expect(evaluateRace({ ...base, outcome: 'loss', player: run({ wheelspinS: 1.6, maxSlipRatio: 0.7 }) })).toEqual(spin);
+  });
+});
+
+describe('factory parts (back to original)', () => {
+  const spec = (c: CareerController) => {
+    const b = ownedCarBuild(c.activeCar!);
+    if (!b.ok) throw new Error(b.errors.join('; '));
+    return { car: JSON.stringify(b.car), power: b.peakPowerCv, torque: b.peakTorqueNm, key: b.key };
+  };
+  const factory = (baseId: string) => {
+    const b = resolveBuild(findCampaignCar(baseId)!, []);
+    if (!b.ok) throw new Error('factory');
+    return { car: JSON.stringify(b.car), power: b.peakPowerCv, torque: b.peakTorqueNm, key: b.key };
+  };
+  const cat = (id: string) => findPart(id)?.category;
+
+  it('installing a part and going back to the original gives the identical factory build; the part stays in stock', async () => {
+    const store = new MemoryStore();
+    const c = new CareerController(new CareerRepository(store, 'slot-1'));
+    expect((await c.newCareer('vw-gol-gts-1988')).ok).toBe(true);
+    await winUpTo(c, 1);
+    expect(stockStatus(c.activeCar!, 'exhaust', cat)).toMatchObject({ state: 'installed', label: 'Em uso' });
+    expect(spec(c)).toEqual(factory('vw-gol-gts-1988'));
+    expect((await c.buyPart('exhaust-sport')).ok).toBe(true);
+    expect(spec(c)).not.toEqual(factory('vw-gol-gts-1988'));
+    expect(stockStatus(c.activeCar!, 'exhaust', cat)).toMatchObject({ state: 'stock', label: 'Original' });
+    const credits = c.save!.credits;
+
+    expect((await c.restoreStock('exhaust')).ok).toBe(true);
+    expect(c.activeCar!.installedParts).toEqual([]);
+    expect(spec(c)).toEqual(factory('vw-gol-gts-1988'));
+    expect(stockStatus(c.activeCar!, 'exhaust', cat).label).toBe('Em uso');
+    expect(c.save!.inventoryPartIds).toEqual(['exhaust-sport@vw-gol-gts-1988']);
+    expect(partStatus(c.save!, c.activeCar!, findPart('exhaust-sport')!).label).toBe('Comprada');
+    expect(c.save!.credits).toBe(credits); // free
+    // already original: nothing to do
+    expect((await c.restoreStock('exhaust')).ok).toBe(false);
+
+    // the choice is in the save: a fresh controller on the same store sees it
+    const again = new CareerController(new CareerRepository(store, 'slot-1'));
+    await again.load();
+    expect(again.activeCar!.installedParts).toEqual([]);
+    expect(again.save!.inventoryPartIds).toEqual(['exhaust-sport@vw-gol-gts-1988']);
+    expect(spec(again)).toEqual(factory('vw-gol-gts-1988'));
+
+    // and the bought part can be reinstalled without paying again
+    expect((await again.installFromInventory('exhaust-sport')).ok).toBe(true);
+    expect(again.save!.credits).toBe(credits);
+    expect(again.save!.inventoryPartIds).toEqual([]);
+  });
+
+  it('restore all puts every slot back to factory, keeps every part in stock, and respects build rules per slot', async () => {
+    const c = await career();
+    await winUpTo(c, 6);
+    await c.repo.transact(c.save!.revision, (x) => ({ ...x!, credits: 20000 })).then((n) => (c.save = n));
+    for (const id of ['filter-sport', 'exhaust-sport', 'tires-sport', 'clutch-reinforced', 'turbo-basic']) expect((await c.buyPart(id)).ok).toBe(true);
+    // the turbo needs the reinforced clutch: the original clutch alone is refused, nothing changes
+    const before = c.activeCar!.installedParts.slice();
+    const r = await c.restoreStock('clutch');
+    expect(r.ok).toBe(false);
+    expect(c.activeCar!.installedParts).toEqual(before);
+    // the whole car back to factory
+    expect((await c.restoreStock()).ok).toBe(true);
+    expect(c.activeCar!.installedParts).toEqual([]);
+    expect(c.activeCar!.tune ?? {}).toEqual({});
+    expect(spec(c)).toEqual(factory('vw-gol-gts-1988'));
+    expect([...c.save!.inventoryPartIds].sort()).toEqual(before.map((id) => `${id}@vw-gol-gts-1988`).sort());
+    expect((await c.restoreStock()).ok).toBe(false);
   });
 });
