@@ -111,7 +111,7 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
           turbo: {
             ...baseKit.turbo,
             maxBoostBar: mod.turboBoostBar ?? baseKit.turbo.maxBoostBar,
-            spoolTimeS: baseKit.turbo.spoolTimeS * (mod.turboSpoolScale ?? 1),
+            spoolTimeS: baseKit.turbo.spoolTimeS,
           },
           massAddKg: mod.turboMassAddKg ?? baseKit.massAddKg,
           intercoolerEffectiveness: mod.intercoolerEffectiveness ?? baseKit.intercoolerEffectiveness,
