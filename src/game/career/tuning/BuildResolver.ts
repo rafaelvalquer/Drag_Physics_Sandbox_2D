@@ -42,6 +42,16 @@ export function buildKey(baseId: string, partIds: readonly string[], tune: Build
   return `${baseId}|${[...new Set(partIds)].sort().join(',')}${tune.boostBar !== undefined ? `|b${tune.boostBar.toFixed(2)}` : ''}`;
 }
 
+/** Shared mechanical adjustment limits for workshop and dynamometer. */
+export function boostRangeForParts(partIds: readonly string[]): [number, number] | null {
+  const kit = partIds.map(findPart).find((p) => p?.category === 'turbo');
+  if (!kit) return null;
+  const max = 'mod' in kit ? Math.max(1, (kit.mod.turboBoostBar ?? 0.6) + 0.15) : (kit as TurboPart).boostRangeBar[1];
+  const waste = partIds.map(findPart).find((p) => p?.category === 'turbo-wastegate');
+  const offset = waste && 'mod' in waste ? (waste.mod.wastegateRangeAddBar ?? 0) : 0;
+  return [0.4, Math.min(1.8, max + offset)];
+}
+
 const cache = new Map<string, BuildResult>();
 
 /** Resolves (and caches) a build. The returned car is deeply frozen. */
@@ -133,8 +143,7 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
   if (tune.boostBar !== undefined) {
     const t = engineParts.turbo;
     if (!t) return { ok: false, errors: ['ajuste de pressão sem turbo instalado'] };
-    const [lo, max] = t.boostRangeBar;
-    const hi = Math.min(2, max + (mod.wastegateRangeAddBar ?? 0));
+    const [lo, hi] = boostRangeForParts(partIds)!;
     if (!(tune.boostBar >= lo && tune.boostBar <= hi))
       return { ok: false, errors: [`pressão fora da faixa do kit (${fmtBar(lo)} a ${fmtBar(hi)} bar)`] };
   }
@@ -156,7 +165,7 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
   let knockLoss = 0;
   // Non-engine upgrades (clutch, tyres, mass, suspension, internals) must not resample
   // the engine curve: restoring them keeps factory motor physics byte-for-byte.
-  const nonEnginePrefix = /^(clutch|finalDrive|gearSpread|tire|massRemove|cgHeight|internalTorqueLimit)/;
+  const nonEnginePrefix = /^(clutch|finalDrive|gearSpread|tire|massRemove|cgHeight|internalTorqueLimit|fuelBoostLimit)/;
   const changesEngine = !!(engineParts.filter || engineParts.manifold || engineParts.cam || engineParts.exhaust || engineParts.turbo)
     || Object.keys(mod).some((k) => !nonEnginePrefix.test(k));
   if (changesEngine) {
