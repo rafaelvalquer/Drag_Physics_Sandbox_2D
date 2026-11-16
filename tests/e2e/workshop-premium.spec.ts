@@ -11,8 +11,8 @@ test('oficina premium: nove sistemas, grupos distintos, estados e adaptação pa
   // Creating the campaign is asynchronous (IndexedDB): do not race it with the test-only navigation.
   await expect.poll(() => mode<boolean>(page, 'Boolean(m.controller.save)'), { timeout: 20_000 }).toBe(true);
   await expect(page.getByTestId('career-dialogue')).toBeVisible();
-  for (let i = 0; i < 30 && (await page.getByTestId('dialogue-next').count()); i++)
-    await page.getByTestId('dialogue-next').click();
+  // The prologue has a variable number of dialogue frames; skip it for this visual regression.
+  await page.getByTestId('dialogue-skip').click();
   await expect(page.getByTestId('career-garage')).toBeVisible();
 
   await mode(page, "m.show('workshop')");
