@@ -54,3 +54,34 @@ O workflow `P1 Brazilian cars and audio` executa a matriz High/Low e 44,1/48 kHz
 - O render offline mede o DSP com frames físicos, mas **não** mede starvation real do AudioWorklet em todos os dispositivos; os testes no navegador verificam ciclo de vida das vozes.
 - O modo `--short` do CI percorre os trechos rapidamente para regressão; medições detalhadas exigem a execução sem `--short`.
 - Os arquivos WAV antes/depois exigem duas revisões distintas: `--tag` apenas identifica a revisão, não simula uma calibração antiga.
+
+## Baseline quantitativa, revisão de origem
+
+Relatório do GitHub Actions `43954168431`, estágio `run` sob carga real no simulador, DSP High/48 kHz, `--short`. As rotações **não são iguais** entre veículos; estes números descrevem o comportamento observado e não uma meta de nivelamento.
+
+| Motor (original) | RPM médio | Intake RMS | Block RMS | Exhaust RMS | Turbo RMS | CPU offline |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Uno FIASA 1.0 | 4756 | 0.028 | 0.006 | 0.014 | 0 | 6.3% |
+| Celta VHC 1.0 | 3945 | 0.018 | 0.005 | 0.009 | 0 | 6.3% |
+| Chevette 1.6/S | 4698 | 0.034 | 0.007 | 0.013 | 0 | 6.2% |
+| Corsa 1.4 EFI | 4707 | 0.023 | 0.007 | 0.013 | 0 | 6.1% |
+| Kadett 1.8 | 5633 | 0.037 | 0.011 | 0.018 | 0 | 6.4% |
+| Saveiro AP 1.8 | 3735 | 0.036 | 0.006 | 0.012 | 0 | 6.6% |
+| Saveiro Marcos Turbo | 4727 | 0.049 | 0.011 | 0.038 | 0.021 | 9.9% |
+
+Todos os testes da baseline mostraram `nanResets=0`, `rejectedFrames=0` e apenas uma sincronização inicial. Pressão média da Saveiro Marcos no trecho: **0,56 bar**. A medição da configuração de fábrica permaneceu em **0 bar**.
+
+### Ajustes P1 fundamentados na baseline
+
+A admissão já apresenta personalidade relativa por motor; não foi mexido no DSP global ou no `mechanicalNoise`. Em especial a Saveiro e o Chevette tinham escape relativamente discreto frente à admissão. Foram aplicadas correções **moderadas, específicas por veículo**, somente em `exhaustGain`, preservando geometria de escapamento e combustível:
+
+| Original | Antes | Depois | Objetivo |
+| --- | ---: | ---: | --- |
+| Uno | 0.95 | 1.06 | Recuperar escapamento sem alterar assinatura FIASA |
+| Celta | 0.95 | 1.02 | Pequena compensação do VHC 1.0 |
+| Chevette | 0.95 | 1.12 | Dar presença ao escape longitudinal 1.6/S |
+| Corsa | 0.95 | 1.03 | Preservar o conjunto EFI 1.4 |
+| Kadett | 0.95 | 1.09 | Equilibrar o 1.8 em alta rotação |
+| Saveiro | 0.95 | 1.14 | Reforçar pulso do AP 1.8 mantendo timbre próprio |
+
+Os presets turbo herdam essas correções automaticamente do carro base; não foram criadas versões artificiais de motor. Os valores `tire`, `transmission`, `environment`, `block`, `intake` e `turbo` foram mantidos após a auditoria por não haver evidência quantitativa suficiente de defeitos neles.

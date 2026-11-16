@@ -1,6 +1,6 @@
 import { VehicleSound } from '../audio/core/VehicleSound';
 import { carToAcousticConfig } from '../audio/dsp/AcousticConfig';
-import { CARS, LAB_CARS, cloneCar } from '../data/cars/index';
+import { CAR_GROUPS, CARS, LAB_CARS, cloneCar } from '../data/cars/index';
 import type { CarConfig, TrackConfig } from '../data/schema';
 import { TRACKS, findTrack } from '../data/tracks/index';
 import { DragAI, type AiLevel } from '../game/ai/DragAI';
@@ -190,7 +190,12 @@ export class RaceMode implements Mode {
       h(
         'select',
         { 'data-testid': testid, onchange: (e: Event) => on((e.target as HTMLSelectElement).value as T) },
-        opts.map(([v, l]) => h('option', { value: v, selected: v === value }, l)),
+        [
+          ...(testid === 'race-opponent' ? [h('option', { value: '', selected: value === '' }, '— corrida solo —')] : []),
+          ...CAR_GROUPS.map((group) => h('optgroup', { label: group.label },
+            group.cars.map((car) => h('option', { value: car.id, selected: car.id === value }, car.name)),
+          )),
+        ],
       ) as HTMLSelectElement;
     const cars = LAB_CARS.map((c) => [c.id, c.name] as [string, string]);
     this.resultsHost = h('div', { 'data-testid': 'results' });

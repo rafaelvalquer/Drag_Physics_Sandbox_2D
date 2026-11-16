@@ -63,7 +63,7 @@ export const CAR_GM_CORSA_GL_1996: CarConfig = {
     tempSensitivityPerC: 0.0018,
   },
   exhaust: periodStockExhaust(0.36, 34, { tailpipeDiameterMm: 45, mufflerAbsorption: 0.66, outputGain: 0.8 }),
-  acoustic: periodAcoustic({ intakeGain: 0.65, blockGain: 0.6, mechanicalNoise: 0.5, gearTeeth: 19 }),
+  acoustic: periodAcoustic({ exhaustGain: 1.03, intakeGain: 0.65, blockGain: 0.6, mechanicalNoise: 0.5, gearTeeth: 19 }),
   visual: {
     bodyStyle: 'corsaGl96',
     color: '#1d4f91',

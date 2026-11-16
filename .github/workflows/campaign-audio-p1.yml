@@ -53,13 +53,13 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Campaign stock acoustic reports
-        run: npx tsx scripts/audio-calibrate.ts --scope campaign --variant stock --quality ${{ matrix.quality }} --rate ${{ matrix.rate }} --short --report artifacts/audio-campaign
+        run: npx tsx scripts/audio-calibrate.ts --scope campaign --variant stock --quality ${{ matrix.quality }} --rate ${{ matrix.rate }} --short --tag calibrated --report artifacts/audio-campaign
       - name: Prepared turbo acoustic reports
         if: matrix.quality == 'high' && matrix.rate == 48000
-        run: npx tsx scripts/audio-calibrate.ts --scope campaign --variant turbo-build --quality high --rate 48000 --short --report artifacts/audio-campaign --wav artifacts/audio-campaign
+        run: npx tsx scripts/audio-calibrate.ts --scope campaign --variant turbo-build --quality high --rate 48000 --short --tag calibrated --report artifacts/audio-campaign --wav artifacts/audio-campaign
       - name: Original campaign WAVs
         if: matrix.quality == 'high' && matrix.rate == 48000
-        run: npx tsx scripts/audio-calibrate.ts --scope campaign --variant stock --quality high --rate 48000 --short --wav artifacts/audio-campaign --report artifacts/audio-campaign
+        run: npx tsx scripts/audio-calibrate.ts --scope campaign --variant stock --quality high --rate 48000 --short --tag calibrated --wav artifacts/audio-campaign --report artifacts/audio-campaign
       - if: always()
         uses: actions/upload-artifact@v4
         with:

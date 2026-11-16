@@ -33,6 +33,12 @@ test('Marcos turbo is a separate free preset with correct boost and a factory re
   await expect.poll(async () => (await debug(page)).liveVoices).toBe(1);
   await expect(page.getByTestId('turbo-gauge')).toBeVisible();
   await page.screenshot({ path: test.info().outputPath('marcos-turbo-sandbox.png'), fullPage: true });
+  await page.getByTestId('editor-defaults').click();
+  await page.getByTestId('editor-apply').click();
+  await expect.poll(() => mode<string>(page, 'm.runner.player.sim.car.engine.induction')).toBe('NA');
+  await expect(page.getByTestId('turbo-gauge')).toBeHidden();
+  await page.getByTestId('prepared-select').selectOption('vw-saveiro-marcos-turbo-sandbox');
+  await expect.poll(() => mode<string>(page, 'm.runner.player.sim.car.engine.induction')).toBe('turbo');
   await page.getByTestId('car-select').selectOption('gm-celta-2003');
   await expect(page.getByTestId('prepared-select')).toHaveValue('');
   await expect.poll(() => mode<string>(page, 'm.runner.player.sim.car.engine.induction')).toBe('NA');
