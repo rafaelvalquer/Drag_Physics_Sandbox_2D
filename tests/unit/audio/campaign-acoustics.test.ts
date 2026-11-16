@@ -24,7 +24,7 @@ describe('Brazilian engine acoustic integration', () => {
           const sim = new VehicleSimulation(car, TRACKS[0]!);
           const voice = new VehicleAcoustics(rate, config);
           const out = Array.from({ length: CHANNEL_COUNT }, () => new Float32Array(Math.ceil(rate * STEP) + 2));
-          let acc = 0, peak = 0;
+          let acc = 0, peak = 0, turboPeak = 0, finite = true;
           for (let i = 0; i < 180; i++) {
             sim.controls.pedal = i < 90 ? 0 : 0.65;
             sim.step(STEP);
@@ -35,11 +35,13 @@ describe('Brazilian engine acoustic integration', () => {
             voice.render(out, n);
             for (let k = 0; k < CHANNEL_COUNT; k++) for (let j = 0; j < n; j++) {
               const v = out[k]![j]!;
-              expect(Number.isFinite(v)).toBe(true);
+              finite = finite && Number.isFinite(v);
               peak = Math.max(peak, Math.abs(v));
             }
-            for (let j = 0; j < n; j++) expect(Math.abs(out[CH.turbo]![j]!)).toBeLessThan(1e-8);
+            for (let j = 0; j < n; j++) turboPeak = Math.max(turboPeak, Math.abs(out[CH.turbo]![j]!));
           }
+          expect(finite).toBe(true);
+          expect(turboPeak).toBeLessThan(1e-8);
           expect(voice.nanResets).toBe(0);
           expect(voice.stream.rejectedFrames).toBe(0);
           expect(peak).toBeGreaterThan(0.00001);
