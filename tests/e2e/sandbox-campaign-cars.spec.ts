@@ -8,6 +8,36 @@ const ids = [
 
 test.afterEach(() => expect(errors, errors.join('\n')).toEqual([]));
 
+test('main Sandbox vehicle selector lists all factory and prepared cars', async ({ page }) => {
+  await boot(page);
+  const select = page.getByTestId('car-select');
+  await expect(select.locator('optgroup')).toHaveCount(4);
+  await expect(select.locator('option')).toHaveCount(22);
+  await expect(page.getByTestId('sandbox-catalog-count')).toContainText('14 carros originais + 8 preparações');
+
+  // Factory cars are selectable directly, without career unlocks.
+  for (const id of ids) {
+    await expect(select.locator('option[value="' + id + '"]')).toHaveCount(1);
+    await select.selectOption(id);
+    await expect.poll(() => mode<string>(page, 'm.runner.player.sim.car.id')).toBe(id);
+  }
+
+  // The same primary selector exposes ready-to-drive turbo recipes.
+  const marcos = 'vw-saveiro-marcos-turbo-sandbox';
+  await expect(select.locator('option[value="' + marcos + '"]')).toHaveCount(1);
+  await select.selectOption(marcos);
+  await expect(select).toHaveValue(marcos);
+  await expect(page.getByTestId('prepared-select')).toHaveValue(marcos);
+  await expect.poll(() => mode<string>(page, 'm.runner.player.sim.car.engine.induction')).toBe('turbo');
+  await expect.poll(() => mode<string>(page, 'm.runner.player.sim.car.id')).toBe('vw-saveiro-gl-1994');
+
+  await select.selectOption('vw-saveiro-gl-1994');
+  await expect(page.getByTestId('prepared-select')).toHaveValue('');
+  await expect.poll(() => mode<string>(page, 'm.runner.player.sim.car.engine.induction')).toBe('NA');
+});
+
+
+
 test('six Brazilian factory cars, garage art and original restoration', async ({ page }) => {
   await boot(page);
   for (const id of ids) {
