@@ -66,6 +66,8 @@ export class VehicleAcoustics {
   ambientK = 298;
   /** Offline diagnostics only: called per sample with radiated, jet, combined (Pa), normalized (pre-softClip) and final exhaust samples. */
   exhaustTap: ((radiated: number, jet: number, combined: number, normalized: number, final: number) => void) | null = null;
+  /** Offline diagnostics only: per sample tone, hiss, roar, combined (Pa), normalized (pre-softClip) and final intake samples. */
+  intakeTap: ((tone: number, hiss: number, roar: number, combined: number, normalized: number, final: number) => void) | null = null;
   /** Peak absolute output per channel since the last `resetStats` (diagnostics, calibration). */
   readonly peak = new Float64Array(CHANNEL_COUNT);
   readonly sumSq = new Float64Array(CHANNEL_COUNT);
@@ -183,7 +185,8 @@ export class VehicleAcoustics {
         }
         continue;
       }
-      this.write(outputs, CH.intake, offset + j, raw0, fade);
+      const yIn = this.write(outputs, CH.intake, offset + j, raw0, fade);
+      if (this.intakeTap) this.intakeTap(e.intakeTone, e.intakeHiss, e.intakeRoar, raw0, raw0 * this.gains[CH.intake]!, yIn);
       this.write(outputs, CH.block, offset + j, raw1, fade);
       const yEx = this.write(outputs, CH.exhaust, offset + j, raw2, fade);
       if (this.exhaustTap) this.exhaustTap(e.exhaustRadiated, e.exhaustJet, raw2, raw2 * this.gains[CH.exhaust]!, yEx);

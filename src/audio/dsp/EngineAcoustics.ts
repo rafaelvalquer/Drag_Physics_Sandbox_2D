@@ -12,6 +12,20 @@ const JET_REL_LEVEL = 0.3;
 const JET_STROUHAL = 0.2;
 const JET_FC_MIN = 250;
 const JET_FC_MAX = 1400;
+/** Intake turbulence calibration (see EngineAcoustics.process): reference intensity (Pa) of the roar
+ * curve, roar and throttle-hiss RMS relative to the periodic intake RMS at saturation, Strouhal
+ * number and corner limits of the roar, throttle band-pass, normalisation of the hiss drive. */
+const ROAR_INTENSITY_REF = 600;
+const ROAR_MAX_PA = 250;
+const ROAR_STROUHAL = 0.8;
+const ROAR_FC_MIN = 350;
+const ROAR_FC_MAX = 1500;
+const HISS_FC = 1500;
+const HISS_Q = 0.8;
+const HISS_LP = 2500;
+const HISS_MAX_PA = 40;
+const HISS_REF = 0.08;
+const HISS_FLOW_TERM = 0.05;
 const DEG = Math.PI / 180;
 const LUT = 1440; // points over the 720° cycle (0.5° resolution)
 const LUT_SCALE = LUT / FOUR_PI;
@@ -86,9 +100,26 @@ export class EngineAcoustics {
   private readonly tickRes: Biquad;
   private readonly starterRes: Biquad;
   private readonly throttleHissBp: Biquad;
+  private readonly throttleHissLp: OnePole;
   private readonly jetHp: Biquad;
   private readonly roarHp: OnePole;
   private readonly roarLp: OnePole;
+  private readonly roarLp2: OnePole;
+  private readonly hissRng: Prng;
+  private readonly roarRng: Prng;
+  private readonly roarFc: ParamSmoother;
+  private readonly roarAmp: ParamSmoother;
+  private readonly hissAmp: ParamSmoother;
+  private readonly toneEnvK: number;
+  private readonly toneDc: OnePole;
+  private readonly snorkelDiameterM: number;
+  private readonly hissDrive: number;
+  private toneEnvSq = 0;
+  private roarAmpTarget = 0;
+  private roarFcTarget = 400;
+  private roarDrive = 1;
+  private hissAmpTarget = 0;
+  private intakeCounter = 0;
   private readonly snorkelAreaM2: number;
   private readonly cavity: Biquad;
   private cavityKick = 0;
@@ -130,6 +161,10 @@ export class EngineAcoustics {
   private cAir = 346;
   // outputs of the last sample (Pa-scale, before mixing gains)
   intakeOut = 0;
+  /** Components of `intakeOut` (Pa, before the final high-pass), kept for offline diagnostics. */
+  intakeTone = 0;
+  intakeHiss = 0;
+  intakeRoar = 0;
   blockOut = 0;
   exhaustOut = 0;
   /** Components of `exhaustOut` (Pa), kept for offline diagnostics: pipe radiation and tailpipe jet noise. */
@@ -245,7 +280,31 @@ export class EngineAcoustics {
     const fH = (343 / (2 * Math.PI)) * Math.sqrt(snorkelA / ((e.intake.airboxVolumeL / 1000) * snorkelL));
     this.airbox = new Biquad(sampleRate).setBandpass(fH, 1.4);
     this.intakeHp = new OnePole(sampleRate, 25);
-    this.throttleHissBp = new Biquad(sampleRate).setBandpass(3200, 0.8);
+    this.throttleHissBp = new Biquad(sampleRate).setBandpass(HISS_FC, HISS_Q);
+    this.throttleHissLp = new OnePole(sampleRate, HISS_LP);
+    this.hissRng = new Prng(cfg.seed * 104729 + 23);
+    this.roarRng = new Prng(cfg.seed * 1299709 + 41);
+    this.roarLp2 = new OnePole(sampleRate, 900);
+    this.roarFc = new ParamSmoother(sampleRate, 0.08, 0.08, 400);
+    this.roarAmp = new ParamSmoother(sampleRate, 0.03, 0.06);
+    this.hissAmp = new ParamSmoother(sampleRate, 0.03, 0.06);
+    this.toneEnvK = 1 - Math.exp(-1 / (0.08 * sampleRate));
+    this.toneDc = new OnePole(sampleRate, 20);
+    this.snorkelDiameterM = Math.sqrt((4 * snorkelA) / Math.PI);
+    // unit-RMS drive of the throttle band-pass (measured once on a seeded noise run: independent of
+    // the sample rate and of the filter settings)
+    {
+      const bp = new Biquad(sampleRate).setBandpass(HISS_FC, HISS_Q);
+      const lp = new OnePole(sampleRate, HISS_LP);
+      const pr = new Prng(7);
+      let s = 0;
+      const n = 16384;
+      for (let i = 0; i < n; i++) {
+        const y = lp.lowpass(bp.process(pr.bipolar()));
+        if (i >= 1024) s += y * y;
+      }
+      this.hissDrive = 1 / Math.sqrt(s / (n - 1024) + 1e-20);
+    }
     this.jetHp = new Biquad(sampleRate).setHighpass(150, 0.7);
     this.jetLp2 = new OnePole(sampleRate, 900);
     this.jetFc = new ParamSmoother(sampleRate, 0.08, 0.08, 400);
@@ -463,17 +522,44 @@ export class EngineAcoustics {
       intakeSig = suction * 0.4;
     }
     intakeSig = this.airbox.process(intakeSig) * 0.7 + intakeSig * 0.3;
-    // turbulent throttle noise: grows with the pressure drop across a partly open plate
-    const drop = Math.max(0, 1 - pMan / 101325);
-    const flowRpm = absW / 600;
-    const hiss = this.throttleHissBp.process(this.rng.bipolar()) * drop * flowRpm * c.throttle * 900;
-    // induction roar: turbulent flow noise at the airbox inlet, same scaling as the tailpipe jet
-    // (∝ ρ·v²·(v/c)², v from the inducted mass flow), modulated by the pulsating suction
+    // Turbulent noise layers. Like the tailpipe jet, the physical intensity only DRIVES a smooth
+    // saturating curve x/(1+x) that sets an amplitude relative to the running level of the periodic
+    // intake sound, so turbulence is a discreet layer (never the v⁴ wall of static it used to be).
+    const toneAc = intakeSig - this.toneDc.lowpass(intakeSig);
+    this.toneEnvSq += (toneAc * toneAc - this.toneEnvSq) * this.toneEnvK;
+    const toneEnv = Math.sqrt(this.toneEnvSq);
+    // induction roar: flow noise at the airbox inlet, Lighthill scaling ρ·v²·(v/c)² from the inducted
+    // mass flow; spectrum follows the flow (corner ∝ v/D, ~−12 dB/oct above)
     const mAir = c.load * this.displacementM3 * 1.18 * (absW / FOUR_PI);
     const vIn = mAir / (1.18 * this.snorkelAreaM2);
-    const machIn = vIn / this.cAir;
-    const mod = 1 + Math.max(-0.9, Math.min(2, -suction / 3000));
-    const roar = this.roarLp.lowpass(this.roarHp.highpass(this.rng.bipolar())) * 4 * 1.18 * vIn * vIn * machIn * machIn * mod;
+    // throttle noise: pressure drop across the plate (upstream pressure = ambient + boost for a
+    // turbocharged engine, where the plate sits after the compressor) times the mass-flow fraction;
+    // a small flow-only term keeps a natural trace of turbulence at wide-open throttle
+    const pUp = 101325 + Math.max(0, c.boostPa);
+    const drop = Math.max(0, 1 - pMan / pUp);
+    const flow = Math.min(1.5, (pMan / 101325) * (absW / this.redlineOmega));
+    if ((this.intakeCounter++ & 31) === 0) {
+      const machIn = vIn / this.cAir;
+      const intensity = 4 * 1.18 * vIn * vIn * machIn * machIn;
+      const x = intensity / ROAR_INTENSITY_REF;
+      this.roarAmpTarget = ROAR_MAX_PA * (x / (1 + x));
+      this.roarFcTarget = Math.min(ROAR_FC_MAX, Math.max(ROAR_FC_MIN, (ROAR_STROUHAL * vIn) / this.snorkelDiameterM));
+      const fc = this.roarFc.value;
+      this.roarLp.setCutoff(fc);
+      this.roarLp2.setCutoff(fc * 1.8);
+      // unit-RMS drive for a white source of variance 1/3 band-limited to ≈ 1.1·fc
+      this.roarDrive = 1 / (0.577 * Math.sqrt((2.2 * fc) / this.sampleRate));
+      const xh = (drop * flow * flow + HISS_FLOW_TERM * flow * flow * flow) / HISS_REF;
+      this.hissAmpTarget = HISS_MAX_PA * (xh / (1 + xh));
+    }
+    this.roarFc.next(this.roarFcTarget);
+    const inPulse = 1 + Math.max(-0.9, Math.min(1.5, toneAc / (2 * toneEnv + 1e-6)));
+    const roar =
+      this.roarLp2.lowpass(this.roarLp.lowpass(this.roarHp.highpass(this.roarRng.bipolar()))) * this.roarDrive * this.roarAmp.next(this.roarAmpTarget) * inPulse;
+    const hiss = this.throttleHissLp.lowpass(this.throttleHissBp.process(this.hissRng.bipolar())) * this.hissDrive * this.hissAmp.next(this.hissAmpTarget);
+    this.intakeTone = intakeSig * runFade;
+    this.intakeHiss = hiss * runFade;
+    this.intakeRoar = roar * runFade;
     this.intakeOut = this.intakeHp.highpass(intakeSig + hiss + roar) * runFade;
 
     // ---- block
@@ -508,5 +594,24 @@ export class EngineAcoustics {
     this.burnAmp.fill(0);
     this.exhaust.clear();
     this.runner?.clear();
+    // intake chain: no residue of filters, envelopes or smoothed noise levels after a reset
+    this.airbox.reset();
+    this.intakeHp.reset();
+    this.throttleHissBp.reset();
+    this.throttleHissLp.reset();
+    this.roarHp.reset();
+    this.roarLp.reset();
+    this.roarLp2.reset();
+    this.roarFc.reset(400);
+    this.roarAmp.reset();
+    this.hissAmp.reset();
+    this.toneEnvSq = 0;
+    this.toneDc.reset();
+    this.roarAmpTarget = 0;
+    this.hissAmpTarget = 0;
+    this.intakeTone = 0;
+    this.intakeHiss = 0;
+    this.intakeRoar = 0;
+    this.intakeOut = 0;
   }
 }
