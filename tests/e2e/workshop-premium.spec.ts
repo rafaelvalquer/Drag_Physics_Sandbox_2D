@@ -13,7 +13,7 @@ test('oficina premium: nove sistemas, grupos distintos, estados e adaptação pa
   await expect(page.getByTestId('career-dialogue')).toBeVisible();
   // The prologue has a variable number of dialogue frames; skip it for this visual regression.
   await page.getByTestId('dialogue-skip').click();
-  await expect(page.getByTestId('career-garage')).toBeVisible();
+  await expect(page.getByTestId('career-garage-screen')).toBeVisible();
 
   await mode(page, "m.show('workshop')");
   await expect(page.getByTestId('career-workshop')).toBeVisible();
