@@ -154,7 +154,12 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
   const stockEngine = withStockBreathing(base.engine, ratedRpm);
   let steadyBoostBar: { rpm: number; bar: number }[] = [];
   let knockLoss = 0;
-  if (parts.length || tune.boostBar !== undefined) {
+  // Non-engine upgrades (clutch, tyres, mass, suspension, internals) must not resample
+  // the engine curve: restoring them keeps factory motor physics byte-for-byte.
+  const nonEnginePrefix = /^(clutch|finalDrive|gearSpread|tire|massRemove|cgHeight|internalTorqueLimit)/;
+  const changesEngine = !!(engineParts.filter || engineParts.manifold || engineParts.cam || engineParts.exhaust || engineParts.turbo)
+    || Object.keys(mod).some((k) => !nonEnginePrefix.test(k));
+  if (changesEngine) {
     const r = applyEngineParts(stockEngine, engineParts);
     car.engine = r.engine;
     steadyBoostBar = r.steadyBoostBar;
