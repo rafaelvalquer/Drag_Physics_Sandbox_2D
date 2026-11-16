@@ -191,7 +191,7 @@ export class RaceMode implements Mode {
         'select',
         { 'data-testid': testid, onchange: (e: Event) => on((e.target as HTMLSelectElement).value as T) },
         [
-          ...(testid === 'race-opponent' ? [h('option', { value: '', selected: value === '' }, '— corrida solo —')] : []),
+          ...(testid === 'race-opponent' ? opts.filter(([v]) => v === '').map(([v, label]) => h('option', { value: v, selected: value === v }, label)) : []),
           ...CAR_GROUPS.map((group) => h('optgroup', { label: group.label },
             group.cars.map((car) => h('option', { value: car.id, selected: car.id === value }, car.name)),
           )),
