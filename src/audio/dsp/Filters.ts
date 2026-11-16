@@ -48,16 +48,21 @@ export class Biquad {
   private z2 = 0;
   constructor(private readonly sampleRate: number) {}
 
-  private coeffs(f: number, q: number): { w: number; cos: number; alpha: number } {
+  // scratch results of coeffs(); fields so that retuning a filter never allocates
+  private cCos = 1;
+  private cAlpha = 0;
+
+  private coeffs(f: number, q: number): void {
     const fc = Math.min(Math.max(f, 5), this.sampleRate * 0.45);
     const w = (2 * Math.PI * fc) / this.sampleRate;
-    const cos = Math.cos(w);
-    const alpha = Math.sin(w) / (2 * Math.max(q, 0.05));
-    return { w, cos, alpha };
+    this.cCos = Math.cos(w);
+    this.cAlpha = Math.sin(w) / (2 * Math.max(q, 0.05));
   }
 
   setLowpass(f: number, q = 0.7071): this {
-    const { cos, alpha } = this.coeffs(f, q);
+    this.coeffs(f, q);
+    const cos = this.cCos;
+    const alpha = this.cAlpha;
     const a0 = 1 + alpha;
     this.b0 = (1 - cos) / 2 / a0;
     this.b1 = (1 - cos) / a0;
@@ -68,7 +73,9 @@ export class Biquad {
   }
 
   setHighpass(f: number, q = 0.7071): this {
-    const { cos, alpha } = this.coeffs(f, q);
+    this.coeffs(f, q);
+    const cos = this.cCos;
+    const alpha = this.cAlpha;
     const a0 = 1 + alpha;
     this.b0 = (1 + cos) / 2 / a0;
     this.b1 = -(1 + cos) / a0;
@@ -80,7 +87,9 @@ export class Biquad {
 
   /** Constant 0 dB peak gain band-pass. */
   setBandpass(f: number, q: number): this {
-    const { cos, alpha } = this.coeffs(f, q);
+    this.coeffs(f, q);
+    const cos = this.cCos;
+    const alpha = this.cAlpha;
     const a0 = 1 + alpha;
     this.b0 = alpha / a0;
     this.b1 = 0;
@@ -128,6 +137,28 @@ export function softClip(x: number): number {
   if (x < -3) return -1;
   const x2 = x * x;
   return (x * (27 + x2)) / (27 + 9 * x2);
+}
+
+/**
+ * Exponential (one-pole) parameter smoother with separate attack (rising) and release (falling)
+ * time constants. Used for gains and filter frequencies so they never jump between samples.
+ */
+export class ParamSmoother {
+  value: number;
+  private readonly ka: number;
+  private readonly kr: number;
+  constructor(sampleRate: number, attackS: number, releaseS = attackS, initial = 0) {
+    this.value = initial;
+    this.ka = 1 - Math.exp(-1 / Math.max(1, attackS * sampleRate));
+    this.kr = 1 - Math.exp(-1 / Math.max(1, releaseS * sampleRate));
+  }
+  next(target: number): number {
+    this.value += (target - this.value) * (target > this.value ? this.ka : this.kr);
+    return this.value;
+  }
+  reset(v = 0): void {
+    this.value = v;
+  }
 }
 
 /** Linear parameter smoother (per-sample ramp to the target over `timeS`). */

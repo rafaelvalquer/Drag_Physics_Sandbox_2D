@@ -17,9 +17,9 @@ export const CHANNEL_NORM: Readonly<Record<number, number>> = {
   [CH.block]: 1 / 200000,
   [CH.exhaust]: 1 / 1800,
   [CH.turbo]: 0.1,
-  [CH.tire]: 0.35,
+  [CH.tire]: 0.25,
   [CH.transmission]: 0.45,
-  [CH.environment]: 0.3,
+  [CH.environment]: 0.12,
 };
 
 /**

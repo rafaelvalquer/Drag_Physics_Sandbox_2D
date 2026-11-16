@@ -12,6 +12,8 @@ import { VehicleAcoustics } from '../../../src/audio/dsp/VehicleAcoustics';
 import { autocorrelationPitch, averagedSpectrum, aWeightedLevel, bandEnergy, rms } from '../../../src/audio/analysis/spectrum';
 import { exhaustPreset } from '../../../src/data/exhaustPresets';
 import { H, car, carToAcousticConfig, renderSynthetic, withFiring } from './helpers';
+import { AuxAcoustics } from '../../../src/audio/dsp/AuxAcoustics';
+import { NOISE_SCENARIOS, NOISE_SPEEDS_KMH, analyzeSignal, renderNoise, renderSteady, type NoiseScenario, type SignalMetrics } from '../../../src/audio/analysis/noiseLab';
 
 const N = 16384;
 const dB = (x: number): number => 20 * Math.log10(Math.max(x, 1e-12));
@@ -440,5 +442,212 @@ describe('vehicle acoustics driven by the physics', () => {
     const runningPeak = Math.max(...transPeak.slice(shiftStart - 40, shiftStart - 10));
     expect(clunk).toBeGreaterThan(runningPeak);
     expect(voice.nanResets).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Tyre rolling / skid squeal and wind (environment + tire channels) – regression for the radio-
+// static hiss at high speed. Isolated renders at 0…300 km/h, 44.1 and 48 kHz.
+// ---------------------------------------------------------------------------------------------
+describe('tyre and wind noise (environment + tire channels)', () => {
+  const cfg = carToAcousticConfig(car('arco-1600'), 'high', 1);
+  const RATES = [44100, 48000] as const;
+  const sc = (id: string): NoiseScenario => NOISE_SCENARIOS.find((s) => s.id === id)!;
+  type Run = { env: SignalMetrics; tire: SignalMetrics; ch: Float32Array[] };
+  const cache = new Map<string, Run>();
+  function run(fs: number, kmh: number, id: string): Run {
+    const key = `${fs}/${kmh}/${id}`;
+    let r = cache.get(key);
+    if (!r) {
+      const { ch } = renderSteady(cfg, fs, kmh, sc(id));
+      r = { env: analyzeSignal(ch[CH.environment]!, fs), tire: analyzeSignal(ch[CH.tire]!, fs), ch };
+      cache.set(key, r);
+    }
+    return r;
+  }
+
+  for (const fs of RATES) {
+    describe(`@ ${fs} Hz`, () => {
+      it('wind alone: finite, no clipping, low-weighted spectrum (no static) and progressive growth', () => {
+        let prev = 0;
+        for (const kmh of NOISE_SPEEDS_KMH) {
+          const { env } = run(fs, kmh, 'roll');
+          expect(Number.isFinite(env.rms)).toBe(true);
+          expect(env.clipped).toBe(0);
+          expect(env.peak).toBeLessThan(0.3);
+          if (kmh > 0) {
+            expect(env.bands[3]).toBeLessThan(0.01); // < 1 % of the energy above 4 kHz
+            expect(env.centroidHz).toBeLessThan(1000);
+          }
+          expect(env.rms).toBeGreaterThanOrEqual(prev * 0.98);
+          prev = env.rms;
+        }
+        const w40 = run(fs, 40, 'roll').env.rms;
+        const w120 = run(fs, 120, 'roll').env.rms;
+        const w300 = run(fs, 300, 'roll').env.rms;
+        expect(w300).toBeGreaterThan(0.01); // not removed
+        expect(w300).toBeLessThan(0.06);
+        expect(w40).toBeLessThan(w120 * 0.5);
+        expect(w120).toBeLessThan(w300 * 0.5);
+      });
+
+      it('rolling noise without skid: low/mid weighted, bounded growth, no squeal band', () => {
+        let prev = 0;
+        for (const kmh of NOISE_SPEEDS_KMH) {
+          const { tire } = run(fs, kmh, 'roll');
+          expect(tire.clipped).toBe(0);
+          expect(tire.peak).toBeLessThan(0.4);
+          if (kmh > 0) {
+            expect(tire.bands[0] + tire.bands[1]).toBeGreaterThan(0.9);
+            expect(tire.bands[3]).toBeLessThan(0.02);
+            expect(tire.centroidHz).toBeLessThan(700);
+          }
+          expect(tire.rms).toBeGreaterThanOrEqual(prev * 0.98);
+          prev = tire.rms;
+        }
+        // 40 → 300 km/h grows by less than 16 dB (the old v^1.5 law gave ≈ 29 dB)
+        expect(dB(run(fs, 300, 'roll').tire.rms) - dB(run(fs, 40, 'roll').tire.rms)).toBeLessThan(16);
+        expect(run(fs, 300, 'roll').tire.rms).toBeLessThan(0.08);
+      });
+
+      it('normal wheel/ground speed mismatch at high speed does not squeal, heavy slip does', () => {
+        for (const kmh of [120, 180, 240, 300]) {
+          const roll = run(fs, kmh, 'roll').tire;
+          const heavy = run(fs, kmh, 'slip-heavy').tire;
+          expect(heavy.aLevelDb - roll.aLevelDb).toBeGreaterThan(5);
+          // squeal puts real energy above 1.5 kHz that the rolling noise lacks
+          expect(heavy.bands[2] + heavy.bands[3]).toBeGreaterThan(5 * (roll.bands[2] + roll.bands[3]));
+        }
+      });
+
+      it('light slip sits between rolling and intense slip; burnouts stay clearly audible', () => {
+        for (const kmh of NOISE_SPEEDS_KMH) {
+          const roll = run(fs, kmh, 'roll').tire.rms;
+          const light = run(fs, kmh, 'slip-light').tire.rms;
+          const heavy = run(fs, kmh, 'slip-heavy').tire.rms;
+          expect(light).toBeGreaterThan(roll * 0.99);
+          expect(heavy).toBeGreaterThan(light * 0.99);
+          expect(heavy).toBeGreaterThan(0.03);
+        }
+        expect(run(fs, 0, 'slip-heavy').tire.bands[2]).toBeGreaterThan(0.2);
+      });
+
+      it('wind + tyres together, and all channels combined: bounded, no clipping, no hiss dominance', () => {
+        const mixAll = [0.8, 0.7, 1, 0.8, 0.8, 0.6, 0.5];
+        for (const kmh of NOISE_SPEEDS_KMH) {
+          for (const id of ['roll', 'slip-light', 'slip-heavy']) {
+            const { ch, env, tire } = run(fs, kmh, id);
+            const n = ch[0]!.length;
+            const wt = new Float32Array(n);
+            const all = new Float32Array(n);
+            for (let i = 0; i < n; i++) {
+              wt[i] = ch[CH.environment]![i]! * 0.5 + ch[CH.tire]![i]! * 0.8;
+              let s = 0;
+              for (let k = 0; k < ch.length; k++) s += ch[k]![i]! * mixAll[k]!;
+              all[i] = s * 0.35;
+            }
+            const m = analyzeSignal(wt, fs);
+            const a = analyzeSignal(all, fs);
+            expect(m.clipped).toBe(0);
+            expect(a.clipped).toBe(0);
+            expect(a.peak).toBeLessThan(1);
+            expect(Number.isFinite(a.rms)).toBe(true);
+            expect(env.clipped + tire.clipped).toBe(0);
+            if (kmh > 0) expect(m.bands[3]).toBeLessThan(id === 'roll' ? 0.02 : 0.12);
+          }
+        }
+      });
+
+      it('at 300 km/h the engine stays clearly more audible than wind + rolling noise', () => {
+        const { ch } = run(fs, 300, 'roll');
+        const mix = [0.8, 0.7, 1, 0.8, 0.8, 0.6, 0.5];
+        const level = (k: number): number => aLevel(ch[k]!, fs, 0) + dB(mix[k]!);
+        const engine = Math.max(level(CH.exhaust), level(CH.intake), level(CH.block));
+        expect(engine).toBeGreaterThan(level(CH.environment) + 6);
+        expect(engine).toBeGreaterThan(level(CH.tire) + 3);
+      });
+    });
+  }
+
+  it('44.1 and 48 kHz give the same level and spectral balance', () => {
+    for (const kmh of [40, 120, 300]) {
+      for (const id of ['roll', 'slip-heavy']) {
+        const a = run(44100, kmh, id);
+        const b = run(48000, kmh, id);
+        expect(Math.abs(dB(a.env.rms) - dB(b.env.rms))).toBeLessThan(1);
+        expect(Math.abs(dB(a.tire.rms) - dB(b.tire.rms))).toBeLessThan(1.2);
+        expect(Math.abs(a.tire.centroidHz / b.tire.centroidHz - 1)).toBeLessThan(0.1);
+        expect(Math.abs(a.env.centroidHz / b.env.centroidHz - 1)).toBeLessThan(0.1);
+      }
+    }
+  });
+
+  it('rolling and skid are separate internal sources and the skid gate uses the slip ratio', () => {
+    const fs = 48000;
+    const probe = (v: number, slip: number): { roll: number; skid: number } => {
+      const aux = new AuxAcoustics(fs, cfg);
+      const c = {
+        omega: 300,
+        throttle: 1,
+        boostPa: 0,
+        turboShaftRpm: 0,
+        bovFlow: 0,
+        vehicleSpeed: v,
+        wheelSlipSpeed: slip,
+        tireLoadN: 4000,
+        gearboxOutputOmega: 0,
+        clutchSlipOmega: 0,
+        transmissionTorque: 0,
+        gear: 0,
+        gearChanged: false,
+      };
+      let roll = 0;
+      let skid = 0;
+      for (let i = 0; i < fs; i++) {
+        aux.process(c);
+        if (i > fs / 2) {
+          roll = Math.max(roll, Math.abs(aux.tireRollOut));
+          skid = Math.max(skid, Math.abs(aux.tireSlipOut));
+        }
+      }
+      return { roll, skid };
+    };
+    const normal = probe(83, 1.7); // 300 km/h, 2 % mismatch: above the old 0.3 m/s threshold
+    expect(normal.skid).toBeLessThan(1e-3);
+    expect(normal.roll).toBeGreaterThan(0.1);
+    const burnout = probe(0, 15);
+    expect(burnout.skid).toBeGreaterThan(0.5);
+    expect(burnout.roll).toBe(0);
+    expect(probe(83, 30).skid).toBeGreaterThan(0.5); // ratio 0.36 and 30 m/s: real skid at speed
+    expect(probe(83, 3).skid).toBeLessThan(0.02); // 3.6 % ratio: below the ratio gate
+  });
+
+  it('is continuous: a 0→300 km/h sweep and slip on/off steps produce no clicks', () => {
+    const fs = 48000;
+    const steady = run(fs, 120, 'roll');
+    const steadyJump = Math.max(steady.env.maxJumpRatio, steady.tire.maxJumpRatio);
+    const sweep = renderNoise(cfg, { sampleRate: fs, seconds: 8, speed: (t) => (Math.min(1, t / 6) * 300) / 3.6, slip: sc('roll').slip });
+    for (const k of [CH.environment, CH.tire]) {
+      const m = analyzeSignal(sweep.ch[k]!.subarray(Math.round(0.3 * fs)), fs);
+      expect(m.maxJumpRatio).toBeLessThan(Math.max(steadyJump, 6) * 1.5);
+      expect(m.clipped).toBe(0);
+    }
+    // slip appears at t = 2 s and disappears at t = 4 s at 200 km/h (slip callback is called once per 120 Hz frame)
+    let calls = 0;
+    const stepped = renderNoise(cfg, {
+      sampleRate: fs,
+      seconds: 6,
+      speed: () => 200 / 3.6,
+      slip: (v) => {
+        const t = calls++ / 120;
+        return t >= 2 && t < 4 ? 0.4 * v : 0.015 * v;
+      },
+    });
+    const m = analyzeSignal(stepped.ch[CH.tire]!.subarray(Math.round(0.3 * fs)), fs);
+    expect(m.maxJumpRatio).toBeLessThan(12);
+    const seg = (a: number, b: number): number => rms(stepped.ch[CH.tire]!, Math.round(a * fs), Math.round(b * fs));
+    expect(seg(2.6, 3.8)).toBeGreaterThan(seg(0.8, 1.8) * 1.5);
+    expect(seg(5, 6)).toBeLessThan(seg(2.6, 3.8) * 0.75);
+    expect(seg(5, 6)).toBeLessThan(seg(0.8, 1.8) * 1.3);
   });
 });
