@@ -8,8 +8,12 @@ test('oficina premium: nove sistemas, grupos distintos, estados e adaptação pa
   await page.locator('button.tab[data-mode=career]').click();
   await page.getByTestId('career-new').click();
   await page.getByTestId('choose-vw-gol-gts-1988').click();
+  // Creating the campaign is asynchronous (IndexedDB): do not race it with the test-only navigation.
+  await expect.poll(() => mode<boolean>(page, 'Boolean(m.controller.save)'), { timeout: 20_000 }).toBe(true);
+  await expect(page.getByTestId('career-dialogue')).toBeVisible();
   for (let i = 0; i < 30 && (await page.getByTestId('dialogue-next').count()); i++)
     await page.getByTestId('dialogue-next').click();
+  await expect(page.getByTestId('career-garage')).toBeVisible();
 
   await mode(page, "m.show('workshop')");
   await expect(page.getByTestId('career-workshop')).toBeVisible();
