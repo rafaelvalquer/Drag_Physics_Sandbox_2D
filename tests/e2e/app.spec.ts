@@ -74,7 +74,7 @@ test('drag race against the AI: tree, results, record persisted in IndexedDB', a
   await boot(page);
   await page.locator('#topbar button[data-mode=race]').click();
   await page.getByTestId('race-distance').selectOption('eighth');
-  await expect(page.getByTestId('race-status')).toContainText('Pressione E');
+  await expect(page.getByTestId('race-status')).toContainText('Pronto para largar');
   await page.waitForFunction(() => (window as unknown as { __app: { debug: { current: { runner: { player: { sim: { engine: { runState: string } } } } } } } }).__app.debug.current.runner.player.sim.engine.runState === 'RUNNING');
   await page.locator('#game').click({ position: { x: 50, y: 50 } });
   await page.keyboard.press('e');

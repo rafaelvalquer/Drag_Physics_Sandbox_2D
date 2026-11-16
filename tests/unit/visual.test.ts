@@ -231,7 +231,8 @@ describe('camera', () => {
     const cam = new CameraController();
     let x = 100;
     let v = 0;
-    let prev = cam.update(1 / 60, { ...base, mode: 'follow', player: car(x, v) });
+    // the controller updates its state in place (no allocation per frame): keep a copy
+    let prev = { ...cam.update(1 / 60, { ...base, mode: 'follow', player: car(x, v) }) };
     let maxStep = 0;
     for (let i = 0; i < 60 * 14; i++) {
       v = Math.min(75, v + 9 / 60);
@@ -240,7 +241,7 @@ describe('camera', () => {
       // camera motion relative to the car stays smooth frame to frame
       maxStep = Math.max(maxStep, Math.abs(s.x - prev.x - v / 60));
       expect(Math.abs(s.ppm - prev.ppm)).toBeLessThan(1.2);
-      prev = s;
+      prev = { ...s };
     }
     expect(maxStep).toBeLessThan(0.35);
     expect(1100 / prev.ppm).toBeCloseTo(FOLLOW_SPAN_FAST_M, 0);

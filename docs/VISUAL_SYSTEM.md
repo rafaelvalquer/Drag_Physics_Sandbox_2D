@@ -195,10 +195,34 @@ Padrão por pista: Test Track e Airfield de dia, Desert Strip ao fim de tarde, N
 - **Enquadramento:** parado, a vista tem 14 m de largura, e o carro ocupa cerca de um terço. A linha do solo fica a 70 % da altura.
 - **Zoom dinâmico:** abre até 21 m a 60 m/s.
 - **Antecipação:** a câmera olha à frente do carro, até um quinto da vista.
-- **Sem atraso:** a câmera anda junto com o carro e só então suaviza a diferença.
+- **Sem atraso e sem tremer:** nas câmeras follow e wide, a câmera é transportada exatamente pela distância que o carro do jogador percorreu **na tela** desde o quadro anterior (a mesma posição interpolada usada pelo sprite). Só o resíduo até o enquadramento (antecipação, zoom, adversário, árvore) é suavizado. Não existe uma segunda previsão por velocidade que possa discordar da posição desenhada.
+- **Antecipação como offset:** a antecipação é um deslocamento amortecido (0,5 s) em relação ao carro desenhado, nunca uma posição prevista.
 - **Adversário próximo:** a menos de 16 m, a vista abre o suficiente para manter os dois. Além disso, um indicador na borda mostra nome e distância.
-- **Cortes:** só quando o carro volta à linha de largada.
-- **Limites:** nunca mostra antes de −30 m nem depois do fim da pista.
+- **Cortes:** quando o carro volta à linha de largada, salta mais de 30 m em um quadro ou o modo de câmera muda (tecla C). A troca de modo reinicia o acompanhamento.
+- **Limites:** nunca mostra antes de −30 m nem depois do fim da pista. O limite vale para a posição final da câmera, não para o alvo, então ela não alterna entre a posição limitada e a transportada. Perto das pontas, o carro anda na tela.
+- **Câmera start:** fixa na largada.
+
+### Interpolação e relógio visual
+
+A física roda em passos fixos de 1/120 s, e o quadro de tela cai entre dois passos. Antes, o carro era desenhado no último passo: um quadro avançava 1 passo e o seguinte 3, e o carro ia e voltava na tela. Agora:
+
+- **Estado anterior e atual:** o `SimulationRunner` copia por valor, antes e depois de cada passo, a posição, a velocidade, o pitch e os ângulos das rodas motriz e livre de cada veículo. A física nunca é alterada pela renderização.
+- **Interpolação:** o `VehicleViews` desenha `lerp(anterior, atual, alpha)`, com `alpha = acumulador / passo` limitado a [0, 1]. O desenho fica no máximo um passo (8,3 ms) atrás da física. Funciona com 0, 1 ou N passos por quadro.
+- **O que não é interpolado:** marcha, estado do motor, troca, luzes, patinagem, partículas e eventos de um passo usam o estado mais recente.
+- **Cortes:** reinício (R), troca de carro ou qualquer mudança de posição fora de um passo igualam anterior e atual. O carro aparece no lugar novo sem animar de volta.
+- **Pausa:** pausado ou avançando um passo no Developer Lab, `alpha = 1`, e a tela mostra exatamente o estado da física.
+- **Relógio único:** câmera, suavizações, animações e partículas usam o mesmo tempo real (`performance.now()`) que avança a física, limitado a 0,1 s por quadro. O delta do Phaser, suavizado para a taxa do monitor, não é mais usado. A cronometragem não mudou.
+- **Diagnóstico:** `RaceScene.visualDebug(n)` devolve os últimos `n` quadros (buffer circular pré-alocado de 900 quadros, sem log no console) com physicsX, renderX, cameraX, screenX, alpha, passos, delta real, delta visual, delta do Phaser, fps, ppm, zoom e modo de câmera.
+
+Medição no Edge, build de produção, Aurora V12 em plena carga até 291 km/h (oscilação de screenX em relação ao movimento uniforme entre quadros vizinhos):
+
+| Câmera | Antes, p95 / máx. | Depois, p95 / máx. |
+|---|---|---|
+| follow, 240–300 km/h | 0,04 / 26,4 px | 0,00 / 0,00 px |
+| wide, 120–180 km/h | 4,2 / 8,9 px | 0,00 / 0,01 px |
+| start, 40–80 km/h | 4,4 / 4,4 px | 0,03 / 0,04 px |
+
+Os picos de antes coincidem com quadros de 3 passos seguidos de 1 passo, quando o acumulador fica perto da fronteira de um passo e o relógio real oscila 1–2 ms. A 60 Hz exatos isso acontece em alguns quadros por segundo. Em monitores de 75, 120 ou 144 Hz, ou com quadros irregulares, acontece em quase todos.
 - **Zoom do usuário:** multiplicador de 0,6× a 1,6× em Configurações.
 
 ## 10. Instrumentos
@@ -261,6 +285,7 @@ Medido no Edge sem interface, a 1400 × 860 e perfil alto, acelerando com fumaç
 | corrida | duas faixas, árvore pelo estado real, verde, chegada, luz de freio |
 | dinamômetro | carro na bancada, rodas girando, curva medida |
 | vazamento | número de texturas estável ao repetir trocas |
+| estabilidade da câmera | arrancada até ~290 km/h em follow, start e wide; registra screenX por quadro e exige oscilação ≤ 2 px (p95) e ≤ 6 px (máx.) em follow e wide; salva `stability-<rótulo>.json` |
 
 Em todos os cenários vale: escala uniforme (o sprite nunca é esticado), comprimento na tela igual ao comprimento real × escala da câmera, pneus exatamente sobre a linha do solo, eixos a um entre-eixos de distância e movimento da carroceria dentro de limites.
 

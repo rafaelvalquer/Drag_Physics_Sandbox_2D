@@ -9,6 +9,10 @@ export const ROLLOUT_M = 0.29;
 /** Trap speed is the average over the last 66 ft before a timing point. */
 export const TRAP_M = 66 * FT;
 
+/** Rest tolerance for being "ready" at the line (m/s). */
+export const READY_SPEED_MS = 0.05;
+export const READY_MESSAGE = 'Pronto para largar — acelere em neutro ou engate a primeira.';
+
 export type RaceDistanceId = 'eighth' | 'quarter' | 'km';
 export const RACE_DISTANCES: Record<RaceDistanceId, { label: string; m: number }> = {
   eighth: { label: '1/8 milha (201 m)', m: 660 * FT },
@@ -48,6 +52,8 @@ export interface LaneResult {
   finished: boolean;
   dnf: boolean;
   maxSpeedMs: number;
+  /** Total time = RT + ET = finish − green (s); null until the finish line is crossed. */
+  total?: number | null;
   /** Captured when the lane crosses the finish line (absent in runs saved by older versions). */
   maxRpm?: number;
   gearsUsed?: number[];
@@ -65,7 +71,10 @@ export interface RaceLane {
 
 interface LaneState {
   ready: boolean;
+  engineOn: boolean;
   leftAt: number | null;
+  /** Race time at which the lane finished (finish line crossed or DNF); freezes the timers. */
+  endT: number | null;
   prevX: number;
   prevT: number;
   crossT: Map<number, number>; // distance → absolute time of crossing
@@ -107,7 +116,7 @@ export class RaceController {
     this.distanceM = RACE_DISTANCES[distanceId].m;
     this.splits = SPLITS.filter((s) => s.m <= this.distanceM + 1e-6);
     this.rng = new Prng(seed * 977 + 13);
-    this.lanes = raceLanes.map((l) => ({ ready: false, leftAt: null, prevX: l.sim.x, prevT: 0, crossT: new Map(), result: emptyResult() }));
+    this.lanes = raceLanes.map((l) => ({ ready: false, engineOn: false, leftAt: null, endT: null, prevX: l.sim.x, prevT: 0, crossT: new Map(), result: emptyResult() }));
     for (const l of raceLanes) {
       l.sim.controls.autoStart = true; // ignition is automatic on the track
       l.sim.controls.autoBrake = false;
@@ -125,6 +134,17 @@ export class RaceController {
     const st = this.lanes[lane];
     if (!st || st.leftAt === null) return null;
     return st.result.et ?? this.time - st.leftAt;
+  }
+
+  /**
+   * Time since the green light (s), from the race simulation clock: 0 until green, then advances
+   * even if the car is still in neutral or stopped. Frozen at the finish line (or DNF). null while
+   * the tree has not been scheduled. Separate from ET (`elapsed`) and RT.
+   */
+  elapsedSinceGreen(lane: number): number | null {
+    const st = this.lanes[lane];
+    if (!st || this.greenAt === null) return null;
+    return Math.max(0, (st.endT ?? this.time) - this.greenAt);
   }
 
   /** Tree lights for the renderer. */
@@ -158,17 +178,19 @@ export class RaceController {
     // tree sequence
     if (this.phase === 'staging') {
       const allReady = this.lanes.every((l) => l.ready);
+      // ready = engine running + car at rest at the line (neutral or first gear); the tree
+      // starts by itself once everybody has been ready for a moment
       if (allReady) {
         if (this.stagedSince === null) this.stagedSince = t;
+        this.status = READY_MESSAGE;
         if (t - this.stagedSince > 0.6) {
           this.treeStartAt = t + 0.6 + this.rng.next() * 1.2;
           this.greenAt = this.treeStartAt + (this.treeType === 'pro' ? 0.4 : 1.5);
           this.phase = 'tree';
-          this.status = 'Árvore iniciada';
         }
       } else {
         this.stagedSince = null;
-        this.status = 'Pressione E para engatar a 1ª marcha';
+        this.status = this.lanes.every((l) => l.engineOn) ? 'Aguardando o carro parar na linha…' : 'Ligando o motor…';
       }
     }
     if (this.phase === 'tree' && this.greenAt !== null && t >= this.greenAt) {
@@ -183,15 +205,17 @@ export class RaceController {
       if (lane.ai) {
         lane.ai.update(h, sim, {
           timeSinceGreen: this.greenAt === null ? null : t - this.greenAt,
-          // "at the line": the AI engages first gear here, which is what makes it ready (staged)
+          // "at the line": the AI may select first gear here (readiness no longer depends on the gear)
           staged: st.ready || (st.leftAt === null && sim.x < ROLLOUT_M),
           finished,
         });
       } else {
         c.pedal = finished ? 0 : (lane.pedal?.() ?? 0);
       }
-      // the car is held at the line until the driver applies throttle (no brake key)
-      c.holdBrake = st.leftAt === null && c.pedal < 0.02 && !finished;
+      // The car is held at the line (no brake key): always in neutral (revving freely without
+      // moving, whatever the grade or wind) and, in gear, until the driver applies throttle.
+      // Gear + throttle releases it – leaving before the green is a red light, never blocked.
+      c.holdBrake = st.leftAt === null && (sim.gear === 0 || c.pedal < 0.02) && !finished;
       c.autoBrake = finished;
     });
   }
@@ -204,7 +228,8 @@ export class RaceController {
       const st = this.lanes[i]!;
       const sim = lane.sim;
       const res = st.result;
-      if (st.leftAt === null) st.ready = sim.engine.runState === 'RUNNING' && sim.gear >= 1 && sim.x < ROLLOUT_M;
+      st.engineOn = sim.engine.runState === 'RUNNING';
+      if (st.leftAt === null) st.ready = st.engineOn && Math.abs(sim.speed) < READY_SPEED_MS && sim.x < ROLLOUT_M;
       res.maxSpeedMs = Math.max(res.maxSpeedMs, sim.speed);
       const x0 = st.prevX;
       const x1 = sim.x;
@@ -251,7 +276,9 @@ export class RaceController {
         const tf = cross(this.distanceM);
         if (tf !== null) {
           res.finished = true;
+          st.endT = tf;
           res.et = tf - st.leftAt;
+          res.total = (res.rt ?? 0) + res.et; // = finish − green
           res.maxRpm = sim.maxRpm;
           res.gearsUsed = [...sim.gearsUsed].sort((a, b) => a - b);
           res.slipM = sim.slipIntegral;
@@ -259,7 +286,10 @@ export class RaceController {
           res.trapMs = res.traps[id] ?? null;
         }
       }
-      if (!res.finished && !res.dnf && this.greenAt !== null && t - this.greenAt > this.dnfTimeoutS) res.dnf = true;
+      if (!res.finished && !res.dnf && this.greenAt !== null && t - this.greenAt > this.dnfTimeoutS) {
+        res.dnf = true;
+        st.endT = t;
+      }
       st.prevX = x1;
       st.prevT = t;
     });

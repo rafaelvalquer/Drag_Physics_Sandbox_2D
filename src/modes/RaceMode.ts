@@ -241,15 +241,17 @@ export class RaceMode implements Mode {
         { class: 'hint' },
         'Pressione ',
         h('span', { class: 'keycap' }, 'E'),
-        ' para engatar a 1ª e estagiar. Na luz verde acelere com ',
+        ' engata a 1ª (a embreagem é automática). O motor liga sozinho e o carro começa em neutro: acelere com ',
         h('span', { class: 'keycap' }, 'W'),
         '/',
         h('span', { class: 'keycap' }, '↑'),
-        ' e troque com ',
+        ' para escolher a rotação de largada. Quando todos estão parados a árvore inicia sozinha e o cronômetro corre a partir do verde. Engate a 1ª quando quiser (',
+        h('span', { class: 'keycap' }, 'E'),
+        ') e troque com ',
         h('span', { class: 'keycap' }, 'E'),
         '/',
         h('span', { class: 'keycap' }, 'Q'),
-        '. Acelerar antes do verde tira o carro do estágio (queima a largada). Após a chegada o carro freia sozinho.',
+        '. Sair antes do verde é queima de largada. Após a chegada o carro freia sozinho.',
       ),
       h('h3', {}, 'Resultado'),
       this.resultsHost,
@@ -321,6 +323,9 @@ export class RaceMode implements Mode {
       if (s.trap) rows.push(row(`  velocidade ${s.label}`, (r) => (r.traps[s.id] === undefined ? '—' : `${(r.traps[s.id]! * su.k).toFixed(1)} ${su.label}`)));
     }
     rows.push(row('ET', (r) => (r.dnf ? 'DNF' : fmt(r.et, 3))));
+    rows.push(row('Tempo total (RT + ET)', (r) => (r.dnf ? 'DNF' : fmt(r.total, 3))));
+    rows.push(row('Vel. final', (r) => (r.trapMs === null ? '—' : `${(r.trapMs * su.k).toFixed(1)} ${su.label}`)));
+    rows.push(row('Resultado', (r) => (r.dnf ? 'DNF' : r.redLight ? 'QUEIMA DE LARGADA — não oficial' : r.finished ? 'Válido' : '—')));
     rows.push(row('Vel. máx.', (r) => `${(r.maxSpeedMs * su.k).toFixed(1)} ${su.label}`));
     rows.push(row('Marchas usadas', (r) => (r.gearsUsed && r.gearsUsed.length > 0 ? r.gearsUsed.join('·') : '—')));
     rows.push(row('Rotação máx.', (r) => (r.maxRpm === undefined ? '—' : `${r.maxRpm.toFixed(0)} rpm`)));
@@ -424,11 +429,17 @@ export class RaceMode implements Mode {
     if (this.messageT > 0) this.messageT -= dtS;
     if (race && p) {
       const opp = this.runner.vehicles.find((v) => v.id === 'opponent');
-      const done = race.results[0]?.et != null;
+      const r0 = race.results[0];
+      const done = r0?.et != null;
+      const sinceGreen = race.elapsedSinceGreen(0);
+      // timer = time since the green light (runs even in neutral); ET shown separately only once
+      // the car has left the stage beam
       this.hud?.update(p.sim, this.ctx.settings.units, this.messageT > 0 ? this.message : this.runner.paused ? 'PAUSADO' : '', {
         distanceM: p.sim.x,
-        timeS: race.elapsed(0),
-        timeLabel: done ? 'ET' : 'tempo',
+        timeS: sinceGreen,
+        timeLabel: done ? 'TEMPO TOTAL' : sinceGreen === null ? 'preparação' : 'TEMPO DESDE O VERDE',
+        etS: sinceGreen === null ? undefined : race.elapsed(0),
+        alert: r0?.redLight ?? false,
         gapM: opp ? opp.sim.x - p.sim.x : null,
       });
       if (this.banner) {
@@ -436,7 +447,7 @@ export class RaceMode implements Mode {
         this.banner.style.display = this.resultCard ? 'none' : '';
       }
       // refresh the panel table at most when something changed
-      const sig = JSON.stringify(race.results.map((r) => [r.rt, Object.keys(r.splits).length, r.et, r.dnf]));
+      const sig = JSON.stringify(race.results.map((r) => [r.rt, Object.keys(r.splits).length, r.et, r.dnf, r.total]));
       if (sig !== this.lastRendered) {
         this.lastRendered = sig;
         this.renderResults();

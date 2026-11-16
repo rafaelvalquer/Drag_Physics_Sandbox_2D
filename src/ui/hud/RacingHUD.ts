@@ -12,6 +12,10 @@ export interface HudInfo {
   timeS: number | null;
   /** Label for the timer (e.g. "tempo", "ET"). */
   timeLabel?: string;
+  /** Separate ET (s since leaving the stage beam): undefined hides the row, null shows "—". */
+  etS?: number | null;
+  /** Highlights the timer (e.g. red light). */
+  alert?: boolean;
   /** Opponent position relative to the player (m, positive = opponent ahead) or null. */
   gapM: number | null;
 }
@@ -40,6 +44,9 @@ export class RacingHUD {
   private readonly dist: HTMLElement;
   private readonly time: HTMLElement;
   private readonly timeLabel: HTMLElement;
+  private readonly etRow: HTMLElement;
+  private readonly et: HTMLElement;
+  private readonly timeRow: HTMLElement;
   private readonly gapRow: HTMLElement;
   private readonly gap: HTMLElement;
   private readonly slipBar: HTMLElement;
@@ -66,6 +73,10 @@ export class RacingHUD {
     this.dist = h('span', { 'data-testid': 'hud-distance' }, '0.0 m');
     this.time = h('span', { 'data-testid': 'hud-time' }, '—');
     this.timeLabel = h('span', { class: 'k' }, 'tempo');
+    this.et = h('span', { 'data-testid': 'hud-et' }, '—');
+    this.etRow = h('div', { class: 'kv-row' }, h('span', { class: 'k' }, 'ET (desde o sensor)'), this.et);
+    this.etRow.style.display = 'none';
+    this.timeRow = h('div', { class: 'kv-row big' }, this.timeLabel, this.time);
     this.gap = h('span', { 'data-testid': 'hud-gap' }, '');
     this.gapRow = h('div', { class: 'kv-row' }, h('span', { class: 'k' }, 'adversário'), this.gap);
     this.slipBar = h('div', { class: 'fill' });
@@ -85,7 +96,8 @@ export class RacingHUD {
       h(
         'div',
         { class: 'info' },
-        h('div', { class: 'kv-row big' }, this.timeLabel, this.time),
+        this.timeRow,
+        this.etRow,
         h('div', { class: 'kv-row' }, h('span', { class: 'k' }, 'distância'), this.dist),
         this.gapRow,
         h('div', { class: 'bar-row', title: 'Escorregamento longitudinal dos pneus de tração: (ωr − v) / v' }, h('span', { class: 'k' }, 'patinagem'), h('div', { class: 'hbar' }, this.slipBar), this.slipText),
@@ -139,6 +151,9 @@ export class RacingHUD {
     this.dist.textContent = `${inf.distanceM.toFixed(1)} m`;
     this.timeLabel.textContent = inf.timeLabel ?? 'tempo';
     this.time.textContent = inf.timeS === null ? '—' : `${inf.timeS.toFixed(3)} s`;
+    this.etRow.style.display = inf.etS === undefined ? 'none' : '';
+    this.et.textContent = inf.etS == null ? '—' : `${inf.etS.toFixed(3)} s`;
+    this.timeRow.style.color = inf.alert ? '#ff4d4d' : '';
     this.gapRow.style.display = inf.gapM === null ? 'none' : '';
     if (inf.gapM !== null) this.gap.textContent = `${inf.gapM >= 0 ? '+' : '−'}${Math.abs(inf.gapM).toFixed(1)} m ${inf.gapM >= 0 ? 'à frente' : 'atrás'}`;
     // slip ratio of the driven tyres; below ~2 m/s the ratio uses 2 m/s as reference (telemetry)

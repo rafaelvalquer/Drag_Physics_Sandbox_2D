@@ -1,6 +1,6 @@
 import type { CarConfig } from '../data/schema';
 import type { RenderVehicle } from '../game/scenes/RaceScene';
-import type { RunnerVehicle } from '../game/SimulationRunner';
+import { lerpSnapshot, type RunnerVehicle } from '../game/SimulationRunner';
 import { artSignature } from '../game/vehicles/VehicleSpriteAssembler';
 
 /** Distance of the listener from the near lane (m): a trackside microphone next to the player. */
@@ -22,24 +22,34 @@ export class VehicleViews {
     for (const v of vs) if (v.sim.engine.afterfire) this.flame.set(v.id, FLAME_HOLD_S);
   }
 
+  /**
+   * Continuous quantities (position, speed, pitch, wheel angles) are drawn interpolated between the
+   * last two physics states at the runner's alpha, so the picture moves with the real clock instead
+   * of in whole 1/120 s steps. Discrete state (gear, engine, shift, lamps, events) is the latest.
+   */
   render(vs: readonly RunnerVehicle[], dtS: number): RenderVehicle[] {
     return vs.map((v) => {
       const s = v.sim;
+      const ip = v.interp;
+      const speed = lerpSnapshot(ip, 'speed');
       const t = Math.max(0, (this.flame.get(v.id) ?? 0) - dtS);
       this.flame.set(v.id, t);
       return {
         id: v.id,
         car: s.car,
-        x: s.x,
+        x: lerpSnapshot(ip, 'x'),
+        physicsX: s.x,
+        interpAlpha: ip.alpha,
+        physicsSteps: ip.steps,
         lane: v.lane >= 1 ? 1 : 0,
-        pitch: s.pitch,
-        wheelAngleDriven: s.wheelAngleDriven,
-        wheelAngleFree: s.wheelAngleFree,
+        pitch: lerpSnapshot(ip, 'pitch'),
+        wheelAngleDriven: lerpSnapshot(ip, 'wheelAngleDriven'),
+        wheelAngleFree: lerpSnapshot(ip, 'wheelAngleFree'),
         wheelOmegaDriven: s.driveline.v,
-        wheelOmegaFree: s.speed / s.car.tires.radiusM,
+        wheelOmegaFree: speed / s.car.tires.radiusM,
         slipSpeed: s.driveline.v * s.car.tires.radiusM - s.speed,
         slipRatio: s.telemetry.slipRatio,
-        speed: s.speed,
+        speed,
         accel: s.telemetry.acceleration,
         afterfire: t > 0,
         isPlayer: v.isPlayer,

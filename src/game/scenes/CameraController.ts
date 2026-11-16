@@ -5,7 +5,14 @@
  * Framing goals: the cars are the subject – at rest the player's car fills about a third of the
  * view width – the track sits in the lower-middle of the picture, the zoom opens moderately with
  * speed, the camera leads the car in its direction of travel and never jumps (except when the
- * car itself is teleported back to the start).
+ * car itself is teleported back to the start or the camera mode changes: those are cuts).
+ *
+ * Stability: in follow and wide the camera is carried by exactly the distance the player's car
+ * moved on screen since the last frame (the same interpolated position the sprite is drawn at),
+ * and only the remaining difference to the framing target – look-ahead, zoom, an opponent or the
+ * tree in frame – is eased. At any constant or changing speed the car therefore keeps its place
+ * on screen to a fraction of a pixel; there is no second, velocity-based prediction that could
+ * disagree with the drawn position. The track limits clamp the final position, not the target.
  */
 export type CameraMode = 'follow' | 'wide' | 'start';
 
@@ -45,6 +52,14 @@ export const FOLLOW_SPAN_REST_M = 14;
 export const FOLLOW_SPAN_FAST_M = 21;
 export const FOLLOW_FAST_SPEED = 60;
 const START_SPAN_M = 26;
+/** Time constants (s) of the framing residual, the look-ahead and the zoom. */
+const FRAME_TAU_S = 0.18;
+const LEAD_TAU_S = 0.5;
+const ZOOM_TAU_S = 0.45;
+/** Longest frame step used for easing (s); positions are carried exactly whatever the gap. */
+const MAX_EASE_DT_S = 0.1;
+/** A jump of the followed car larger than this in one frame is a teleport (m): cut. */
+const TELEPORT_M = 30;
 /** An opponent closer than this (m) is kept in frame by opening the zoom a little. */
 const PAIR_RANGE_M = 16;
 const MIN_PPM = 6;
@@ -60,6 +75,9 @@ export class CameraController {
   private ppm = 0;
   private lead = 0;
   private initialised = false;
+  private lastMode: CameraMode | null = null;
+  /** Player's drawn centre (m) at the last frame, NaN when there was none. */
+  private lastAnchor = Number.NaN;
   state: CameraState = { x: 0, ppm: 60, groundY: 400 };
 
   /** Fraction of the view height where the near lane's ground line sits. */
@@ -67,10 +85,22 @@ export class CameraController {
     return viewH < 520 ? 0.66 : 0.7;
   }
 
+  /** Forget the tracking state: the next update cuts straight to the framing target. */
+  reset(): void {
+    this.initialised = false;
+    this.lastAnchor = Number.NaN;
+    this.lead = 0;
+  }
+
   update(dtS: number, i: CameraInput): CameraState {
+    const dt = Number.isFinite(dtS) ? Math.min(Math.max(dtS, 0), MAX_EASE_DT_S) : 0;
+    const p = i.player;
+    const anchor = p ? p.x - p.wheelbaseM * 0.5 : Number.NaN;
+    // a new camera mode or a car put somewhere else starts the tracking from scratch
+    if (i.mode !== this.lastMode || (Number.isFinite(this.lastAnchor) && Math.abs(anchor - this.lastAnchor) > TELEPORT_M) || Number.isFinite(anchor) !== Number.isFinite(this.lastAnchor)) this.reset();
+    this.lastMode = i.mode;
     const W = Math.max(1, i.viewW);
     const zoomUser = Math.min(2, Math.max(0.4, i.userZoom));
-    const p = i.player;
     let span = FOLLOW_SPAN_REST_M;
     let targetX = 0;
     if (i.mode === 'start') {
@@ -89,7 +119,8 @@ export class CameraController {
       const centre = p.x - p.wheelbaseM * 0.5;
       // look ahead in the direction of travel, never more than a fifth of the view
       const leadTarget = Math.min(span * 0.2, Math.max(0, p.speed) * 0.11);
-      this.lead += (leadTarget - this.lead) * (1 - Math.exp(-dtS / 0.5));
+      // the look-ahead is a damped offset from the drawn car, never a position prediction
+      this.lead = this.initialised ? this.lead + (leadTarget - this.lead) * (1 - Math.exp(-dt / LEAD_TAU_S)) : leadTarget;
       targetX = centre + this.lead;
       // something to watch next to the car (the starting-line tree): frame both
       if (i.include !== null && Math.abs(i.include - p.x) < 14) {
@@ -114,26 +145,33 @@ export class CameraController {
     let targetPpm = Math.min(MAX_PPM, Math.max(MIN_PPM, W / span));
     // tall narrow views: do not let the road band fill the whole height
     targetPpm = Math.min(targetPpm, i.viewH / 6.2);
-    const half = W / 2 / targetPpm;
-    const lo = i.trackStartM + half;
-    const hi = i.trackEndM - half;
-    if (lo < hi) targetX = Math.min(hi, Math.max(lo, targetX));
-    else targetX = (i.trackStartM + i.trackEndM) / 2;
+    targetX = this.clampToTrack(targetX, targetPpm, W, i);
 
     if (!this.initialised || Math.abs(targetX - this.x) > 120) {
-      // first frame, or the car was put back on the start line: cut instead of flying over
+      // first frame, new mode, or the car was put back on the start line: cut instead of flying
       this.x = targetX;
       this.ppm = targetPpm;
-      this.lead = 0;
       this.initialised = true;
     } else {
-      const dt = Math.min(Math.max(dtS, 0), 0.1);
-      // move with the car first (no lag at constant speed), then ease towards the framing target
-      if (i.mode !== 'start' && p) this.x += p.speed * dt;
-      this.x += (targetX - this.x) * (1 - Math.exp(-dt / 0.18));
-      this.ppm += (targetPpm - this.ppm) * (1 - Math.exp(-dt / 0.45));
+      // carry the view with the drawn car (exactly, whatever the frame time), then ease only the
+      // remaining difference to the framing target
+      if (i.mode !== 'start' && Number.isFinite(anchor)) this.x += anchor - this.lastAnchor;
+      this.x += (targetX - this.x) * (1 - Math.exp(-dt / FRAME_TAU_S));
+      this.ppm += (targetPpm - this.ppm) * (1 - Math.exp(-dt / ZOOM_TAU_S));
+      // the limits apply to what is shown: near the ends of the track the car moves on screen
+      this.x = this.clampToTrack(this.x, this.ppm, W, i);
     }
-    this.state = { x: this.x, ppm: this.ppm, groundY: Math.round(i.viewH * CameraController.groundFraction(i.viewH)) };
+    this.lastAnchor = anchor;
+    this.state.x = this.x;
+    this.state.ppm = this.ppm;
+    this.state.groundY = Math.round(i.viewH * CameraController.groundFraction(i.viewH));
     return this.state;
+  }
+
+  private clampToTrack(x: number, ppm: number, W: number, i: CameraInput): number {
+    const half = W / 2 / ppm;
+    const lo = i.trackStartM + half;
+    const hi = i.trackEndM - half;
+    return lo < hi ? Math.min(hi, Math.max(lo, x)) : (i.trackStartM + i.trackEndM) / 2;
   }
 }

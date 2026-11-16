@@ -6,7 +6,7 @@
  * inside their arches, framing, HUD inside the stage, parallax, smoke only when the tyres slide.
  * Pixels are not compared; the screenshots are the evidence to look at.
  */
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { boot, errors, mode, waitEngineRunning } from './helpers';
 
@@ -276,7 +276,7 @@ test('race: two cars, tree from the real race state, finish and results', async 
   await boot(page);
   await page.locator('#topbar button[data-mode=race]').click();
   await page.getByTestId('race-distance').selectOption('eighth');
-  await expect(page.getByTestId('race-status')).toContainText('Pressione E');
+  await expect(page.getByTestId('race-status')).toContainText('Pronto para largar');
   await page.waitForFunction(() => (window as unknown as { __app: { debug: { current: { runner: { player: { sim: { engine: { runState: string } } } } } } } }).__app.debug.current.runner.player.sim.engine.runState === 'RUNNING');
   let v = await waitArt(page);
   await page.waitForTimeout(700);
@@ -482,4 +482,125 @@ test('no texture leak when cars, tracks and lighting change', async ({ page }) =
   expect(await count()).toBe(first);
   expect(v.vehicleTextures).toBe(1);
   expect(v.particles.pooled).toBeLessThanOrEqual(280);
+});
+
+// ------------------------------------------------------------------ on-screen stability
+
+interface FrameColumns {
+  t: number[];
+  physicsX: number[];
+  renderX: number[];
+  cameraX: number[];
+  screenX: number[];
+  interpolationAlpha: number[];
+  physicsSteps: number[];
+  realDeltaMs: number[];
+  visualDeltaMs: number[];
+  phaserDeltaMs: number[];
+  fps: number[];
+  ppm: number[];
+  speed: number[];
+  cameraMode: number[];
+}
+
+const SPEED_BINS_KMH = [0, 40, 80, 120, 180, 240, 300, 400];
+
+/**
+ * Jitter of the player's car on screen: for every frame, the distance (px) between where it was
+ * drawn and where a uniform motion through its neighbouring frames would have put it (time-aware,
+ * so an uneven frame time alone does not count). Smooth motion → ≈ 0 px whatever the speed.
+ */
+function screenJitter(f: FrameColumns, viewW: number): { kmh: number; r: number }[] {
+  const out: { kmh: number; r: number }[] = [];
+  for (let i = 1; i < f.t.length - 1; i++) {
+    const s = f.screenX;
+    if (f.speed[i]! < 1 || s[i]! < 0 || s[i]! > viewW) continue;
+    const t0 = f.t[i - 1]!;
+    const t2 = f.t[i + 1]!;
+    if (t2 <= t0) continue;
+    const k = (f.t[i]! - t0) / (t2 - t0);
+    const expected = s[i - 1]! + (s[i + 1]! - s[i - 1]!) * k;
+    out.push({ kmh: f.speed[i]! * 3.6, r: Math.abs(s[i]! - expected) });
+  }
+  return out;
+}
+
+function percentile(a: number[], p: number): number {
+  if (a.length === 0) return 0;
+  const s = [...a].sort((x, y) => x - y);
+  return s[Math.min(s.length - 1, Math.floor(p * s.length))]!;
+}
+
+function jitterReport(j: { kmh: number; r: number }[]): { bin: string; n: number; p95: number; max: number }[] {
+  const rows: { bin: string; n: number; p95: number; max: number }[] = [];
+  for (let b = 0; b < SPEED_BINS_KMH.length - 1; b++) {
+    const lo = SPEED_BINS_KMH[b]!;
+    const hi = SPEED_BINS_KMH[b + 1]!;
+    const r = j.filter((x) => x.kmh >= lo && x.kmh < hi).map((x) => x.r);
+    if (r.length > 0) rows.push({ bin: `${lo}-${hi} km/h`, n: r.length, p95: percentile(r, 0.95), max: Math.max(...r) });
+  }
+  return rows;
+}
+
+/** Full-throttle run on the long track with automatic upshifts, recording every frame. */
+async function recordRun(page: Page, camera: 'follow' | 'wide' | 'start', maxS: number): Promise<FrameColumns> {
+  await mode(page, `(m.restart(), m.cameraMode = '${camera}', 0)`);
+  await waitEngineRunning(page);
+  await page.waitForTimeout(400);
+  await page.locator('#game').click({ position: { x: 50, y: 50 } });
+  await page.keyboard.press('e');
+  await expect.poll(() => mode<number>(page, 'm.runner.player.sim.gear')).toBe(1);
+  await page.evaluate(() => (window as unknown as { __app: { debug: { game: { scene: { getScene(k: string): { frameLog: { clear(): void } } } } } } }).__app.debug.game.scene.getScene('race').frameLog.clear());
+  await page.keyboard.down('w');
+  const t0 = Date.now();
+  while (Date.now() - t0 < maxS * 1000) {
+    const s = await mode<{ rpm: number; red: number; gear: number; gears: number; x: number }>(
+      page,
+      '({ rpm: m.runner.player.sim.engine.rpm, red: m.runner.player.sim.car.engine.redlineRpm, gear: m.runner.player.sim.gear, gears: m.runner.player.sim.car.transmission.gearRatios.length, x: m.runner.player.sim.x })',
+    );
+    if (s.x > 1400) break;
+    if (s.rpm > s.red * 0.94 && s.gear < s.gears) await page.keyboard.press('e');
+    await page.waitForTimeout(60);
+  }
+  await page.keyboard.up('w');
+  return page.evaluate(() => {
+    const game = (window as unknown as { __app: { debug: { game: { scene: { getScene(k: string): { visualDebug(n: number): { frames: unknown } } } } } } }).__app.debug.game;
+    return game.scene.getScene('race').visualDebug(900).frames as never;
+  });
+}
+
+test('camera stability: the car does not shake on screen while accelerating (follow, wide, start)', async ({ page }) => {
+  test.setTimeout(240_000);
+  const label = process.env.SMOOTH_LABEL ?? 'atual';
+  await boot(page);
+  await page.getByTestId('track-select').selectOption('airfield');
+  await page.getByTestId('car-select').selectOption('aurora-v12-lab');
+  await waitEngineRunning(page);
+  await waitArt(page);
+  const runs: Record<string, FrameColumns> = {};
+  runs.follow = await recordRun(page, 'follow', 22);
+  await shot(page, `stability-${label}-follow`);
+  runs.start = await recordRun(page, 'start', 6);
+  await shot(page, `stability-${label}-start`);
+  await page.getByTestId('compare-select').selectOption('tempest-v8');
+  await waitArt(page);
+  runs.wide = await recordRun(page, 'wide', 22);
+  await shot(page, `stability-${label}-wide`);
+  const viewW = (await visual(page)).viewW;
+  const report: Record<string, { bin: string; n: number; p95: number; max: number }[]> = {};
+  for (const [k, f] of Object.entries(runs)) {
+    report[k] = jitterReport(screenJitter(f, viewW));
+    console.log(`[${label}] ${k}: ${report[k]!.map((r) => `${r.bin} p95 ${r.p95.toFixed(2)} px max ${r.max.toFixed(2)} px (n=${r.n})`).join(' | ')}`);
+  }
+  writeFileSync(`${OUT}/stability-${label}.json`, JSON.stringify({ label, viewW, report, runs }));
+  if (process.env.SMOOTH_BASELINE) return;
+  // follow and wide: the car is steady on screen at every speed reached (≈ 300 km/h)
+  for (const k of ['follow', 'wide']) {
+    const all = report[k]!;
+    expect(Math.max(...runs[k]!.speed) * 3.6, `top speed of the ${k} run`).toBeGreaterThan(240);
+    for (const r of all) {
+      expect(r.p95, `${k} ${r.bin}`).toBeLessThanOrEqual(2);
+      expect(r.max, `${k} ${r.bin}`).toBeLessThanOrEqual(6);
+    }
+  }
 });

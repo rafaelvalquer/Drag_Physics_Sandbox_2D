@@ -10,8 +10,14 @@ import type { TimeOfDaySetting } from './LightingController';
 export interface RenderVehicle {
   id: string;
   car: CarConfig;
-  /** Front axle ground contact, metres along the track (0 = start line). */
+  /** Front axle ground contact, metres along the track (0 = start line), as drawn this frame:
+   * interpolated between the last two physics states. Camera and sprite both use this value. */
   x: number;
+  /** Front axle position of the latest physics state (m) – diagnostics only. */
+  physicsX: number;
+  /** Interpolation factor used for this frame (0..1) and physics steps run in it (diagnostics). */
+  interpAlpha: number;
+  physicsSteps: number;
   lane: 0 | 1;
   /** Body pitch computed by the physics (rad). */
   pitch: number;

@@ -6,6 +6,7 @@ import { VehicleTextureRegistry, VehicleVisualController, type VehicleVisualInfo
 import { CameraController } from './CameraController';
 import { LightingController, lit, spriteTint } from './LightingController';
 import { ParallaxEnvironment } from './ParallaxEnvironment';
+import { CAMERA_MODE_CODE, FrameLog, type FrameField } from './frameLog';
 import type { RenderVehicle, SceneBridge } from './renderTypes';
 import { SURFACES } from './trackArt';
 import { TrackRenderer } from './TrackRenderer';
@@ -35,6 +36,14 @@ export interface VisualDebug {
   track: { props: number; textures: number; treeVisible: boolean; litBulbs: number };
   vehicleTextures: number;
   fps: number;
+  /** Camera mode, zoom and the player's positions for the last frame (diagnostics). */
+  cameraMode: string;
+  zoom: number;
+  player: { physicsX: number; renderX: number; screenX: number; interpolationAlpha: number; physicsSteps: number } | null;
+  realDeltaMs: number;
+  visualDeltaMs: number;
+  /** The last `frames` recorded frames (oldest first; none unless asked), see frameLog.ts. */
+  frames: Record<FrameField, number[]>;
 }
 
 /**
@@ -58,6 +67,7 @@ export class RaceScene extends Phaser.Scene {
   private trackKey = '';
   private lastNow = 0;
   private lastVehicles: RenderVehicle[] = [];
+  readonly frameLog = new FrameLog();
 
   constructor() {
     super('race');
@@ -114,7 +124,11 @@ export class RaceScene extends Phaser.Scene {
     const visible = this.bridge.visible();
     this.cameras.main.setVisible(visible);
     if (!visible) return;
-    const dtS = Math.min(0.1, deltaMs / 1000);
+    // one visual clock for everything drawn (camera, easing, animation, particles): the same real
+    // elapsed time the physics advanced by, capped so a long gap does not overshoot any easing.
+    // Phaser's delta is smoothed to the display rate; mixing it with the physics clock made the
+    // camera and the car advance by different amounts each frame.
+    const dtS = Math.min(0.1, Math.max(0, realDt));
     const W = this.scale.width;
     const H = this.scale.height;
     const cfg = this.bridge.track();
@@ -170,6 +184,25 @@ export class RaceScene extends Phaser.Scene {
 
     // ---- screen-space overlays: player marker and off-screen opponent indicator
     this.drawOverlays(vehicles, player, W, zoom, cam.groundY, cam.ppm, toScreenX);
+
+    // ---- diagnostics (no allocation, no console output)
+    const r = this.frameLog.row;
+    r.t = now;
+    r.physicsX = player?.physicsX ?? 0;
+    r.renderX = player?.x ?? 0;
+    r.cameraX = cam.x;
+    r.screenX = player ? toScreenX(player.x) : 0;
+    r.interpolationAlpha = player?.interpAlpha ?? 0;
+    r.physicsSteps = player?.physicsSteps ?? 0;
+    r.realDeltaMs = realDt * 1000;
+    r.visualDeltaMs = dtS * 1000;
+    r.phaserDeltaMs = deltaMs;
+    r.fps = this.game.loop.actualFps;
+    r.ppm = cam.ppm;
+    r.zoom = zoom;
+    r.cameraMode = CAMERA_MODE_CODE[this.bridge.cameraMode];
+    r.speed = player?.speed ?? 0;
+    this.frameLog.commit();
   }
 
   private drawOverlays(vehicles: RenderVehicle[], player: RenderVehicle | undefined, W: number, zoom: number, groundY: number, ppm: number, toScreenX: (xm: number) => number): void {
@@ -236,7 +269,7 @@ export class RaceScene extends Phaser.Scene {
   }
 
   /** What is currently drawn, in screen pixels (read-only; used by the visual tests). */
-  visualDebug(): VisualDebug {
+  visualDebug(frames = 0): VisualDebug {
     const cam = this.camera.state;
     const W = this.scale.width;
     const zoom = cam.ppm / PPM_BASE;
@@ -264,6 +297,15 @@ export class RaceScene extends Phaser.Scene {
       track: this.track.debug(),
       vehicleTextures: this.vehTextures.liveTextures,
       fps: this.game.loop.actualFps,
+      cameraMode: this.bridge.cameraMode,
+      zoom,
+      player: (() => {
+        const p = this.lastVehicles.find((v) => v.isPlayer) ?? this.lastVehicles[0];
+        return p ? { physicsX: p.physicsX, renderX: p.x, screenX: W / 2 + (p.x - cam.x) * cam.ppm, interpolationAlpha: p.interpAlpha, physicsSteps: p.physicsSteps } : null;
+      })(),
+      realDeltaMs: this.frameLog.row.realDeltaMs,
+      visualDeltaMs: this.frameLog.row.visualDeltaMs,
+      frames: this.frameLog.dump(frames),
     };
   }
 }

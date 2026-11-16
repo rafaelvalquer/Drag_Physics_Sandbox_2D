@@ -46,6 +46,8 @@ O Gol é o único carro real. Sua fidelidade tem limites próprios, além dos do
 
 - **Custo de um passo de física:** é medido com `performance.now()`, cuja resolução os navegadores reduzem por segurança. Médias em muitos passos são confiáveis, mas o valor de um passo isolado não é. A aba Testes do editor não mostra esse número por isso.
 - **Quadros longos:** quadros acima de 0,25 s, como uma aba em segundo plano, não são simulados. O tempo descartado é informado no Developer Lab e no CSV.
+- **Atraso de desenho:** para o carro andar liso na tela, ele é desenhado interpolado entre os dois últimos passos de física. A imagem fica até um passo (8,3 ms) atrás do estado simulado; o HUD, o som e a cronometragem usam o estado mais recente.
+- **Medição de estabilidade:** o desvio de screenX é medido nos instantes em que a cena atualiza (`performance.now()`), não no instante exato em que o monitor exibe o quadro, que o navegador não informa.
 
 ## Visual
 
