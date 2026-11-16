@@ -619,8 +619,8 @@ export class CareerMode implements Mode {
           title: st.detail,
           tabindex: '0', role: 'button',
           onclick: () => { this.selectedPart = p.id; this.show('workshop'); },
-          onkeydown: (e: KeyboardEvent) => {
-            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.selectedPart = p.id; this.show('workshop'); }
+          onkeydown: (e: Event) => {
+            if (e instanceof KeyboardEvent && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); this.selectedPart = p.id; this.show('workshop'); }
           },
         },
           h('div', { class: 'ws-part-head' },
