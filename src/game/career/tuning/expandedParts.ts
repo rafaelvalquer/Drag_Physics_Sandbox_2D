@@ -47,6 +47,7 @@ const specs: Spec[] = [
   ['turbo-strong', 'turbo', 'Kit turbo forte', 3, 17000, 'part-turbo', { turboBoostBar: 1.35, turboSpoolScale: 1.58, turboMassAddKg: 30, intercoolerEffectiveness: 0.75 }, 'Conjunto de grande vazão exige internos, alimentação e acerto adequados.'],
   ['turbine-small', 'turbo-turbine', 'Turbina pequena', 1, 1350, 'part-turbo', { turboSpoolScale: 0.92, turboFlowScale: 1.05 }, 'Menor inércia do rotor reduz atraso, restringindo o fluxo máximo.'],
   ['turbine-medium', 'turbo-turbine', 'Turbina média', 2, 2600, 'part-turbo', { turboSpoolScale: 1.12, turboFlowScale: 0.95 }, 'Roda compressora maior entrega fluxo em alta com mais atraso.'],
+  ['turbine-medium-high', 'turbo-turbine', 'Turbina média/alta', 3, 3850, 'part-turbo', { turboSpoolScale: 1.28, turboFlowScale: 0.89 }, 'Rotor intermediário amplia capacidade de fluxo com atraso moderado de pressão.'],
   ['turbine-large', 'turbo-turbine', 'Turbina grande', 3, 5200, 'part-turbo', { turboSpoolScale: 1.52, turboFlowScale: 0.82 }, 'Grande compressor desloca o enchimento para rotações elevadas.'],
   ['ic-small', 'turbo-intercooler', 'Intercooler pequeno', 1, 1100, 'part-turbo', { intercoolerEffectivenessAdd: 0.045, intercoolerMassAddKg: 3 }, 'Rejeita calor da compressão em baixa e média carga.'],
   ['ic-medium', 'turbo-intercooler', 'Intercooler médio', 2, 2300, 'part-turbo', { intercoolerEffectivenessAdd: 0.1, intercoolerMassAddKg: 6 }, 'Mais área frontal reduz temperatura do ar pressurizado.'],
