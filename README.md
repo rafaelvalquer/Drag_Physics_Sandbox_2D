@@ -3,7 +3,10 @@
 Jogo de arrancada em vista lateral 2D, feito para o navegador, com:
 
 - **física própria** de passo fixo (1/120 s): motor de valor médio, embreagem e câmbio semiautomático simulados, pneus Magic Formula e transferência de carga;
-- **som 100 % sintetizado** a partir do estado da física: guias de onda acústicas e escapamento por cilindro, em um AudioWorklet.
+- **som 100 % sintetizado** a partir do estado da física: guias de onda acústicas e escapamento por cilindro, em um AudioWorklet;
+- **gráficos 2D semirrealistas** gerados por código: carros com desenho próprio e materiais, rodas e suspensão animadas pela física, pista texturizada, cenários em camadas com parallax e iluminação de dia, fim de tarde e noite.
+
+![Largada na corrida](docs/screenshots/race-launch.png)
 
 Nada de amostras gravadas e nada de números de desempenho impostos. A potência medida no dinamômetro, os tempos de corrida e o som saem das mesmas equações.
 
@@ -32,7 +35,7 @@ Abra o endereço que o Vite mostrar e clique em **Ativar som e começar**: o nav
 | `npm run test:e2e` | testes ponta a ponta no Edge, contra o servidor de desenvolvimento |
 | `npm run test:e2e:build` | os mesmos testes contra o build de produção |
 | `npm run bench` | benchmark de física e áudio (Node) |
-| `npm run assets` | exporta os sprites SVG dos carros e um manifesto para `dist-assets/sprites` |
+| `npm run assets` | exporta as camadas SVG da arte de cada carro e um manifesto com os metadados visuais para `dist-assets/sprites` |
 | `npm run calibrate:audio` | recalibra os fatores de escala Pa → saída digital do áudio |
 
 ## Controles
@@ -53,6 +56,7 @@ Câmbio semiautomático: **não há tecla de embreagem nem de freio**.
 - **Embreagem e ignição:** a embreagem é automática e fisicamente simulada; a ignição liga sozinha ao entrar na pista.
 - **Depois da chegada:** o carro freia automaticamente, ou você pode reiniciar.
 - **Teclas:** todas são remapeáveis em **Configurações**.
+- **Gráficos:** em **Configurações** há três perfis gráficos (baixo, médio, alto) e a escolha da iluminação (padrão da pista, dia, fim de tarde ou noite).
 - **Telas de toque:** aparecem botões na tela; eles podem ser forçados a aparecer ou sumir em Configurações.
 
 Detalhes em [docs/CONTROLS.md](docs/CONTROLS.md).
@@ -85,7 +89,13 @@ Arrancada contra a IA (iniciante, intermediário ou avançado).
 
 Varredura em plena carga, em que o torque é **medido** pelo freio do dinamômetro e nunca lido da curva configurada, com exportação CSV.
 
-A bancada ao vivo tem som e mostra espectro e oscilograma. Dá para trocar o escapamento e fixar um espectro de referência para comparar.
+A bancada ao vivo tem som e mostra espectro e oscilograma. Dá para trocar o escapamento e fixar um espectro de referência para comparar. O carro aparece numa célula de testes, sobre os rolos, ao lado dos gráficos medidos.
+
+### Garagem
+
+O botão **Garagem** abre uma prévia grande de cada carro em estúdio, com ficha técnica, amostras de pintura e luzes. O carro e a cor escolhidos valem para o modo que estiver aberto.
+
+![Garagem](docs/screenshots/garage-default.png)
 
 ## Conteúdo
 
@@ -113,6 +123,7 @@ Todos os carros são fictícios. O Aurora V12 é um carro de laboratório e só 
 - [Arquitetura](docs/ARCHITECTURE.md)
 - [Modelo físico](docs/PHYSICS_MODEL.md): equações, parâmetros, unidades e hipóteses
 - [Modelo acústico](docs/ACOUSTIC_MODEL.md): o que é validado matematicamente e o que exigiria calibração real
+- [Sistema visual](docs/VISUAL_SYSTEM.md): pipeline de arte, animações, pista, cenários, câmera, instrumentos e perfis gráficos
 - [Integração open source](docs/OPEN_SOURCE_INTEGRATION.md)
 - [Controles](docs/CONTROLS.md) · [Sandbox](docs/SANDBOX.md) · [Testes](docs/TESTING.md)
 - [Limitações conhecidas](docs/LIMITATIONS.md)

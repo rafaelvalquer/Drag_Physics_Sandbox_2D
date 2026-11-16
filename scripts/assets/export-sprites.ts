@@ -1,44 +1,37 @@
 /**
- * Asset pipeline: exports the procedural car sprites (body and wheel SVG) for every car in the
- * catalogue, plus a JSON manifest with the texture sizes and physics anchor points.
+ * Asset pipeline: exports the vehicle artwork of every car in the catalogue as layered SVG files
+ * (under, body, gloss, lights, brake, shadow, hub, wheel) plus a JSON manifest with the visual
+ * metadata (scale, wheel centres, exhaust and lamp positions, anchor points).
  *
- * The game builds the same SVGs at runtime from the car configuration (so edited cars always
- * match their physics geometry); this export is for documentation, review and external tools.
+ * The game builds exactly the same layers at run time from the car configuration and rasterises
+ * them into one texture atlas per car (so edited cars always match their physics geometry); this
+ * export is for documentation, review and external tools. The pipeline is reproducible: the same
+ * configuration always produces the same files.
  *
- *   npm run assets [outDir]      (default: dist-assets/sprites)
+ *   npm run assets [outDir] [pxPerMetre]      (default: dist-assets/sprites, 144)
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { LAB_CARS } from '../../src/data/cars/index';
 import { validateCar } from '../../src/data/schema';
-import { buildCarArt } from '../../src/game/vehicles/carArt';
+import { buildVehicleLayers } from '../../src/game/vehicles/VehicleSpriteAssembler';
 
 const outDir = resolve(process.argv[2] ?? 'dist-assets/sprites');
+const pxPerM = Number(process.argv[3] ?? 144);
 mkdirSync(outDir, { recursive: true });
 
 const manifest: Record<string, unknown>[] = [];
 for (const car of LAB_CARS) {
   const v = validateCar(car);
   if (!v.ok) throw new Error(`${car.id}: invalid configuration – ${v.errors.join('; ')}`);
-  const art = buildCarArt(car);
-  const body = `${car.id}.body.svg`;
-  const wheel = `${car.id}.wheel.svg`;
-  writeFileSync(join(outDir, body), art.bodySvg);
-  writeFileSync(join(outDir, wheel), art.wheelSvg);
-  manifest.push({
-    id: car.id,
-    name: car.name,
-    body,
-    wheel,
-    pxPerMetre: art.scale,
-    bodySizePx: [art.bodyW, art.bodyH],
-    wheelDiameterPx: art.wheelD,
-    frontAxlePx: [art.frontAxleX, art.axleY],
-    exhaustPx: [art.exhaustX, art.exhaustY],
-    wheelbaseM: car.wheelbaseM,
-    tyreRadiusM: car.tires.radiusM,
-  });
-  console.log(`${car.name.padEnd(24)} ${body}  ${wheel}  ${art.bodyW}×${art.bodyH}px`);
+  const { layers, meta } = buildVehicleLayers(car, pxPerM);
+  const files: Record<string, { file: string; sizePx: [number, number] }> = {};
+  for (const l of layers) {
+    const file = `${car.id}.${l.name}.svg`;
+    writeFileSync(join(outDir, file), l.svg);
+    files[l.name] = { file, sizePx: [l.w, l.h] };
+  }
+  manifest.push({ id: car.id, name: car.name, bodyStyle: car.visual.bodyStyle, layers: files, meta });
 }
-writeFileSync(join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
-console.log(`\n${manifest.length} cars → ${outDir}`);
+writeFileSync(join(outDir, 'manifest.json'), `${JSON.stringify({ generator: 'drag-physics-sandbox-2d asset pipeline', pxPerMetre: pxPerM, cars: manifest }, null, 2)}\n`);
+console.log(`${manifest.length} cars, ${manifest.length * 8} SVG layers → ${outDir}`);

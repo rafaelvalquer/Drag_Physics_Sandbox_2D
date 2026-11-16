@@ -2,13 +2,13 @@
 
 O Sandbox é o modo principal: um carro em uma pista de 1,6 a 2 km, sem árvore nem cronômetro oficial, com todos os parâmetros abertos.
 
-- **Seleção:** carro e pista são escolhidos no topo do painel. Trocar qualquer um reinicia a simulação.
+- **Seleção:** carro e pista são escolhidos no topo do painel. Trocar qualquer um reinicia a simulação. O botão **Garagem**, no topo da tela, mostra os carros em detalhe e também troca a pintura.
 - **Ignição:** automática ao entrar na pista. O botão **Ligar/Desligar motor** existe para testar partida e parada.
 - **Fim da pista:** nos últimos 260 m, o carro freia sozinho. `R` reinicia.
 
 ## HUD
 
-O HUD mostra conta-giros, marcha, velocidade, acelerador, pressão do turbo (nos carros turbo) e luz de troca, e também:
+O HUD mostra o conta-giros analógico com a escala do motor escolhido, a marcha, a velocidade, as luzes de troca progressivas, o acelerador e a pressão do turbo (nos carros turbo), e também:
 
 - **distância percorrida** e **tempo da passada:** o tempo começa no primeiro movimento e para quando o carro volta ao repouso;
 - **diferença para o carro de comparação**, quando há um;

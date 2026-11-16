@@ -386,12 +386,21 @@ export class SandboxMode implements Mode {
     );
   }
 
-  private selectCar(id: string): void {
+  /** Selects a catalogue car, optionally with another paint (garage and car list). */
+  selectCar(id: string, paint?: { color: string; accent: string }): boolean {
     const c = LAB_CARS.find((x) => x.id === id);
-    if (!c) return;
+    if (!c) return false;
     this.car = cloneCar(c);
+    if (paint) this.car.visual = { ...this.car.visual, ...paint };
     this.editor?.setBase(this.car);
     this.replacePlayer();
+    const sel = this.ctx.panel.querySelector<HTMLSelectElement>('[data-testid=car-select]');
+    if (sel) sel.value = id;
+    return true;
+  }
+
+  currentCar(): CarConfig {
+    return this.car;
   }
 
   private applyCar(car: CarConfig, physicsChanged: boolean): void {

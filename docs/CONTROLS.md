@@ -84,8 +84,19 @@ Os botões aparecem no Sandbox e na Corrida, não no dinamômetro.
 
 `C` alterna entre três modos:
 
-- **seguir:** o zoom diminui com a velocidade;
+- **seguir:** o carro ocupa cerca de um terço da tela; o zoom abre com a velocidade e a câmera olha à frente. Na corrida, a árvore de largada fica em quadro enquanto o carro está na linha, e um adversário a menos de 16 m é mantido na imagem;
 - **os dois carros:** enquadra ambos;
 - **largada:** fixa na linha.
 
 O zoom base é ajustável em **Configurações → Zoom da câmera**, de 0,6× a 1,6×.
+
+## Gráficos
+
+Em **Configurações → Gráficos**:
+
+- **Perfil gráfico:** baixo, médio ou alto. Muda a resolução das texturas, o número de partículas, o desfoque das rodas e as camadas opcionais. Não altera a física nem o som.
+- **Iluminação:** padrão da pista, dia, fim de tarde ou noite.
+
+## Garagem
+
+O botão **Garagem**, no topo, mostra cada carro em detalhe e permite escolher o carro e a pintura para o modo aberto. `Esc` fecha.

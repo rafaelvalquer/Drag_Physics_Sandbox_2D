@@ -1,6 +1,7 @@
 import type { CarConfig } from '../data/schema';
 import type { RenderVehicle } from '../game/scenes/RaceScene';
 import type { RunnerVehicle } from '../game/SimulationRunner';
+import { artSignature } from '../game/vehicles/VehicleSpriteAssembler';
 
 /** Distance of the listener from the near lane (m): a trackside microphone next to the player. */
 export const LISTENER_OFFSET_M = 7;
@@ -34,13 +35,20 @@ export class VehicleViews {
         pitch: s.pitch,
         wheelAngleDriven: s.wheelAngleDriven,
         wheelAngleFree: s.wheelAngleFree,
-        slipSpeed: Math.abs(s.driveline.v * s.car.tires.radiusM - s.speed),
+        wheelOmegaDriven: s.driveline.v,
+        wheelOmegaFree: s.speed / s.car.tires.radiusM,
+        slipSpeed: s.driveline.v * s.car.tires.radiusM - s.speed,
+        slipRatio: s.telemetry.slipRatio,
         speed: s.speed,
+        accel: s.telemetry.acceleration,
         afterfire: t > 0,
         isPlayer: v.isPlayer,
         artKey: this.artKey(v.id, s.car),
         rpm: s.engine.rpm,
         running: s.engine.runState === 'RUNNING',
+        cranking: s.engine.runState === 'CRANKING',
+        braking: s.controls.autoBrake || s.controls.holdBrake,
+        shifting: s.shift.active,
         load: s.engine.load,
         name: v.isPlayer ? 'Você' : (this.names.get(v.id) ?? s.car.name),
       };
@@ -49,7 +57,7 @@ export class VehicleViews {
 
   /** A new texture key whenever the art inputs change (edited visual config, wheels, wheelbase). */
   private artKey(id: string, car: CarConfig): string {
-    const sig = JSON.stringify([car.visual, car.wheelbaseM, car.tires.radiusM, car.exhaust.layout, car.engine.induction]);
+    const sig = artSignature(car);
     const k = this.artKeys.get(id);
     if (k && k.sig === sig) return k.key;
     const key = `${car.id}-${++this.keyCounter}`;

@@ -36,6 +36,12 @@ export interface Mode {
   markers(): TrackMarker[];
   tree(): TreeLights | null;
   finishM(): number | null;
+  /** A point (m) the camera should keep in frame with the player (e.g. the tree while staging). */
+  focusM?(): number | null;
+  /** Selects one of the catalogue cars (used by the garage). Returns false when not applicable. */
+  selectCar?(id: string, paint?: { color: string; accent: string }): boolean;
+  /** The car currently selected in this mode. */
+  currentCar?(): import('../data/schema').CarConfig;
   cameraMode: CameraMode;
   /** The audio context became available (first user gesture) – create the voices. */
   onAudioReady(): void;

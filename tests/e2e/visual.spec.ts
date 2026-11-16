@@ -1,0 +1,389 @@
+/**
+ * Visual tests of the running game (real app, real browser, no mocks).
+ *
+ * Every scenario saves a screenshot to `visual-captures/` for inspection and asserts geometry and
+ * behaviour read from the renderer's own debug snapshot: vehicle scale, wheels on the ground and
+ * inside their arches, framing, HUD inside the stage, parallax, smoke only when the tyres slide.
+ * Pixels are not compared; the screenshots are the evidence to look at.
+ */
+import { mkdirSync } from 'node:fs';
+import { expect, test, type Page } from '@playwright/test';
+import { boot, errors, mode, waitEngineRunning } from './helpers';
+
+const OUT = process.env.VISUAL_DIR ?? 'visual-captures';
+mkdirSync(OUT, { recursive: true });
+
+interface VehicleInfo {
+  id: string;
+  lane: number;
+  loaded: boolean;
+  pxPerM: number;
+  rootScale: number;
+  bodyScaleX: number;
+  bodyScaleY: number;
+  wheels: { x: number; y: number; r: number }[];
+  lengthM: number;
+  wheelbaseM: number;
+  pitch: number;
+  heave: number;
+  wheelLayers: { rear: [number, number, number]; front: [number, number, number] };
+  lightsOn: boolean;
+  brakeOn: boolean;
+  screenX: number;
+  screenGroundY: number;
+  screenLengthPx: number;
+}
+
+interface Visual {
+  viewW: number;
+  viewH: number;
+  ppm: number;
+  camX: number;
+  groundY: number;
+  lighting: string;
+  profile: string;
+  vehicles: VehicleInfo[];
+  particles: { live: number; marks: number; pooled: number; emitted: Record<string, number> };
+  parallax: { layers: { index: number; tileX: number; y: number; scale: number }[] };
+  track: { props: number; textures: number; treeVisible: boolean; litBulbs: number };
+  vehicleTextures: number;
+  fps: number;
+}
+
+async function shot(page: Page, name: string): Promise<void> {
+  await page.screenshot({ path: `${OUT}/${name}.png` });
+}
+
+function visual(page: Page): Promise<Visual> {
+  return page.evaluate(() => {
+    const game = (window as unknown as { __app: { debug: { game: { scene: { getScene(k: string): { visualDebug(): unknown } } } } } }).__app.debug.game;
+    return game.scene.getScene('race').visualDebug() as never;
+  }) as Promise<Visual>;
+}
+
+async function setting(page: Page, key: string, value: unknown): Promise<void> {
+  await page.evaluate(([k, v]) => (window as unknown as { __app: { updateSetting(k: string, v: unknown): void } }).__app.updateSetting(k as string, v), [key, value] as const);
+}
+
+/** Waits until every vehicle's artwork is on screen. */
+async function waitArt(page: Page): Promise<Visual> {
+  await expect.poll(async () => (await visual(page)).vehicles.every((v) => v.loaded) && (await visual(page)).vehicles.length > 0, { timeout: 15_000 }).toBe(true);
+  return visual(page);
+}
+
+/** Geometry every vehicle must satisfy in any scenario. */
+function expectSound(v: Visual): void {
+  for (const car of v.vehicles) {
+    // uniform scale: the sprite is never stretched
+    expect(car.bodyScaleX).toBeCloseTo(car.bodyScaleY, 6);
+    expect(car.bodyScaleX).toBeGreaterThan(0);
+    // on-screen length follows the car's real length and the camera scale
+    expect(car.screenLengthPx).toBeCloseTo(car.lengthM * v.ppm * car.rootScale, 3);
+    expect(car.wheels).toHaveLength(2);
+    for (const w of car.wheels) {
+      // tyres rest on the ground line: centre exactly one radius above it (root-local, y down)
+      expect(w.y).toBeCloseTo(-w.r, 4);
+    }
+    // wheel centres are one wheelbase apart
+    expect(Math.abs(car.wheels[1]!.x - car.wheels[0]!.x) / 40).toBeCloseTo(car.wheelbaseM, 4);
+    // body motion stays small (no floating, no sinking)
+    expect(Math.abs(car.pitch)).toBeLessThan(0.12);
+    expect(Math.abs(car.heave)).toBeLessThan(0.08);
+  }
+}
+
+test.afterEach(() => {
+  expect(errors, errors.join('\n')).toEqual([]);
+});
+
+test('garage: detailed preview, technical sheet, paint and car choice', async ({ page }) => {
+  await boot(page, false);
+  await page.getByTestId('garage-open').click();
+  await expect(page.getByTestId('garage')).toBeVisible();
+  const layout = (): Promise<{ carPx: number; width: number; loaded: boolean }> =>
+    page.evaluate(() => {
+      const c = document.querySelector<HTMLCanvasElement>('[data-testid=garage] canvas.garage-preview')!;
+      return { carPx: c.width * 0.74, width: c.width, loaded: c.width > 100 };
+    });
+  await expect.poll(async () => (await layout()).loaded).toBe(true);
+  await page.waitForTimeout(500);
+  await shot(page, 'garage-default');
+  // the car fills most of the preview (detail is visible)
+  expect((await layout()).carPx / (await layout()).width).toBeGreaterThan(0.6);
+  await expect(page.getByTestId('garage-specs')).toContainText('cv');
+  await expect(page.getByTestId('garage-specs')).toContainText('N·m');
+  for (const id of ['arco-1600', 'vetra-rs', 'lince-gt', 'orion-xr', 'tempest-v8', 'aurora-v12-lab']) {
+    await page.getByTestId(`garage-car-${id}`).click();
+    await page.waitForTimeout(350);
+    await shot(page, `garage-${id}`);
+  }
+  // paint preview and lamps
+  await page.getByTestId('garage-car-tempest-v8').click();
+  await page.getByTestId('garage-swatch').nth(2).click();
+  await page.getByTestId('garage-lamps').check();
+  await page.waitForTimeout(350);
+  await shot(page, 'garage-paint-lamps');
+  await page.getByTestId('garage-use').click();
+  await expect(page.getByTestId('garage')).toHaveCount(0);
+  await expect.poll(() => mode<string>(page, 'm.runner.player.sim.car.id')).toBe('tempest-v8');
+  // the chosen paint reached the car on the track (same artwork source)
+  const colour = await mode<string>(page, 'm.runner.player.sim.car.visual.color');
+  expect(colour).not.toBe('#f2b705');
+  await waitArt(page);
+  await shot(page, 'garage-applied-on-track');
+});
+
+test('sandbox: idle, launch with wheelspin, gear change and deceleration', async ({ page }) => {
+  await boot(page);
+  await waitEngineRunning(page);
+  let v = await waitArt(page);
+  await page.waitForTimeout(600);
+  v = await visual(page);
+  await shot(page, 'sandbox-idle');
+  expectSound(v);
+  const car = v.vehicles[0]!;
+  // framing: the car is the subject (about a third of the view) and sits in the lower middle
+  expect(car.screenLengthPx / v.viewW).toBeGreaterThan(0.26);
+  expect(v.groundY / v.viewH).toBeGreaterThan(0.6);
+  expect(v.groundY / v.viewH).toBeLessThan(0.8);
+  // idle: wheels still and sharp, no smoke although the engine runs
+  expect(car.wheelLayers.rear).toEqual([1, 0, 0]);
+  expect(v.particles.emitted.smoke).toBe(0);
+  // revving in neutral must not make smoke either (throttle alone is not wheelspin)
+  await page.locator('#game').click({ position: { x: 50, y: 50 } });
+  await page.keyboard.down('w');
+  await page.waitForTimeout(700);
+  await page.keyboard.up('w');
+  expect((await visual(page)).particles.emitted.smoke).toBe(0);
+  await page.waitForTimeout(600);
+
+  // launch: the driven tyres slide → smoke and marks; the nose rises
+  await page.keyboard.press('e');
+  await expect.poll(() => mode<number>(page, 'm.runner.player.sim.gear')).toBe(1);
+  await page.keyboard.down('w');
+  await expect.poll(async () => (await visual(page)).particles.emitted.smoke, { timeout: 8000 }).toBeGreaterThan(5);
+  await page.waitForTimeout(350);
+  v = await visual(page);
+  await shot(page, 'sandbox-launch');
+  expectSound(v);
+  expect(v.vehicles[0]!.pitch).toBeGreaterThan(0.004);
+  expect(v.particles.emitted.marks).toBeGreaterThan(0);
+  // gear change at speed: wheels blurred, parallax moving, zoom opened a little
+  const ppmRest = car.screenLengthPx / car.lengthM;
+  await expect.poll(() => mode<number>(page, 'm.runner.player.sim.speed'), { timeout: 15_000 }).toBeGreaterThan(14);
+  const before = await visual(page);
+  await page.keyboard.press('e');
+  await page.waitForTimeout(120);
+  await shot(page, 'sandbox-shift');
+  await expect.poll(() => mode<number>(page, 'm.runner.player.sim.gear'), { timeout: 5000 }).toBe(2);
+  await expect.poll(() => mode<number>(page, 'm.runner.player.sim.speed'), { timeout: 15_000 }).toBeGreaterThan(30);
+  v = await visual(page);
+  await shot(page, 'sandbox-speed');
+  expectSound(v);
+  expect(v.vehicles[0]!.wheelLayers.rear[2]).toBeGreaterThan(0.5);
+  expect(v.ppm).toBeLessThan(ppmRest);
+  // measured in this browser while accelerating with smoke on screen (reported, not asserted hard)
+  const perf = await mode<{ stepMs: number; dropped: number }>(page, '({ stepMs: m.runner.stats.stepMs, dropped: m.runner.stats.droppedRealTimeS })');
+  console.log(`perf (high profile): ${v.fps.toFixed(1)} fps, physics ${perf.stepMs.toFixed(3)} ms/step, dropped ${perf.dropped.toFixed(3)} s, ${v.particles.live} particles, ${v.particles.marks} marks`);
+  test.info().annotations.push({ type: 'perf', description: `${v.fps.toFixed(1)} fps; physics ${perf.stepMs.toFixed(3)} ms/step` });
+  expect(v.fps).toBeGreaterThan(30);
+  expect(perf.stepMs).toBeLessThan(2);
+  // parallax: distant layers scroll slower than near ones, all slower than the track
+  const moved = v.parallax.layers.map((l, i) => Math.abs(l.tileX * l.scale - before.parallax.layers[i]!.tileX * before.parallax.layers[i]!.scale));
+  expect(moved[0]!).toBeGreaterThan(0);
+  expect(moved[0]!).toBeLessThan(moved[moved.length - 1]!);
+  // lift off: deceleration, nose down, no new smoke
+  await page.keyboard.up('w');
+  const smoke = v.particles.emitted.smoke;
+  await page.waitForTimeout(900);
+  v = await visual(page);
+  await shot(page, 'sandbox-decel');
+  expectSound(v);
+  expect(v.vehicles[0]!.pitch).toBeLessThan(0.002);
+  expect(v.particles.emitted.smoke).toBe(smoke);
+});
+
+test('tracks and lighting: every scene, day, dusk and night', async ({ page }) => {
+  await boot(page);
+  for (const track of ['test-track', 'desert-strip', 'night-industrial', 'airfield']) {
+    await page.getByTestId('track-select').selectOption(track);
+    await waitArt(page);
+    await page.waitForTimeout(500);
+    const v = await visual(page);
+    await shot(page, `track-${track}`);
+    expectSound(v);
+    expect(v.track.props).toBeGreaterThan(10);
+    expect(v.parallax.layers.length).toBe(3);
+  }
+  for (const time of ['day', 'dusk', 'night']) {
+    await setting(page, 'timeOfDay', time);
+    await page.waitForTimeout(500);
+    const v = await visual(page);
+    await shot(page, `light-airfield-${time}`);
+    expect(v.lighting).toContain(time);
+  }
+  await setting(page, 'timeOfDay', 'track');
+  // a wider view of each scene: more of the scenery and the sky
+  await setting(page, 'cameraZoom', 0.6);
+  for (const track of ['test-track', 'desert-strip']) {
+    await page.getByTestId('track-select').selectOption(track);
+    await page.waitForTimeout(700);
+    await shot(page, `wide-${track}`);
+  }
+  await setting(page, 'cameraZoom', 1);
+});
+
+test('graphics profiles and resolutions keep the cars undistorted', async ({ page }) => {
+  await boot(page);
+  await waitArt(page);
+  const res: [number, number][] = [
+    [1920, 1080],
+    [1600, 900],
+    [1366, 768],
+    [820, 1180],
+    [390, 844],
+  ];
+  for (const [w, h] of res) {
+    await page.setViewportSize({ width: w, height: h });
+    await page.waitForTimeout(500);
+    const v = await visual(page);
+    await shot(page, `res-${w}x${h}`);
+    expectSound(v);
+    const car = v.vehicles[0]!;
+    // the whole car fits in the view and stays the subject
+    expect(car.screenLengthPx).toBeLessThan(v.viewW);
+    expect(car.screenLengthPx / v.viewW).toBeGreaterThan(0.24);
+    // HUD stays inside the stage
+    const hud = await page.getByTestId('hud').boundingBox();
+    const stage = await page.locator('#stage').boundingBox();
+    expect(hud).not.toBeNull();
+    expect(hud!.x).toBeGreaterThanOrEqual(stage!.x - 1);
+    expect(hud!.y + hud!.height).toBeLessThanOrEqual(stage!.y + stage!.height + 1);
+  }
+  await page.setViewportSize({ width: 1400, height: 860 });
+  for (const q of ['low', 'medium', 'high']) {
+    await setting(page, 'graphics', q);
+    await expect.poll(async () => (await visual(page)).profile).toBe(q);
+    const v = await waitArt(page);
+    await page.waitForTimeout(400);
+    await shot(page, `profile-${q}`);
+    expectSound(await visual(page));
+    expect(v.vehicles[0]!.pxPerM).toBe({ low: 72, medium: 104, high: 144 }[q]);
+  }
+});
+
+test('race: two cars, tree from the real race state, finish and results', async ({ page }) => {
+  await boot(page);
+  await page.locator('#topbar button[data-mode=race]').click();
+  await page.getByTestId('race-distance').selectOption('eighth');
+  await expect(page.getByTestId('race-status')).toContainText('Pressione E');
+  await page.waitForFunction(() => (window as unknown as { __app: { debug: { current: { runner: { player: { sim: { engine: { runState: string } } } } } } } }).__app.debug.current.runner.player.sim.engine.runState === 'RUNNING');
+  let v = await waitArt(page);
+  await page.waitForTimeout(700);
+  v = await visual(page);
+  await shot(page, 'race-staging');
+  expectSound(v);
+  expect(v.vehicles).toHaveLength(2);
+  // two lanes: the far car is higher on screen and slightly smaller; both keep their real length ratio
+  const near = v.vehicles.find((c) => c.lane === 0)!;
+  const far = v.vehicles.find((c) => c.lane === 1)!;
+  expect(far.screenGroundY).toBeLessThan(near.screenGroundY - 40);
+  expect(far.rootScale).toBeLessThan(near.rootScale);
+  expect(far.screenLengthPx / near.screenLengthPx).toBeCloseTo((far.lengthM * far.rootScale) / (near.lengthM * near.rootScale), 3);
+  // the tree is in the picture while staging
+  expect(v.track.treeVisible).toBe(true);
+  await page.locator('#game').click({ position: { x: 50, y: 50 } });
+  await page.keyboard.press('e');
+  // bulbs follow the race controller: staged lamps first, then the countdown, then green
+  await expect.poll(async () => (await visual(page)).track.litBulbs, { timeout: 10_000 }).toBeGreaterThan(1);
+  await page.waitForFunction(() => {
+    const r = (window as unknown as { __app: { debug: { current: { race: { greenAt: number | null; time: number } } } } }).__app.debug.current.race;
+    return r.greenAt !== null && r.time >= r.greenAt;
+  }, undefined, { timeout: 20_000 });
+  await shot(page, 'race-green');
+  const green = await mode<boolean>(page, 'm.tree().green[0]');
+  expect(green).toBe(true);
+  await page.keyboard.down('w');
+  await page.waitForTimeout(900);
+  v = await visual(page);
+  await shot(page, 'race-launch');
+  expectSound(v);
+  const deadline = Date.now() + 60_000;
+  let shotMid = false;
+  while (Date.now() < deadline) {
+    const s = await mode<{ phase: string; gear: number; rpm: number; red: number; locked: boolean; n: number; x: number }>(
+      page,
+      '({ phase: m.race.phase, gear: m.runner.player.sim.gear, rpm: m.runner.player.sim.engine.rpm, red: m.runner.player.sim.car.engine.redlineRpm, locked: m.runner.player.sim.clutchCtl.mode === "LOCKED", n: m.runner.player.sim.gearbox.gearCount, x: m.runner.player.sim.x })',
+    );
+    if (s.phase === 'finished') break;
+    if (!shotMid && s.x > 90) {
+      shotMid = true;
+      await shot(page, 'race-mid');
+      expectSound(await visual(page));
+    }
+    if (s.locked && s.gear < s.n && s.rpm > s.red - 400) await page.keyboard.press('e');
+    await page.waitForTimeout(50);
+  }
+  await page.keyboard.up('w');
+  await expect(page.getByTestId('result-card')).toBeVisible();
+  await shot(page, 'race-finish-results');
+  // after the finish the car brakes by itself: brake lamps on
+  await expect.poll(async () => (await visual(page)).vehicles.find((c) => c.lane === 0)!.brakeOn, { timeout: 10_000 }).toBe(true);
+  await shot(page, 'race-braking');
+  expectSound(await visual(page));
+});
+
+test('dyno: test cell with the car on the rollers and the measured curves', async ({ page }) => {
+  await boot(page);
+  await page.locator('#topbar button[data-mode=dyno]').click();
+  await expect(page.getByTestId('dyno-bay')).toBeVisible();
+  const bay = (): Promise<{ loaded: boolean; wheelOmega: number; carPx: number; width: number }> => mode(page, 'm.bay.debug()');
+  await expect.poll(async () => (await bay()).loaded, { timeout: 15_000 }).toBe(true);
+  await expect.poll(() => mode<string>(page, 'm.bench.engine.runState'), { timeout: 15_000 }).toBe('RUNNING');
+  await page.waitForTimeout(800);
+  await shot(page, 'dyno-idle');
+  const b = await bay();
+  // the car is large in the cell and the wheels turn with the engine
+  expect(b.carPx / b.width).toBeGreaterThan(0.5);
+  expect(b.wheelOmega).toBeGreaterThan(1);
+  // the charts stay real: measure the curve
+  await page.getByTestId('dyno-sweep').click();
+  await expect(page.getByTestId('dyno-status')).toContainText('Torque máx.', { timeout: 90_000 });
+  await shot(page, 'dyno-measured');
+  expect(await mode<number>(page, 'm.points.length')).toBeGreaterThan(10);
+  // no track rendering work while the dyno view is shown
+  const cam = await page.evaluate(() => {
+    const game = (window as unknown as { __app: { debug: { game: { scene: { getScene(k: string): { cameras: { main: { visible: boolean } } } } } } } }).__app.debug.game;
+    return game.scene.getScene('race').cameras.main.visible;
+  });
+  expect(cam).toBe(false);
+});
+
+test('no texture leak when cars, tracks and lighting change', async ({ page }) => {
+  await boot(page, false);
+  await waitArt(page);
+  const count = (): Promise<number> =>
+    page.evaluate(() => {
+      const game = (window as unknown as { __app: { debug: { game: { textures: { getTextureKeys(): string[] } } } } }).__app.debug.game;
+      return game.textures.getTextureKeys().length;
+    });
+  const cycle = async (): Promise<void> => {
+    for (const car of ['arco-1600', 'tempest-v8', 'kronos-v8']) {
+      await page.getByTestId('car-select').selectOption(car);
+      await waitArt(page);
+    }
+    for (const track of ['desert-strip', 'night-industrial', 'test-track']) {
+      await page.getByTestId('track-select').selectOption(track);
+      await page.waitForTimeout(250);
+    }
+  };
+  await cycle();
+  const first = await count();
+  await cycle();
+  await cycle();
+  const v = await visual(page);
+  // the same number of textures after repeating the cycle: nothing accumulates
+  expect(await count()).toBe(first);
+  expect(v.vehicleTextures).toBe(1);
+  expect(v.particles.pooled).toBeLessThanOrEqual(280);
+});

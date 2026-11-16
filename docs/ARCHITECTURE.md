@@ -20,6 +20,7 @@ Teclado / botões na tela ─► InputManager ─► Mode (Sandbox | Corrida | D
                                     7 canais → mixer → pan/Doppler/distância → master → saída
 
 Phaser (RaceScene) ◄── SceneBridge ◄── Mode.vehicles()/track()/markers()/tree()
+   └─ câmera, iluminação, cenário, pista, veículos e partículas (ver VISUAL_SYSTEM.md)
 ```
 
 A física é a **única fonte de verdade**. A cena, o HUD e o áudio apenas leem o estado; nenhum deles escreve na simulação.
@@ -36,10 +37,12 @@ A física é a **única fonte de verdade**. A cena, o HUD e o áudio apenas leem
 | `src/audio/dsp` | modelo acústico: guias de onda, rede de escapamento, fontes do motor, turbo, pneus, transmissão, vento, filtros, `TelemetryStream` |
 | `src/audio/worklets` | processador AudioWorklet (uma voz por veículo, 7 saídas mono) e protocolo de mensagens |
 | `src/audio/core` | `AudioEngine` (contexto, master, analisador), `VehicleSound` (nó, mixer, espacialização) |
-| `src/game` | `SimulationRunner`, IA, `RaceController` (árvore, feixes, parciais), entrada, cena Phaser e arte procedural |
+| `src/game` | `SimulationRunner`, IA, `RaceController` (árvore, feixes, parciais), entrada |
+| `src/game/scenes` | cena Phaser (orquestrador), câmera, iluminação, cenário em camadas, pista e a arte de ambos |
+| `src/game/vehicles` | pipeline de arte dos carros, atlas, controladores visuais (rodas, suspensão), partículas |
 | `src/modes` | os três modos de jogo (interface `Mode`) |
 | `src/app` | `App` (barra superior, troca de modos, portão de áudio, Phaser), configurações, adaptador física → cena |
-| `src/ui` | HUD, DevLab, gráficos, editor de carro e pista, configurações, botões na tela |
+| `src/ui` | instrumentos (`hud`), garagem, célula do dinamômetro, DevLab, gráficos, editor de carro e pista, configurações, botões na tela |
 | `src/data` | esquema zod, carros, motores, pistas, presets de escapamento |
 | `src/storage` | IndexedDB (presets, recordes, histórico de corridas, configurações) com migrações e fallback em memória |
 | `src/telemetry` | gravador de telemetria (anel com contagem de perdas, exportação CSV) |
@@ -70,9 +73,9 @@ A física é a **única fonte de verdade**. A cena, o HUD e o áudio apenas leem
 ## Cena (Phaser 4)
 
 - **`SceneBridge`:** a cena só conversa com a física por essa interface, implementada pelo `App`, que delega ao modo ativo.
-- **Câmera:** tem três modos e respeita os limites da pista e o zoom do usuário.
-- **Carros:** são SVG procedurais gerados a partir das dimensões reais (entre-eixos, raio do pneu, balanços). Por isso, um carro editado sempre corresponde à sua geometria física.
-- **Efeitos visuais** (fumaça, marcas de pneu, pulsos de escape, vibração em marcha lenta, poeira): derivam do estado físico, mas são apenas visuais. Ver [LIMITATIONS.md](LIMITATIONS.md).
+- **`RaceScene`:** é um orquestrador. Câmera, iluminação, cenário, pista, veículos e partículas são componentes separados, descritos em [VISUAL_SYSTEM.md](VISUAL_SYSTEM.md).
+- **Carros:** a arte é gerada por código a partir das dimensões reais (entre-eixos, raio do pneu, balanços) e rasterizada uma vez num atlas por carro. Um carro editado sempre corresponde à sua geometria física. A garagem e o dinamômetro usam o mesmo atlas.
+- **Animações e efeitos** (rodas, suspensão visual, fumaça, marcas, luzes): derivam do estado físico, mas são apenas visuais e nunca escrevem na simulação. Ver [LIMITATIONS.md](LIMITATIONS.md).
 
 ## Validação e persistência
 

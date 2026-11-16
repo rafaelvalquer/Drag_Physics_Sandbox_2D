@@ -6,6 +6,7 @@ import { TRACKS, findTrack } from '../data/tracks/index';
 import { DragAI, type AiLevel } from '../game/ai/DragAI';
 import { RACE_DISTANCES, RaceController, type LaneResult, type RaceDistanceId, type RaceLane, type TreeType } from '../game/race/RaceController';
 import type { CameraMode, RenderVehicle, TrackMarker, TreeLights } from '../game/scenes/RaceScene';
+import { TREE_X_M } from '../game/scenes/worldScale';
 import { PHYSICS_DT, SimulationRunner } from '../game/SimulationRunner';
 import { TelemetryRecorder } from '../telemetry/TelemetryRecorder';
 import type { AppContext, Mode } from '../app/Mode';
@@ -263,6 +264,29 @@ export class RaceMode implements Mode {
     if (opponent) this.opponentCar = c ? cloneCar(c) : null;
     else if (c) this.playerCar = cloneCar(c);
     this.newRace();
+  }
+
+  /** Selects the player's car (garage), optionally with another paint. */
+  selectCar(id: string, paint?: { color: string; accent: string }): boolean {
+    const c = LAB_CARS.find((x) => x.id === id);
+    if (!c) return false;
+    this.playerCar = cloneCar(c);
+    if (paint) this.playerCar.visual = { ...this.playerCar.visual, ...paint };
+    const sel = this.ctx.panel.querySelector<HTMLSelectElement>('[data-testid=race-car]');
+    if (sel) sel.value = id;
+    this.newRace();
+    return true;
+  }
+
+  currentCar(): CarConfig {
+    return this.playerCar;
+  }
+
+  /** While staging and during the countdown the camera keeps the tree in frame with the car. */
+  focusM(): number | null {
+    const p = this.runner.player;
+    if (!this.race || !p || this.race.phase === 'finished') return null;
+    return p.sim.x < 5.5 ? TREE_X_M : null;
   }
 
   private exportCsv(): void {

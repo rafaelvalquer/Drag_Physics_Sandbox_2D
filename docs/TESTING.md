@@ -20,6 +20,7 @@ npm test
 | `tests/unit/physics/vehicle.test.ts` | Magic Formula (crescimento, pico μ·N, queda, simetria); pico de κ entre 8 e 20 %; linearização dissipativa; desaceleração livre = arrasto + rolamento; **balanço de energia** (resíduo 0,23 %, limite 2 %); transferência de carga; patinagem e aquecimento do pneu em baixa aderência |
 | `tests/unit/physics/semiauto.test.ts` | os **dez testes** da alteração do plano (ver abaixo) e a frenagem automática depois da chegada |
 | `tests/unit/audio/acoustics.test.ts` | tom e periodicidade por arquitetura a 44,1 e 48 kHz; independência da taxa de amostragem; caráter cross-plane × flat-plane; ordem de ignição; corte de faísca total e parcial; carga; presets de escapamento; robustez (não finitos, telemetria aleatória, cliques, perda e reset); determinismo; qualidade baixa; integração com a física. Detalhes em [ACOUSTIC_MODEL.md](ACOUSTIC_MODEL.md) |
+| `tests/unit/visual.test.ts` | lógica da camada visual: um desenho por carro; metadados visuais iguais à geometria física; para-lamas livres dos pneus; estágios de desfoque das rodas sem transparência; suspensão visual (mola amortecida, troca de marcha, independência da taxa de quadros); condição de fumaça; câmera (enquadramento, zoom, sem saltos, limites, adversário e árvore em quadro); iluminação; escala do conta-giros por motor; luzes de troca por carro; indicador de marcha |
 | `tests/integration/runner.test.ts` | resultado independente da taxa de quadros (30/60/144 fps); quadro longo limitado e tempo perdido informado; uma amostra de telemetria por passo, com perdas declaradas no CSV |
 
 ### Os dez testes do câmbio semiautomático
@@ -64,6 +65,24 @@ npm run test:e2e:build
 
 O teste "seleção, motor..." anexa ao relatório o custo medido de um passo de física no navegador.
 
+### Testes visuais
+
+`tests/e2e/visual.spec.ts` roda o jogo real, salva capturas em `visual-captures/` (fora do git) e confere a geometria lida do próprio renderizador. Não compara pixels: as capturas são a evidência para inspeção.
+
+| Cenário | O que verifica |
+|---|---|
+| garagem | prévia grande, ficha técnica, pintura e luzes; a escolha chega à pista |
+| sandbox | parado; sem fumaça ao acelerar em ponto morto; largada com fumaça, marcas e frente levantada; troca; rodas borradas em velocidade; parallax; desaceleração |
+| pistas e iluminação | as quatro pistas, dia, fim de tarde e noite |
+| resoluções e perfis | 1920 × 1080 até 390 × 844; perfis baixo, médio e alto; HUD dentro da cena |
+| corrida | duas faixas, árvore pelo estado real, verde, chegada e luz de freio |
+| dinamômetro | carro na célula, rodas girando com o motor, curva medida |
+| vazamento | número de texturas estável ao repetir trocas de carro e pista |
+
+Em todos vale: sprite nunca esticado, comprimento na tela igual ao real × escala da câmera, pneus sobre a linha do solo, eixos a um entre-eixos de distância. O cenário do sandbox também registra a taxa de quadros medida.
+
+`tests/e2e/artsheet.spec.ts` salva a folha de contato da arte dos carros (`?artsheet`).
+
 ## Ferramentas de medição
 
 ```bash
@@ -93,7 +112,7 @@ Com `--wav <pasta>`, grava a mixagem em WAV. Foi assim que as escalas `CHANNEL_N
 npm run assets
 ```
 
-Exporta os sprites SVG procedurais (carroceria e roda) de cada carro e um `manifest.json` com tamanhos e pontos de ancoragem físicos, em `dist-assets/sprites`.
+Exporta as oito camadas SVG da arte de cada carro (assoalho, carroceria, brilhos, luzes, freio, sombra, cubo e roda) e um `manifest.json` com os metadados visuais, em `dist-assets/sprites`. É o mesmo gerador usado pelo jogo.
 
 ## Checagem de tipos e build
 

@@ -8,6 +8,8 @@ import { RaceMode } from '../modes/RaceMode';
 import { DynoMode } from '../modes/DynoMode';
 import { clear, h, toast } from '../ui/dom';
 import { openSettingsDialog } from '../ui/SettingsDialog';
+import { openGarage } from '../ui/garage/GarageDialog';
+import { LAB_CARS } from '../data/cars/index';
 import { TouchControls } from '../ui/TouchControls';
 import { VehicleSound } from '../audio/core/VehicleSound';
 import type { AppContext, Mode } from './Mode';
@@ -83,6 +85,10 @@ export class App {
       tree: () => app.mode?.tree() ?? null,
       finishM: () => app.mode?.finishM() ?? null,
       zoom: () => app.settings.cameraZoom,
+      visible: () => app.mode?.usesTrack ?? false,
+      focusM: () => app.mode?.focusM?.() ?? null,
+      graphics: () => app.settings.graphics,
+      timeOfDay: () => app.settings.timeOfDay,
       get cameraMode(): CameraMode {
         return app.mode?.cameraMode ?? 'follow';
       },
@@ -119,6 +125,7 @@ export class App {
       ...Object.keys(this.modes).map((id) =>
         h('button', { class: 'tab', 'data-mode': id, onclick: () => this.switchMode(id) }, { sandbox: 'Sandbox', race: 'Corrida', dyno: 'Dinamômetro' }[id] ?? id),
       ),
+      h('button', { class: 'tab garage-btn', 'data-testid': 'garage-open', title: 'Ver os carros em detalhe e escolher um', onclick: () => this.openGarage() }, 'Garagem'),
       h('span', { class: 'spacer' }),
       this.audioLabel,
       this.muteBtn,
@@ -154,8 +161,22 @@ export class App {
     m.mount(this.ctx);
     this.el.game.style.visibility = m.usesTrack ? 'visible' : 'hidden';
     this.touch?.setVisible(m.usesTrack && TouchControls.wanted(this.settings.touchControls));
-    for (const b of this.el.topbar.querySelectorAll<HTMLButtonElement>('button.tab')) b.classList.toggle('active', b.dataset.mode === id);
+    for (const b of this.el.topbar.querySelectorAll<HTMLButtonElement>('button.tab[data-mode]')) b.classList.toggle('active', b.dataset.mode === id);
     if (audioEngine.running) m.onAudioReady();
+  }
+
+  private openGarage(): void {
+    const m = this.mode;
+    if (!m) return;
+    const label: Record<string, string> = { sandbox: 'Usar no Sandbox', race: 'Usar na corrida', dyno: 'Levar ao dinamômetro' };
+    openGarage({
+      cars: LAB_CARS,
+      current: m.currentCar?.() ?? null,
+      useLabel: label[m.id] ?? 'Usar este carro',
+      onUse: (id, paint) => {
+        if (!m.selectCar?.(id, paint ?? undefined)) toast('Este modo não permite trocar de carro agora.', 'error');
+      },
+    });
   }
 
   private showAudioGate(): void {

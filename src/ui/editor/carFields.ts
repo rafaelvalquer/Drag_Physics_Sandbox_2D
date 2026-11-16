@@ -260,6 +260,7 @@ export const FIELD_GROUPS: FieldGroup[] = [
               ['sedan', 'sedã'],
               ['muscle', 'muscle'],
               ['supercar', 'superesportivo'],
+              ['prototype', 'protótipo GT'],
             ],
           },
           { path: 'visual.color', label: 'Cor', kind: 'color' },

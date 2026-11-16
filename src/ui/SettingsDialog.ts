@@ -1,3 +1,4 @@
+import { GRAPHICS_LABELS, TIME_OF_DAY_LABELS } from '../app/graphics';
 import { ACTION_LABELS, DEFAULT_BINDINGS, DRIVE_ACTIONS, META_ACTIONS, keyLabel, validateBindings, type ActionId, type Bindings, type InputManager } from '../game/input/InputManager';
 import { PEDAL_RISE_RANGE, ZOOM_RANGE, type AppSettings } from '../app/settings';
 import { h } from './dom';
@@ -118,6 +119,16 @@ export function openSettingsDialog(deps: SettingsDialogDeps): void {
     h('option', { value: 'high', selected: deps.settings.audioQuality === 'high' }, 'alta'),
     h('option', { value: 'low', selected: deps.settings.audioQuality === 'low' }, 'baixa (menos CPU)'),
   );
+  const gfx = h(
+    'select',
+    { 'data-testid': 'graphics-setting', onchange: (e: Event) => deps.update('graphics', (e.target as HTMLSelectElement).value as AppSettings['graphics']) },
+    (Object.keys(GRAPHICS_LABELS) as AppSettings['graphics'][]).map((k) => h('option', { value: k, selected: deps.settings.graphics === k }, GRAPHICS_LABELS[k])),
+  );
+  const tod = h(
+    'select',
+    { 'data-testid': 'time-setting', onchange: (e: Event) => deps.update('timeOfDay', (e.target as HTMLSelectElement).value as AppSettings['timeOfDay']) },
+    (Object.keys(TIME_OF_DAY_LABELS) as AppSettings['timeOfDay'][]).map((k) => h('option', { value: k, selected: deps.settings.timeOfDay === k }, TIME_OF_DAY_LABELS[k])),
+  );
   const opp = h('input', {
     type: 'checkbox',
     checked: deps.settings.opponentLowQuality,
@@ -179,6 +190,9 @@ export function openSettingsDialog(deps: SettingsDialogDeps): void {
       h('div', { class: 'row' }, h('label', {}, 'Volume geral'), vol),
       h('div', { class: 'row' }, h('label', {}, 'Qualidade do modelo acústico'), quality),
       h('div', { class: 'row' }, h('label', {}, 'Adversários em qualidade baixa'), opp),
+      h('h3', {}, 'Gráficos'),
+      h('div', { class: 'row' }, h('label', { title: 'Resolução das texturas, partículas, desfoque das rodas e camadas opcionais. Não altera a física nem o som.' }, 'Perfil gráfico'), gfx),
+      h('div', { class: 'row' }, h('label', {}, 'Iluminação'), tod),
       h('h3', {}, 'Condução e câmera'),
       h('div', { class: 'row' }, h('label', { title: 'Tempo para o acelerador ir de 0 a 100 % com a tecla pressionada' }, 'Resposta do acelerador (0→100 %)'), rise),
       h('div', { class: 'row' }, h('label', {}, 'Zoom da câmera'), zoom),

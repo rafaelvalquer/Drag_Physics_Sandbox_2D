@@ -1,5 +1,6 @@
 import { DEFAULT_BINDINGS, validateBindings, type Bindings } from '../game/input/InputManager';
 import type { Store } from '../storage/db';
+import type { GraphicsQuality, TimeOfDaySetting } from './graphics';
 
 export interface AppSettings {
   bindings: Bindings;
@@ -15,6 +16,10 @@ export interface AppSettings {
   pedalRiseS: number;
   /** On-screen driving buttons: auto = touch screens only. */
   touchControls: 'auto' | 'on' | 'off';
+  /** Graphics profile (texture resolution, particles, optional layers). */
+  graphics: GraphicsQuality;
+  /** Scene lighting: the track's own time of day or a fixed one. */
+  timeOfDay: TimeOfDaySetting;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -27,6 +32,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   cameraZoom: 1,
   pedalRiseS: 0.09,
   touchControls: 'auto',
+  graphics: 'high',
+  timeOfDay: 'track',
 };
 
 export const ZOOM_RANGE = [0.6, 1.6] as const;
@@ -63,6 +70,10 @@ export async function loadSettings(store: Store): Promise<AppSettings> {
   if (typeof rise === 'number' && rise >= PEDAL_RISE_RANGE[0] && rise <= PEDAL_RISE_RANGE[1]) s.pedalRiseS = rise;
   const tc = await get<string>('touchControls');
   if (tc === 'auto' || tc === 'on' || tc === 'off') s.touchControls = tc;
+  const gq = await get<string>('graphics');
+  if (gq === 'low' || gq === 'medium' || gq === 'high') s.graphics = gq;
+  const tod = await get<string>('timeOfDay');
+  if (tod === 'track' || tod === 'day' || tod === 'dusk' || tod === 'night') s.timeOfDay = tod;
   return s;
 }
 

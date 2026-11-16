@@ -248,7 +248,7 @@ export const AcousticSchema = z.object({
 });
 export type AcousticConfig = z.infer<typeof AcousticSchema>;
 
-export const BodyStyleSchema = z.enum(['hatch', 'hotHatch', 'coupe', 'sedan', 'muscle', 'supercar']);
+export const BodyStyleSchema = z.enum(['hatch', 'hotHatch', 'coupe', 'sedan', 'muscle', 'supercar', 'prototype']);
 export type BodyStyle = z.infer<typeof BodyStyleSchema>;
 
 export const VisualSchema = z.object({

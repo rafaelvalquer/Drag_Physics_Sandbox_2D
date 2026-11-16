@@ -338,7 +338,7 @@ export const CAR_AURORA_V12_LAB: CarConfig = {
     clutch: { maxTorqueNm: 1150, engageRatePerS: 6, launchRpm: 4500, antiStallRpm: 1000 },
   },
   exhaust: exhaustPreset('sport', { layout: 'dual', headerPrimaryLengthM: 0.42, headerDiameterMm: 40 }),
-  visual: { ...CAR_TEMPEST_V8.visual, color: '#6b2fd6', accent: '#d8d8e0', lengthM: 4.7, heightM: 1.2 },
+  visual: { ...CAR_TEMPEST_V8.visual, bodyStyle: 'prototype', color: '#6b2fd6', accent: '#d8d8e0', lengthM: 4.7, heightM: 1.2 },
 };
 
 export const CARS: readonly CarConfig[] = [

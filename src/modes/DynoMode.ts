@@ -1,3 +1,4 @@
+import { DynoBayView } from '../ui/dyno/DynoBayView';
 import { fillEngineAudioFrame } from '../audio/adapters/engineFrame';
 import { VehicleSound } from '../audio/core/VehicleSound';
 import { carToAcousticConfig } from '../audio/dsp/AcousticConfig';
@@ -32,6 +33,7 @@ export class DynoMode implements Mode {
   private car: CarConfig = cloneCar(LAB_CARS[0]!);
   private readonly trackCfg: TrackConfig = findTrack('test-track');
   private view: HTMLElement | null = null;
+  private bay: DynoBayView | null = null;
   private curveCanvas!: HTMLCanvasElement;
   private specCanvas!: HTMLCanvasElement;
   private scopeCanvas!: HTMLCanvasElement;
@@ -59,8 +61,10 @@ export class DynoMode implements Mode {
     this.curveCanvas = h('canvas', { 'data-testid': 'dyno-curve' }) as HTMLCanvasElement;
     this.specCanvas = h('canvas', { 'data-testid': 'dyno-spectrum' }) as HTMLCanvasElement;
     this.scopeCanvas = h('canvas') as HTMLCanvasElement;
-    this.view = h('div', { class: 'dyno-view' }, this.curveCanvas, h('div', { class: 'split' }, this.specCanvas, this.scopeCanvas));
+    this.bay = new DynoBayView();
+    this.view = h('div', { class: 'dyno-view' }, h('div', { class: 'top' }, this.bay.canvas, this.curveCanvas), h('div', { class: 'split' }, this.specCanvas, this.scopeCanvas));
     ctx.overlay.append(this.view);
+    void this.bay.setCar(this.car);
     this.buildPanel();
     this.resetBench();
     this.drawCurves();
@@ -70,8 +74,31 @@ export class DynoMode implements Mode {
     this.sweepToken++;
     this.sound?.dispose();
     this.sound = null;
+    this.bay?.dispose();
+    this.bay = null;
     this.view?.remove();
     clear(this.ctx.panel);
+  }
+
+  /** Puts another car's engine on the bench (car list and garage). */
+  selectCar(id: string, paint?: { color: string; accent: string }): boolean {
+    const c = LAB_CARS.find((x) => x.id === id);
+    if (!c) return false;
+    this.car = cloneCar(c);
+    if (paint) this.car.visual = { ...this.car.visual, ...paint };
+    this.points = [];
+    this.sweepToken++;
+    this.sweeping = false;
+    this.sound?.setConfig(carToAcousticConfig(this.car, this.ctx.settings.audioQuality, 5));
+    this.resetBench();
+    this.buildPanel();
+    this.drawCurves();
+    void this.bay?.setCar(this.car);
+    return true;
+  }
+
+  currentCar(): CarConfig {
+    return this.car;
   }
 
   private ambient(): { pressurePa: number; temperatureK: number } {
@@ -115,18 +142,7 @@ export class DynoMode implements Mode {
           'select',
           {
             'data-testid': 'dyno-car',
-            onchange: (ev: Event) => {
-              const c = LAB_CARS.find((x) => x.id === (ev.target as HTMLSelectElement).value);
-              if (!c) return;
-              this.car = cloneCar(c);
-              this.points = [];
-              this.sweepToken++;
-              this.sweeping = false;
-              this.sound?.setConfig(carToAcousticConfig(this.car, this.ctx.settings.audioQuality, 5));
-              this.resetBench();
-              this.buildPanel();
-              this.drawCurves();
-            },
+            onchange: (ev: Event) => void this.selectCar((ev.target as HTMLSelectElement).value),
           },
           LAB_CARS.map((c) => h('option', { value: c.id, selected: c.id === this.car.id }, `${c.name} – ${c.engine.name}`)),
         ),
@@ -366,6 +382,7 @@ export class DynoMode implements Mode {
       }
       this.sound?.flush();
     }
+    if (b) this.bay?.update(dtS, { rpm: b.engine.rpm, running: b.engine.runState === 'RUNNING', cranking: b.engine.runState === 'CRANKING' });
     this.drawAcc += dtS;
     if (this.drawAcc > 1 / 30) {
       this.drawAcc = 0;

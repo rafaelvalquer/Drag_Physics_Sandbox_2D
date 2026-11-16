@@ -36,12 +36,17 @@ Esta lista é intencionalmente franca: diz o que o modelo **não** faz e onde os
 
 ## Visual
 
-- **Efeitos cosméticos:** vibração em marcha lenta, pulsos de fumaça no escape, poeira no deserto, marcas de pneu e brilho das luminárias são derivados do estado físico (rotação, carga, patinagem), mas são **apenas visuais**: não alimentam a física.
-- **Arte e carros:** a arte é procedural e simples. Os carros são silhuetas geradas a partir das dimensões reais, não modelos detalhados.
+- **Efeitos cosméticos:** a suspensão visual, a vibração em marcha lenta, a fumaça, a poeira, as marcas de pneu, as luzes e o brilho das luminárias são derivados do estado físico (aceleração, rotação, carga, patinagem), mas são **apenas visuais**: não alimentam a física.
+- **Arte gerada por código:** os carros, a pista e os cenários são ilustração vetorial semirrealista, não renderização fotorrealista. Não houve modelagem 3D nem produção artística externa. As árvores e o público das arquibancadas são estilizados e estáticos. O que uma produção externa melhoraria está em [VISUAL_SYSTEM.md](VISUAL_SYSTEM.md), seção 14.
+- **Iluminação:** é feita por tingimento e sprites aditivos. Os carros não projetam sombras sobre o cenário e não há luz calculada por pixel.
+- **Dinamômetro ilustrado:** a simulação é de um dinamômetro de **motor**. A imagem do carro sobre rolos é uma apresentação: as rodas e os rolos giram na rotação do motor pela marcha mais direta, só para efeito visual.
+- **Carga de texturas:** as texturas de pista e cenário são geradas na thread principal ao abrir o jogo e ao trocar de pista, de iluminação ou de perfil gráfico. Isso causa uma pausa única de alguns décimos de segundo, que a simulação descarta e contabiliza como tempo real não simulado.
+- **Carroceria de protótipo:** o Aurora V12 ganhou um tipo de carroceria próprio (`prototype`), acrescentado ao esquema de validação. É um campo apenas visual.
 
 ## Plataforma
 
 - **Navegadores testados:** os testes E2E rodam apenas no Microsoft Edge (Chromium). Firefox e Safari não foram testados de forma automatizada. AudioWorklet e IndexedDB são necessários; sem IndexedDB, os dados ficam só na sessão, com aviso.
 - **Toque:** os botões na tela foram testados com eventos de ponteiro emulados, não em aparelhos reais.
+- **Telas pequenas:** abaixo de 760 px de largura a cena fica em cima e o painel embaixo. O layout foi verificado em 390 × 844 por captura automática, não em aparelhos reais; nesse tamanho os instrumentos ficam pequenos.
 - **Telemetria:** a gravação guarda no máximo 120 s em anel. As amostras sobrescritas são contadas e declaradas no CSV.
 - **Desvios da estrutura de pastas:** as pastas `src/audio/acoustics`, `src/audio/wasm`, `src/game/effects`, `src/game/tracks` e `src/sandbox` previstas na especificação não existem. O código correspondente está em `src/audio/dsp`, `src/game/scenes`, `src/data/tracks`, `src/modes/SandboxMode.ts`, `src/ui/editor` e `src/ui/DevLab.ts`. Também não há `public/assets`: não existem arquivos estáticos, porque gráficos e sons são gerados por código.

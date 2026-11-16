@@ -62,7 +62,7 @@ test('drives with W/E/Q only: no clutch key, no brake key', async ({ page }) => 
   await expect.poll(() => mode<string>(page, 'm.runner.player.sim.clutchCtl.mode'), { timeout: 10_000 }).toBe('LOCKED');
   await page.keyboard.press('e');
   await expect.poll(() => mode<number>(page, 'm.runner.player.sim.gear')).toBe(2);
-  await expect(page.locator('.hud .big').first()).toHaveText(/^[2·]$/);
+  await expect(page.locator('[data-testid=hud-gear] .num')).toHaveText('2');
   await page.keyboard.up('w');
   // R restarts the simulation
   await page.keyboard.press('r');
