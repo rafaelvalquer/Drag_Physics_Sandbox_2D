@@ -208,4 +208,21 @@ describe('expanded premium workshop', () => {
     expect(r.peakPowerCv).toBeGreaterThan(140);
     expect(r.peakPowerCv).toBeLessThan(185);
   });
+  it('keeps a fully equipped chapter-one Gol AP near its 180 cv tuning ceiling', () => {
+    // Every chapter-one engine-breathing and turbo support slot can coexist.
+    // No power cap is added: the physical parameterization must balance the combination.
+    const allStreet = [
+      'filter-sport', 'manifold-sport', 'throttle-rework', 'airbox-performance',
+      'cam-sport', 'flywheel-light', 'exhaust-sport', 'header-4x1', 'pipe-sport',
+      'muffler-sport', 'clutch-reinforced', 'turbo-basic', 'turbine-small',
+      'ic-small', 'wastegate-basic', 'ecu-remap', 'ignition-street', 'fan-upgrade',
+    ];
+    const result = resolveBuild(CAR_VW_GOL_GTS_1988, allStreet);
+    expect(result.ok, result.ok ? undefined : result.errors.join('; ')).toBe(true);
+    if (result.ok) {
+      expect(result.peakPowerCv).toBeGreaterThan(160);
+      expect(result.peakPowerCv).toBeLessThanOrEqual(182);
+    }
+  });
+
 });
