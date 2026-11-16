@@ -34,11 +34,14 @@ export function isChapterComplete(save: Pick<CareerSave, 'completedEventIds'>): 
 /** Shop requirements of a part: its own unlock plus the workshop it is installed in. */
 export function partRequirements(p: PartDef): UnlockId[] {
   const req: UnlockId[] = ['workshop-basic', p.unlock];
-  if (p.category === 'clutch' || p.category === 'differential') req.push('workshop-transmission');
+  if (p.category === 'clutch' || p.category === 'differential' || p.category === 'transmission-gearbox') req.push('workshop-transmission');
   return [...new Set(req)];
 }
 
-export function isPartUnlocked(save: Pick<CareerSave, 'completedEventIds'>, p: PartDef): boolean {
+/** Chapter 2/3 parts are visible but not purchasable until a matching career chapter exists. */
+export function isPartUnlocked(save: Pick<CareerSave, 'completedEventIds'> & { chapterId?: string }, p: PartDef): boolean {
+  const availableChapter = save.chapterId === 'chapter-3' ? 3 : save.chapterId === 'chapter-2' ? 2 : 1;
+  if ('chapter' in p && p.chapter > availableChapter) return false;
   const u = unlocksOf(save);
   return partRequirements(p).every((r) => u.has(r));
 }
@@ -70,6 +73,11 @@ export function partStatus(
   if (save.inventoryPartIds.includes(`${p.id}@${car.baseCarId}`))
     return { state: 'owned', label: 'Comprada', detail: 'No estoque deste carro: instale sem pagar de novo.' };
   if (!isPartUnlocked(save, p)) {
+    const chapter = 'chapter' in p ? p.chapter : 1;
+    if (chapter > 1) return {
+      state: 'locked', label: `Capítulo ${chapter}`,
+      detail: `Disponível no capítulo ${chapter}, ainda não implementado na campanha.`,
+    };
     const have = unlocksOf(save);
     const missing = partRequirements(p).find((r) => !have.has(r))!;
     const ev = EVENTS.find((e) => e.unlocks.includes(missing));
