@@ -28,7 +28,7 @@ export const OwnedCarSchema = z.object({
   paint: z.object({ color: hex, accent: hex }),
   installedParts: z.array(z.string().min(1).max(64)).max(40),
   /** Dyno settings of the engine tuners (absent = kit defaults). */
-  tune: z.object({ boostBar: z.number().min(0.3).max(1.2).optional() }).optional(),
+  tune: z.object({ boostBar: z.number().min(0.3).max(1.8).optional() }).optional(),
   acquiredAt: iso,
 });
 export type OwnedCar = z.infer<typeof OwnedCarSchema>;
