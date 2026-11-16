@@ -1,10 +1,17 @@
 import { Prng } from '../../core/prng';
 import type { AcousticVehicleConfig } from './AcousticConfig';
-import { Biquad, OnePole } from './Filters';
+import { Biquad, OnePole, ParamSmoother } from './Filters';
 import { ExhaustNetwork, portReflection } from './ExhaustNetwork';
 import { GAMMA_AIR, GAMMA_EXHAUST, R_AIR_SPECIFIC, R_EXHAUST_SPECIFIC, Waveguide, soundSpeed } from './Waveguide';
 
 const FOUR_PI = 4 * Math.PI;
+/** Tailpipe jet calibration (see EngineAcoustics.process): reference intensity of the saturating
+ * curve (Pa), jet RMS relative to the pipe-pulse RMS at saturation, Strouhal number and corner limits. */
+const JET_INTENSITY_REF = 300;
+const JET_REL_LEVEL = 0.3;
+const JET_STROUHAL = 0.2;
+const JET_FC_MIN = 250;
+const JET_FC_MAX = 1400;
 const DEG = Math.PI / 180;
 const LUT = 1440; // points over the 720° cycle (0.5° resolution)
 const LUT_SCALE = LUT / FOUR_PI;
@@ -79,13 +86,24 @@ export class EngineAcoustics {
   private readonly tickRes: Biquad;
   private readonly starterRes: Biquad;
   private readonly throttleHissBp: Biquad;
-  private readonly jetHp: OnePole;
+  private readonly jetHp: Biquad;
   private readonly roarHp: OnePole;
   private readonly roarLp: OnePole;
   private readonly snorkelAreaM2: number;
   private readonly cavity: Biquad;
   private cavityKick = 0;
-  private readonly jetLp: OnePole;
+  private readonly jetLp: Biquad;
+  private readonly jetLp2: OnePole;
+  private readonly jetFc: ParamSmoother;
+  private readonly jetAmp: ParamSmoother;
+  private readonly tailDiameterM: number;
+  private readonly sampleRate: number;
+  private jetAmpTarget = 0;
+  private jetDrive = 1;
+  private readonly radEnvK: number;
+  private radEnvSq = 0;
+  private jetFcTarget = 400;
+  private jetCounter = 0;
   private readonly tailAreaM2: number;
   private readonly tailTempFraction: number;
   private readonly displacementM3: number;
@@ -114,6 +132,9 @@ export class EngineAcoustics {
   intakeOut = 0;
   blockOut = 0;
   exhaustOut = 0;
+  /** Components of `exhaustOut` (Pa), kept for offline diagnostics: pipe radiation and tailpipe jet noise. */
+  exhaustRadiated = 0;
+  exhaustJet = 0;
   /** Number of combustion / cut events seen (diagnostics and tests). */
   firedEvents = 0;
   cutEvents = 0;
@@ -225,13 +246,19 @@ export class EngineAcoustics {
     this.airbox = new Biquad(sampleRate).setBandpass(fH, 1.4);
     this.intakeHp = new OnePole(sampleRate, 25);
     this.throttleHissBp = new Biquad(sampleRate).setBandpass(3200, 0.8);
-    this.jetHp = new OnePole(sampleRate, 180);
+    this.jetHp = new Biquad(sampleRate).setHighpass(150, 0.7);
+    this.jetLp2 = new OnePole(sampleRate, 900);
+    this.jetFc = new ParamSmoother(sampleRate, 0.08, 0.08, 400);
+    this.jetAmp = new ParamSmoother(sampleRate, 0.03, 0.06);
+    this.sampleRate = sampleRate;
+    this.tailDiameterM = cfg.exhaust.tailpipeDiameterMm / 1000;
+    this.radEnvK = 1 - Math.exp(-1 / (0.08 * sampleRate));
     this.roarHp = new OnePole(sampleRate, 120);
     this.roarLp = new OnePole(sampleRate, 1800);
     // first circumferential acoustic mode of the combustion chamber f = 1.841·c/(π·B), excited
     // by every combustion (the "clatter" part of combustion noise, transmitted by the block)
     this.cavity = new Biquad(sampleRate).setBandpass((1.841 * 640) / (Math.PI * bore), 14);
-    this.jetLp = new OnePole(sampleRate, 1800);
+    this.jetLp = new Biquad(sampleRate).setLowpass(400, 0.6);
     const lines = cfg.exhaust.layout === 'dual' && Math.max(...e.bankOfCylinder) > 0 && !this.lowQuality ? 2 : 1;
     this.tailAreaM2 = lines * Math.PI * (cfg.exhaust.tailpipeDiameterMm / 2000) ** 2;
     this.tailTempFraction = cfg.exhaust.tailTempFraction;
@@ -384,19 +411,41 @@ export class EngineAcoustics {
 
     // ---- exhaust network
     const radiated = this.exhaust.process(this.exhaustSrc, this.exhaustValve);
-    // Turbulent jet noise at the tailpipe exit (Lighthill: radiated pressure ∝ ρ·v²·(v/c)²),
-    // from the mean exhaust velocity: trapped mass per cycle (load) · cycles/s, expanded to the
-    // tailpipe temperature. Broadband, modulated by the pulsating flow – the full-throttle roar.
+    // Turbulent jet noise at the tailpipe exit. Physical intensity (Lighthill, ∝ ρ·v²·(v/c)², i.e.
+    // ∝ v⁴ in pressure) from the mean exhaust velocity: trapped mass per cycle (load) · cycles/s,
+    // expanded to the tailpipe temperature. The physical value is only the DRIVER: it is mapped
+    // through a smooth saturating curve x/(1+x) (monotonic in the flow, no hard corner) onto an
+    // amplitude relative to the running level of the pipe pulses, so turbulence stays a discreet
+    // layer under the combustion roar at any rpm/load/preset instead of growing with v⁴ until it
+    // masks the pulses. Spectrum: Strouhal-scaled low-pass (≈ 0.2·v/D, ~−18 dB/oct above), so it
+    // never reaches the radio-static region.
     const tTail = this.ambientK + (this.egtK - this.ambientK) * this.tailTempFraction;
     const mDot = c.load * this.displacementM3 * 1.18 * (absW / FOUR_PI);
     const rhoTail = 101325 / (R_EXHAUST_SPECIFIC * tTail);
     const vJet = mDot / (rhoTail * this.tailAreaM2);
-    const cTail = soundSpeed(tTail, GAMMA_EXHAUST, R_EXHAUST_SPECIFIC);
-    const mach = vJet / cTail;
-    const pulse = 1 + Math.max(-0.9, Math.min(2, radiated / 400));
-    const jet = this.jetLp.lowpass(this.jetHp.highpass(this.rng.bipolar())) * 4 * rhoTail * vJet * vJet * mach * mach * pulse;
+    this.radEnvSq += (radiated * radiated - this.radEnvSq) * this.radEnvK;
+    const radEnv = Math.sqrt(this.radEnvSq);
+    if ((this.jetCounter++ & 31) === 0) {
+      const cTail = soundSpeed(tTail, GAMMA_EXHAUST, R_EXHAUST_SPECIFIC);
+      const mach = vJet / cTail;
+      const intensity = 4 * rhoTail * vJet * vJet * mach * mach;
+      const x = intensity / JET_INTENSITY_REF;
+      this.jetAmpTarget = JET_REL_LEVEL * radEnv * (x / (1 + x));
+      this.jetFcTarget = Math.min(JET_FC_MAX, Math.max(JET_FC_MIN, (JET_STROUHAL * vJet) / this.tailDiameterM));
+      const fc = this.jetFc.value;
+      this.jetLp.setLowpass(fc, 0.6);
+      this.jetLp2.setCutoff(fc * 1.8);
+      // unit-RMS drive for a white source of variance 1/3 band-limited to ≈ 1.1·fc
+      this.jetDrive = 1 / (0.577 * Math.sqrt((2.2 * fc) / this.sampleRate));
+    }
+    this.jetFc.next(this.jetFcTarget);
+    const jetAmp = this.jetAmp.next(this.jetAmpTarget);
+    const pulse = 1 + Math.max(-0.9, Math.min(1.5, radiated / (2 * radEnv + 1e-6)));
+    const jet = this.jetLp2.lowpass(this.jetLp.process(this.jetHp.process(this.rng.bipolar()))) * this.jetDrive * jetAmp * pulse;
     // low speed fade (engine stopped): avoids residual hum from held states
     const runFade = absW < 8 ? (absW / 8) * (absW / 8) : 1;
+    this.exhaustRadiated = radiated * runFade;
+    this.exhaustJet = jet * runFade;
     this.exhaustOut = (radiated + jet) * runFade;
 
     // ---- intake: runner (cylinder end ↔ airbox end), Helmholtz airbox, throttle hiss

@@ -24,7 +24,7 @@ export function exhaustPreset(id: ExhaustPresetId, base: Pick<ExhaustConfig, 'la
         tailpipeDiameterMm: 50,
         wallLossDbPerM: 3.5,
         tailTempFraction: 0.45,
-        outputGain: 0.7,
+        outputGain: 1.3,
       };
     case 'sport':
       return {
@@ -58,7 +58,7 @@ export function exhaustPreset(id: ExhaustPresetId, base: Pick<ExhaustConfig, 'la
         tailpipeDiameterMm: 89,
         wallLossDbPerM: 1.2,
         tailTempFraction: 0.65,
-        outputGain: 1.15,
+        outputGain: 0.75,
       };
   }
 }

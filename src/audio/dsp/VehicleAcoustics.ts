@@ -64,6 +64,8 @@ export class VehicleAcoustics {
   private counter = 0;
   private popEnv = 0;
   ambientK = 298;
+  /** Offline diagnostics only: called per sample with radiated, jet, combined (Pa), normalized (pre-softClip) and final exhaust samples. */
+  exhaustTap: ((radiated: number, jet: number, combined: number, normalized: number, final: number) => void) | null = null;
   /** Peak absolute output per channel since the last `resetStats` (diagnostics, calibration). */
   readonly peak = new Float64Array(CHANNEL_COUNT);
   readonly sumSq = new Float64Array(CHANNEL_COUNT);
@@ -183,7 +185,8 @@ export class VehicleAcoustics {
       }
       this.write(outputs, CH.intake, offset + j, raw0, fade);
       this.write(outputs, CH.block, offset + j, raw1, fade);
-      this.write(outputs, CH.exhaust, offset + j, raw2, fade);
+      const yEx = this.write(outputs, CH.exhaust, offset + j, raw2, fade);
+      if (this.exhaustTap) this.exhaustTap(e.exhaustRadiated, e.exhaustJet, raw2, raw2 * this.gains[CH.exhaust]!, yEx);
       this.write(outputs, CH.turbo, offset + j, x.turboOut, fade);
       this.write(outputs, CH.tire, offset + j, x.tireOut, fade);
       this.write(outputs, CH.transmission, offset + j, x.transmissionOut, fade);
@@ -192,7 +195,7 @@ export class VehicleAcoustics {
     }
   }
 
-  private write(outputs: ReadonlyArray<Float32Array | undefined>, k: number, idx: number, raw: number, fade: number): void {
+  private write(outputs: ReadonlyArray<Float32Array | undefined>, k: number, idx: number, raw: number, fade: number): number {
     this.rawSumSq[k]! += raw * raw;
     const y = softClip(this.dc[k]!.process(raw * this.gains[k]!)) * fade;
     const a = y < 0 ? -y : y;
@@ -200,6 +203,7 @@ export class VehicleAcoustics {
     this.sumSq[k]! += y * y;
     const o = outputs[k];
     if (o) o[idx] = y;
+    return y;
   }
 
   reset(): void {

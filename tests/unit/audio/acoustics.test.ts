@@ -12,6 +12,7 @@ import { VehicleAcoustics } from '../../../src/audio/dsp/VehicleAcoustics';
 import { autocorrelationPitch, averagedSpectrum, aWeightedLevel, bandEnergy, rms } from '../../../src/audio/analysis/spectrum';
 import { exhaustPreset } from '../../../src/data/exhaustPresets';
 import { H, car, carToAcousticConfig, renderSynthetic, withFiring } from './helpers';
+import { exhaustMetrics, firingHz, renderExhaust, renderExhaustSteady } from '../../../src/audio/analysis/exhaustLab';
 import { AuxAcoustics } from '../../../src/audio/dsp/AuxAcoustics';
 import { NOISE_SCENARIOS, NOISE_SPEEDS_KMH, analyzeSignal, renderNoise, renderSteady, type NoiseScenario, type SignalMetrics } from '../../../src/audio/analysis/noiseLab';
 
@@ -203,7 +204,8 @@ describe('engine acoustics – load, spark cut and combustion', () => {
     const maxShapeDiff = (p: number[], q: number[]): number => Math.max(...p.map((v, i) => Math.abs(v - q[i]!)));
     expect(maxShapeDiff(stock.bands, straight.bands)).toBeGreaterThan(6);
     expect(maxShapeDiff(sport.bands, straight.bands)).toBeGreaterThan(6);
-    expect(maxShapeDiff(stock.bands, sport.bands)).toBeGreaterThan(6);
+    // stock vs sport differ by 4–5 dB per octave band once the broadband jet no longer fills in the shape
+    expect(maxShapeDiff(stock.bands, sport.bands)).toBeGreaterThan(4);
     // fewer chambers and less absorption: louder
     expect(straight.a).toBeGreaterThan(sport.a);
   });
@@ -558,8 +560,8 @@ describe('tyre and wind noise (environment + tire channels)', () => {
         }
       });
 
-      it('at 300 km/h the engine stays clearly more audible than wind + rolling noise', () => {
-        const { ch } = run(fs, 300, 'roll');
+      it('at 300 km/h the engine stays clearly more audible than wind + rolling noise (sport exhaust car)', () => {
+        const { ch } = renderSteady(carToAcousticConfig(car('lince-gt'), 'high', 1), fs, 300, sc('roll'));
         const mix = [0.8, 0.7, 1, 0.8, 0.8, 0.6, 0.5];
         const level = (k: number): number => aLevel(ch[k]!, fs, 0) + dB(mix[k]!);
         const engine = Math.max(level(CH.exhaust), level(CH.intake), level(CH.block));
@@ -649,5 +651,205 @@ describe('tyre and wind noise (environment + tire channels)', () => {
     expect(seg(2.6, 3.8)).toBeGreaterThan(seg(0.8, 1.8) * 1.5);
     expect(seg(5, 6)).toBeLessThan(seg(2.6, 3.8) * 0.75);
     expect(seg(5, 6)).toBeLessThan(seg(0.8, 1.8) * 1.3);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Exhaust channel: tailpipe jet turbulence must stay a discreet layer under the pipe pulses
+// (regression for the radio-static hiss at high rpm and load, which came from the v⁴ jet term
+// overwhelming the radiated pulses – most strongly with the narrow stock tailpipe).
+// ---------------------------------------------------------------------------------------------
+describe('exhaust channel: jet turbulence vs pulses near the redline', () => {
+  const ids = ['arco-1600', 'vetra-rs', 'lince-gt', 'kronos-v8'];
+  const presetIds = ['stock', 'sport', 'straight'] as const;
+  const cfgOf = (id: string, preset?: (typeof presetIds)[number]) => {
+    const base = car(id);
+    const c: typeof base = JSON.parse(JSON.stringify(base));
+    if (preset) c.exhaust = exhaustPreset(preset, c.exhaust);
+    return { c, cfg: carToAcousticConfig(c, 'high', 1) };
+  };
+  const redline = (id: string): number => car(id).engine.redlineRpm - 150;
+
+  for (const fs of [44100, 48000]) {
+    it(`@ ${fs} Hz: finite, bounded and no hiss at 1000…redline, 25/50/100 % load, every preset`, () => {
+      for (const id of ids) {
+        for (const preset of presetIds) {
+          const { c, cfg } = cfgOf(id, preset);
+          for (const rpm of [1000, 3000, 4500, redline(id)]) {
+            for (const load of [0.25, 0.5, 1]) {
+              const r = renderExhaustSteady(cfg, fs, rpm, load, 1.6);
+              for (const sig of [r.radiated, r.jet, r.normalized, r.final]) for (let i = 0; i < sig.length; i += 7) expect(Number.isFinite(sig[i]!)).toBe(true);
+              const m = exhaustMetrics(r, fs, firingHz(c.engine.cylinders, rpm));
+              expect(r.voice.nanResets).toBe(0);
+              expect(m.finalPeak).toBeLessThanOrEqual(1);
+              if (preset !== 'straight') expect(m.finalPeak).toBeLessThan(0.9);
+              if (load === 1 && rpm > 3000) {
+                // turbulence is a discreet layer: well below the pulses (it was up to +40 dB above them)
+                expect(m.jetOverRadiatedDb).toBeLessThan(-8);
+              }
+              // almost no energy above 4 kHz (static region) – the old stock jet had ~25 %
+              expect(m.bands[3]).toBeLessThan(0.06);
+            }
+          }
+        }
+      }
+    });
+  }
+
+  it('the stock pipe keeps a low spectral centroid at full load (old centroid was 3–4 kHz)', () => {
+    for (const fs of [44100, 48000]) {
+      for (const id of ids) {
+        const { c, cfg } = cfgOf(id, 'stock');
+        for (const rpm of [4500, redline(id)]) {
+          const m = exhaustMetrics(renderExhaustSteady(cfg, fs, rpm, 1), fs, firingHz(c.engine.cylinders, rpm));
+          expect(m.centroidHz).toBeLessThan(900);
+        }
+      }
+    }
+  });
+
+  it('no strong saturation before the soft clip (headroom), including the straight pipe', () => {
+    for (const id of ids) {
+      for (const preset of presetIds) {
+        const { cfg } = cfgOf(id, preset);
+        const m = exhaustMetrics(renderExhaustSteady(cfg, 48000, redline(id), 1), 48000, 100);
+        if (preset !== 'straight') {
+          expect(m.normPeak).toBeLessThan(1.5);
+          expect(m.satShare).toBeLessThan(0.001);
+        } else {
+          expect(m.normPeak).toBeLessThan(3.2);
+          expect(m.satShare).toBeLessThan(0.25);
+        }
+      }
+    }
+  });
+
+  it('turbulence grows in a controlled way with load and rpm (monotonic, saturating, never above the pulses)', () => {
+    for (const id of ['arco-1600', 'kronos-v8']) {
+      const { cfg } = cfgOf(id, 'stock');
+      let prev = 0;
+      for (const load of [0.25, 0.5, 0.75, 1]) {
+        const r = renderExhaustSteady(cfg, 48000, redline(id), load, 1.6);
+        const j = rms(r.jet);
+        expect(j).toBeGreaterThanOrEqual(prev * 0.9);
+        expect(j).toBeLessThan(rms(r.radiated) * 0.5);
+        prev = j;
+      }
+    }
+  });
+
+  it('pulse periodicity is preserved (4-cylinder: harmonics of the firing frequency dominate)', () => {
+    for (const id of ['arco-1600', 'vetra-rs']) {
+      const { c, cfg } = cfgOf(id);
+      for (const rpm of [3000, 4500, redline(id)]) {
+        const r = renderExhaustSteady(cfg, 48000, rpm, 1);
+        const right = exhaustMetrics(r, 48000, firingHz(c.engine.cylinders, rpm)).harmonicShare;
+        const wrong = exhaustMetrics(r, 48000, firingHz(c.engine.cylinders, rpm) * 1.37).harmonicShare;
+        expect(right).toBeGreaterThan(0.85);
+        expect(right).toBeGreaterThan(wrong + 0.3);
+      }
+    }
+  });
+
+  it('engines keep their signature: different cylinder count/firing order give different pitch content', () => {
+    const rpm = 4500;
+    const a = cfgOf('arco-1600');
+    const b = cfgOf('kronos-v8');
+    const ra = renderExhaustSteady(a.cfg, 48000, rpm, 1).final;
+    const rb = renderExhaustSteady(b.cfg, 48000, rpm, 1).final;
+    const pa = autocorrelationPitch(ra, 48000, 40, 400, 0, 8192);
+    // the 4-cylinder fires at 150 Hz at 4500 rpm and repeats strongly each engine cycle
+    expect(Math.abs(pa.hz / 150 - 1)).toBeLessThan(0.1);
+    const sa = averagedSpectrum(ra, 8192);
+    const sb = averagedSpectrum(rb, 8192);
+    const hz = 48000 / 8192;
+    const fire4 = bandEnergy(sa, 48000, 8192, 150, 8) / bandEnergy(sb, 48000, 8192, 150, 8);
+    expect(fire4).toBeGreaterThan(3);
+    // the V8 (cross-plane) has strong content at half-orders that the 4-cylinder lacks
+    const half = (s: Float64Array): number => bandEnergy(s, 48000, 8192, 37.5, 2 * hz) / bandEnergy(s, 48000, 8192, 150, 8);
+    expect(half(sb)).toBeGreaterThan(half(sa));
+  });
+
+  it('responds to the throttle: load raises the level, lifting off lowers it', () => {
+    const { cfg } = cfgOf('arco-1600');
+    const full = rms(renderExhaustSteady(cfg, 48000, 6000, 1).final);
+    const part = rms(renderExhaustSteady(cfg, 48000, 6000, 0.25).final);
+    expect(dB(full) - dB(part)).toBeGreaterThan(2);
+  });
+
+  it('the three presets stay distinct and ordered: stock < sport < straight in level, with different spectra', () => {
+    for (const id of ['vetra-rs', 'lince-gt']) {
+      const lv: number[] = [];
+      const cent: number[] = [];
+      for (const p of presetIds) {
+        const { c, cfg } = cfgOf(id, p);
+        const m = exhaustMetrics(renderExhaustSteady(cfg, 48000, 4500, 1), 48000, firingHz(c.engine.cylinders, 4500));
+        lv.push(dB(m.radiatedRms));
+        cent.push(m.centroidHz);
+      }
+      expect(lv[1]).toBeGreaterThan(lv[0]! + 6);
+      expect(lv[2]).toBeGreaterThan(lv[1]! + 6);
+      expect(new Set(cent.map((x) => Math.round(x / 20))).size).toBeGreaterThan(1);
+    }
+  });
+
+  it('44.1 and 48 kHz agree in level, turbulence share and spectral balance', () => {
+    for (const id of ids) {
+      const { cfg: c1 } = cfgOf(id, 'stock');
+      const a = renderExhaustSteady(c1, 44100, redline(id), 1);
+      const b = renderExhaustSteady(c1, 48000, redline(id), 1);
+      const ma = exhaustMetrics(a, 44100, 100);
+      const mb = exhaustMetrics(b, 48000, 100);
+      expect(Math.abs(dB(ma.finalRms) - dB(mb.finalRms))).toBeLessThan(1.5);
+      expect(Math.abs(ma.jetOverRadiatedDb - mb.jetOverRadiatedDb)).toBeLessThan(3);
+      expect(Math.abs(ma.centroidHz / mb.centroidHz - 1)).toBeLessThan(0.15);
+    }
+  });
+
+  it('continuous across rpm and load changes, and through the rev limiter: no clicks, no amplitude jumps', () => {
+    const fs = 48000;
+    const maxStepRatio = (x: Float32Array, from = 0.4): number => {
+      const s = Math.round(from * fs);
+      let m = 0;
+      let e = 0;
+      for (let i = s + 1; i < x.length; i++) {
+        const d = Math.abs(x[i]! - x[i - 1]!);
+        e += d * d;
+        if (d > m) m = d;
+      }
+      return m / Math.sqrt(e / (x.length - s - 1) + 1e-30);
+    };
+    for (const id of ['arco-1600', 'kronos-v8']) {
+      const { cfg } = cfgOf(id);
+      const steady = renderExhaustSteady(cfg, fs, 4500, 1, 3);
+      const base = maxStepRatio(steady.final);
+      // rpm sweep with a load step in the middle
+      const sweep = renderExhaust(cfg, fs, (t) => ({ rpm: 1500 + (t / 4) * (redline(id) - 1500), load: t < 2 ? 0.3 : 1 }), 4);
+      expect(maxStepRatio(sweep.final)).toBeLessThan(Math.max(base, 6) * 2);
+      // limiter: rpm bouncing against the redline (fuel cut → load drops and returns)
+      const lim = renderExhaust(cfg, fs, (t) => ({ rpm: redline(id), load: Math.floor(t * 12) % 2 === 0 ? 1 : 0.05 }), 3);
+      expect(maxStepRatio(lim.final)).toBeLessThan(Math.max(base, 6) * 2.5);
+      // 100 ms windowed RMS never jumps by more than 12 dB between neighbours in the sweep
+      const w = Math.round(0.1 * fs);
+      let prev = rms(sweep.final, 0, w);
+      for (let i = w; i + w <= sweep.final.length; i += w) {
+        const cur = rms(sweep.final, i, i + w);
+        expect(Math.abs(dB(cur) - dB(prev))).toBeLessThan(12);
+        prev = cur;
+      }
+    }
+  });
+
+  it('runs two engines at once without interference (jet and pulses bit-identical to solo)', () => {
+    const fs = 48000;
+    const { cfg: ca } = cfgOf('arco-1600');
+    const { cfg: cb } = cfgOf('kronos-v8');
+    const solo = renderExhaustSteady(ca, fs, 6000, 1, 1.2);
+    const together = renderExhaustSteady(ca, fs, 6000, 1, 1.2);
+    renderExhaustSteady(cb, fs, 5000, 1, 1.2); // a second voice rendered in between
+    for (let i = 0; i < solo.final.length; i += 13) {
+      expect(together.final[i]).toBe(solo.final[i]);
+      expect(together.jet[i]).toBe(solo.jet[i]);
+    }
   });
 });
