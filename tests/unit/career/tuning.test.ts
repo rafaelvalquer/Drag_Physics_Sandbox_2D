@@ -158,8 +158,9 @@ describe('expanded premium workshop', () => {
       'Motor', 'Admissão', 'Escape', 'Transmissão', 'Pneus', 'Turbo', 'Eletrônica', 'Arrefecimento', 'Estrutura',
     ]);
     const all = WORKSHOP_TABS.flatMap((t) => t.categories);
-    expect(new Set(all).size).toBe(all.length);
-    expect(all).toEqual(CATEGORY_ORDER);
+    expect(new Set(all).size).toBe(CATEGORY_ORDER.length);
+    expect([...new Set(all)]).toEqual(CATEGORY_ORDER);
+    expect(all.filter((id) => id === 'turbo-intercooler')).toHaveLength(2);
     expect(PARTS.length).toBeGreaterThan(60);
     for (const part of PARTS) expect(all).toContain(part.category);
   });
