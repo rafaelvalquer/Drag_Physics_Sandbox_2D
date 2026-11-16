@@ -36,10 +36,12 @@ export const WORKSHOP_TABS: readonly WorkshopTab[] = [
   { id: 'tires', label: 'Pneus', icon: '◎', description: 'Composto, largura e pressão', categories: ['tires', 'tires-width', 'tires-pressure'] },
   { id: 'turbo', label: 'Turbo', icon: '◌', description: 'Pressão, spool e temperatura', categories: ['turbo', 'turbo-turbine', 'turbo-intercooler', 'turbo-wastegate', 'turbo-boost'] },
   { id: 'electronics', label: 'Eletrônica', icon: '⌘', description: 'ECU, combustível e ignição', categories: ['electronics-ecu', 'electronics-fuel', 'electronics-ignition'] },
-  { id: 'cooling', label: 'Arrefecimento', icon: '❄', description: 'Gerenciamento térmico', categories: ['cooling-radiator', 'cooling-oil', 'cooling-fan'] },
+  { id: 'cooling', label: 'Arrefecimento', icon: '❄', description: 'Gerenciamento térmico', categories: ['cooling-radiator', 'cooling-oil', 'cooling-fan', 'turbo-intercooler'] },
   { id: 'chassis', label: 'Estrutura', icon: '◇', description: 'Massa e geometria', categories: ['chassis-weight', 'chassis-suspension'] },
 ];
-export const CATEGORY_ORDER: readonly PartCategory[] = WORKSHOP_TABS.flatMap((t) => t.categories);
+/** One mechanical slot can appear in more than one navigation tab (intercooler: turbo + cooling).
+ * Deduplicate the resolver order so the same physical component is never installed twice. */
+export const CATEGORY_ORDER: readonly PartCategory[] = [...new Set(WORKSHOP_TABS.flatMap((t) => t.categories))];
 export const CATEGORY_LABEL: Record<PartCategory, string> = {
   'intake-filter': 'Filtro de ar', 'intake-manifold': 'Coletor de admissão',
   'intake-throttle': 'Corpo de borboleta', 'intake-airbox': 'Caixa de ar',
