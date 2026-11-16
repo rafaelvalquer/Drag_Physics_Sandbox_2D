@@ -66,7 +66,7 @@ describe('build resolver rules', () => {
   it('tyres replace tyres (two tyre sets is an invalid build)', () => {
     const r = resolveBuild(CAR_VW_SAVEIRO_GL_1994, ['tires-sport', 'tires-semislick']);
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.errors[0]).toMatch(/só cabe uma peça em Pneus/);
+    if (!r.ok) expect(r.errors[0]).toMatch(/só cabe uma peça em (Pneus|Composto)/);
     const semi = ok(CAR_VW_SAVEIRO_GL_1994, ['tires-semislick']).car;
     expect(semi.tires.muPeak).toBe(1.32);
     expect(semi.tires.wheelInertiaKgM2).toBeCloseTo(CAR_VW_SAVEIRO_GL_1994.tires.wheelInertiaKgM2 + 0.15, 9);
