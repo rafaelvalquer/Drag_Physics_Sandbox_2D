@@ -26,7 +26,7 @@ export const OwnedCarSchema = z.object({
   baseCarId: z.string().min(1).max(64),
   nickname: z.string().min(1).max(32),
   paint: z.object({ color: hex, accent: hex }),
-  installedParts: z.array(z.string().min(1).max(64)).max(16),
+  installedParts: z.array(z.string().min(1).max(64)).max(40),
   /** Dyno settings of the engine tuners (absent = kit defaults). */
   tune: z.object({ boostBar: z.number().min(0.3).max(1.2).optional() }).optional(),
   acquiredAt: iso,
@@ -65,8 +65,8 @@ export const CareerRaceResultSchema = z.object({
   completedAt: iso,
   /** Build resolver version and the resolved build keys of both cars. */
   buildVersion: z.number().int(),
-  playerBuildKey: z.string().max(400),
-  opponentBuildKey: z.string().max(400),
+  playerBuildKey: z.string().max(1200),
+  opponentBuildKey: z.string().max(1200),
   creditsAwarded: z.number().int().min(0),
   reputationAwarded: z.number().int().min(0),
 });
@@ -83,7 +83,7 @@ export const CareerSaveSchema = z
     reputation: z.number().int().min(0),
     ownedCars: z.array(OwnedCarSchema).max(12),
     activeCarId: z.string().nullable(),
-    inventoryPartIds: z.array(z.string()).max(64),
+    inventoryPartIds: z.array(z.string()).max(256),
     completedEventIds: z.array(z.string()),
     claimedRewardIds: z.array(z.string()),
     seenStorySceneIds: z.array(z.string()),
