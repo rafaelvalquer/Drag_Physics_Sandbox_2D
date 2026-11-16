@@ -5,7 +5,7 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CARS } from '../src/data/cars/index';
+import { listCalibrationCases } from '../src/audio/analysis/calibrationCases';
 import { TRACKS } from '../src/data/tracks/index';
 import { VehicleSimulation } from '../src/physics/vehicle/VehicleSimulation';
 import { encodeWavMono } from '../src/audio/core/wav';
@@ -41,11 +41,15 @@ const cat = (parts: Float32Array[]): Float32Array => {
   return o;
 };
 
-for (const car of CARS) {
-  if (which !== 'all' && car.id !== which) continue;
+for (const sample of listCalibrationCases({
+  scope: (val('--scope') ?? 'general') as 'all' | 'campaign' | 'fictional' | 'lab' | 'general',
+  car: val('--car') ?? which,
+  variant: (val('--variant') ?? 'stock') as 'stock' | 'aspirated-build' | 'turbo-build' | 'all',
+})) {
+  const car = sample.car;
   const sim = new VehicleSimulation(car, TRACKS[0]!);
   const res: PhysicsPhaseResult[] = renderIntakePhysics(car, sim, fs, undefined, quality);
-  console.log(`\n=== ${car.id} (${car.engine.cylinders} cil, ${car.engine.induction}) intake, real physics @ ${fs} Hz, ${quality} ===`);
+  console.log(`\n=== ${sample.id} (${car.engine.cylinders} cil, ${car.engine.induction}) intake, real physics @ ${fs} Hz, ${quality} ===`);
   console.log('phase      rpm  load  thr  MAP kPa boost | tone.rms hiss.rms roar.rms noise/tone | norm.pk sat% | <500 .5-1.5k 1.5-4k >4k  harm  cent step');
   for (const r of res) {
     const m = intakeMetrics(r.render, fs, firingHz(car.engine.cylinders, Math.max(r.rpm, 300)));
@@ -58,8 +62,8 @@ for (const car of CARS) {
     const parts = { full: 'final', pulses: 'tone', hiss: 'hiss', roar: 'roar' } as const;
     for (const [name, key] of Object.entries(parts)) {
       const sig = cat(res.map((r) => r.render[key]));
-      writeFileSync(join(wavDir, `intake-${tag}-${car.id}-${name}.wav`), encodeWavMono(levelMatch(sig), fs));
+      writeFileSync(join(wavDir, `intake-${tag}-${sample.id}-${name}.wav`), encodeWavMono(levelMatch(sig), fs));
     }
-    console.log(`wrote ${wavDir}/intake-${tag}-${car.id}-{full,pulses,hiss,roar}.wav`);
+    console.log(`wrote ${wavDir}/intake-${tag}-${sample.id}-{full,pulses,hiss,roar}.wav`);
   }
 }
