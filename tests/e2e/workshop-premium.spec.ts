@@ -32,7 +32,8 @@ test('oficina premium: nove sistemas, grupos distintos, estados e adaptação pa
   await page.getByTestId('ws-tab-electronics').click();
   await expect(page.locator('.ws-center .ws-group')).toHaveCount(3);
   await page.getByTestId('ws-tab-cooling').click();
-  await expect(page.locator('.ws-center .ws-group')).toHaveCount(3);
+  await expect(page.locator('.ws-center .ws-group')).toHaveCount(4);
+  await expect(page.getByTestId('ws-group-turbo-intercooler')).toBeVisible();
 
   await page.setViewportSize({ width: 430, height: 900 });
   await expect(page.getByTestId('ws-tab-chassis')).toBeVisible();
