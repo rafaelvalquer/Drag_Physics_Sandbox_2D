@@ -40,3 +40,16 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Workshop responsive E2E
         run: npx playwright test tests/e2e/workshop-premium.spec.ts
+
+  tuning-balance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Workshop physics and Gol AP balancing
+        run: npx vitest run tests/unit/career/tuning.test.ts
