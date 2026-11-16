@@ -14,7 +14,7 @@ import { SPEAKER_NAME, pendingScenes, type StoryScene, type StoryTrigger } from 
 import type { RaceRecord } from '../game/career/CareerController';
 import { TelemetryProbe, runHeadlessRace } from '../game/career/headlessRace';
 import { ownedCarBuild, ownedCarConfig, rivalBuild, rivalCar } from '../game/career/RivalBuildFactory';
-import { BUILD_RESOLVER_VERSION, resolveBuild, type BuildResult } from '../game/career/tuning/BuildResolver';
+import { BUILD_RESOLVER_VERSION, boostRangeForParts, resolveBuild, type BuildResult } from '../game/career/tuning/BuildResolver';
 import { CATEGORY_LABEL, CATEGORY_DESCRIPTION, PARTS, UNLOCK_LABEL, WORKSHOP_TABS, findPart, type PartCategory, type PartDef } from '../game/career/tuning/parts';
 import { RACE_DISTANCES, RaceController, type LaneResult, type RaceLane } from '../game/race/RaceController';
 import { runAccelerationTest } from '../game/race/accelerationTest';
@@ -835,18 +835,20 @@ export class CareerMode implements Mode {
     const b = ownedCarBuild(car);
     const canvas = h('canvas', { class: 'career-dyno-chart', 'data-testid': 'career-dyno-chart' }) as HTMLCanvasElement;
     const info = h('div', { class: 'hint', 'data-testid': 'career-dyno-info' }, 'Medindo no dinamômetro…');
+    const boostRange = boostRangeForParts(car.installedParts);
+    const defaultBoost = b.ok ? (b.car.engine.turbo?.maxBoostBar ?? 0.6) : 0.6;
     const tuneRow =
-      canTuneBoost(s) && car.installedParts.includes('turbo-basic')
+      canTuneBoost(s) && boostRange !== null
         ? h(
             'div',
             { class: 'row' },
             h('label', {}, 'Pressão do turbo (preparadores)'),
             h('input', {
               type: 'range',
-              min: '0.4',
-              max: '1.0',
+              min: String(boostRange?.[0] ?? 0.4),
+              max: String(boostRange?.[1] ?? 1.0),
               step: '0.05',
-              value: String(car.tune?.boostBar ?? 0.6),
+              value: String(car.tune?.boostBar ?? defaultBoost),
               'data-testid': 'career-boost',
               onchange: (e: Event) =>
                 void (async () => {
@@ -856,7 +858,7 @@ export class CareerMode implements Mode {
                   this.show('dyno');
                 })(),
             }),
-            h('span', {}, `${f2(car.tune?.boostBar ?? 0.6)} bar`),
+            h('span', {}, `${f2(car.tune?.boostBar ?? defaultBoost)} bar`),
           )
         : null;
     setTimeout(() => this.runDyno(b, canvas, info), 20);
