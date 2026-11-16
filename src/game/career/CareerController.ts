@@ -219,7 +219,7 @@ export class CareerController {
     const car = this.activeCar;
     if (!s || !car) return fail('nenhum carro ativo');
     if (!canTuneBoost(s)) return fail('os preparadores de motor ainda não trabalham para você');
-    if (!car.installedParts.includes('turbo-basic')) return fail('sem turbo não há pressão para ajustar');
+    if (!car.installedParts.some((id) => findPart(id)?.category === 'turbo')) return fail('sem turbo não há pressão para ajustar');
     const tune = boostBar === undefined ? {} : { boostBar: Math.round(boostBar * 100) / 100 };
     const chk = this.checkBuild(car, car.installedParts, tune);
     if (!chk.ok) return fail(chk.error);
@@ -363,7 +363,7 @@ export class CareerController {
 
 /** The boost setting survives only while a turbo is installed. */
 function tuneFor(car: OwnedCar, parts: string[]): OwnedCar['tune'] {
-  return parts.includes('turbo-basic') ? (car.tune ?? {}) : {};
+  return parts.some((id) => findPart(id)?.category === 'turbo') ? (car.tune ?? {}) : {};
 }
 
 export { EVENTS };
