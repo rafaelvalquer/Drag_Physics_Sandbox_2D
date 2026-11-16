@@ -1,6 +1,7 @@
 import { VehicleSound, DEFAULT_MIX, type ChannelMix } from '../audio/core/VehicleSound';
 import { CHANNELS as AUDIO_CHANNELS, carToAcousticConfig } from '../audio/dsp/AcousticConfig';
-import { LAB_CARS, cloneCar } from '../data/cars/index';
+import { CAR_GROUPS, LAB_CARS, cloneCar } from '../data/cars/index';
+import { BUILT_IN_SANDBOX_PRESETS, findSandboxPreset } from '../data/cars/sandboxPresets';
 import { validateCar, type CarConfig, type TrackConfig } from '../data/schema';
 import { TRACKS, findTrack } from '../data/tracks/index';
 import { DragAI } from '../game/ai/DragAI';
@@ -249,7 +250,7 @@ export class SandboxMode implements Mode {
     const carSel = h(
       'select',
       { 'data-testid': 'car-select', onchange: (e: Event) => this.selectCar((e.target as HTMLSelectElement).value) },
-      LAB_CARS.map((c) => h('option', { value: c.id, selected: c.id === this.car.id }, c.name)),
+      CAR_GROUPS.map((g) => h('optgroup', { label: g.label }, g.cars.map((c) => h('option', { value: c.id, selected: c.id === this.car.id }, c.name)))),
     );
     const trackSel = h(
       'select',
@@ -274,13 +275,14 @@ export class SandboxMode implements Mode {
         'data-testid': 'compare-select',
         onchange: (e: Event) => {
           const id = (e.target as HTMLSelectElement).value;
-          const c = LAB_CARS.find((x) => x.id === id);
+          const c = LAB_CARS.find((x) => x.id === id) ?? findSandboxPreset(id)?.car;
           this.compareCar = c ? cloneCar(c) : null;
           this.buildVehicles();
         },
       },
       h('option', { value: '' }, '— nenhum —'),
-      LAB_CARS.map((c) => h('option', { value: c.id }, c.name)),
+      CAR_GROUPS.map((g) => h('optgroup', { label: g.label }, g.cars.map((c) => h('option', { value: c.id }, c.name)))),
+      h('optgroup', { label: 'Preparações prontas' }, BUILT_IN_SANDBOX_PRESETS.map((p) => h('option', { value: p.id }, p.label))),
     );
     const cmpDrv = h(
       'select',
@@ -298,7 +300,8 @@ export class SandboxMode implements Mode {
       onApply: (car, physics) => this.applyCar(car, physics),
       // presets keep the factory car id behind a "user-" prefix
       defaults: (id) => {
-        const c = LAB_CARS.find((x) => x.id === id.replace(/^(user-)+/, ""));
+        const factoryId = id.replace(/^(user-)+/, '');
+        const c = LAB_CARS.find((x) => x.id === factoryId) ?? LAB_CARS.find((x) => x.id === findSandboxPreset(factoryId)?.baseCarId);
         return c ? cloneCar(c) : null;
       },
       onDuplicate: (car) => void this.savePreset(`${car.name} (cópia)`, car),
@@ -320,6 +323,15 @@ export class SandboxMode implements Mode {
     panel.append(
       h('h2', {}, 'Sandbox'),
       h('div', { class: 'row' }, h('label', {}, 'Veículo'), carSel),
+      h('div', { class: 'row' }, h('label', {}, 'Preparação de teste'),
+        h('select', { 'data-testid': 'prepared-select', onchange: (e: Event) => {
+          const id = (e.target as HTMLSelectElement).value;
+          if (id) this.selectPreparedPreset(id);
+        } },
+          h('option', { value: '' }, '— veículo original —'),
+          BUILT_IN_SANDBOX_PRESETS.map((p) => h('option', { value: p.id }, p.label)),
+        ),
+      ),
       h('div', { class: 'row' }, h('label', {}, 'Pista'), trackSel),
       h('div', { class: 'row' }, this.engineBtn, h('button', { 'data-testid': 'restart', onclick: () => this.restart() }, 'Reiniciar (R)')),
       h(
@@ -396,6 +408,22 @@ export class SandboxMode implements Mode {
     this.replacePlayer();
     const sel = this.ctx.panel.querySelector<HTMLSelectElement>('[data-testid=car-select]');
     if (sel) sel.value = id;
+    const prepared = this.ctx.panel.querySelector<HTMLSelectElement>('[data-testid=prepared-select]');
+    if (prepared) prepared.value = '';
+    return true;
+  }
+
+  /** Built-in presets resolve through the career BuildResolver but never touch career saves. */
+  selectPreparedPreset(id: string): boolean {
+    const p = findSandboxPreset(id);
+    if (!p) return false;
+    this.car = cloneCar(p.car);
+    this.editor?.setBase(this.car);
+    this.replacePlayer();
+    const stock = this.ctx.panel.querySelector<HTMLSelectElement>('[data-testid=car-select]');
+    if (stock) stock.value = p.baseCarId;
+    const prepared = this.ctx.panel.querySelector<HTMLSelectElement>('[data-testid=prepared-select]');
+    if (prepared) prepared.value = p.id;
     return true;
   }
 

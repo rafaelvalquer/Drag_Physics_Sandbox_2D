@@ -11,8 +11,8 @@ export { CAR_FIAT_UNO_MILLE_1995, CAR_GM_CELTA_2003, CAR_GM_CORSA_GL_1996, CAR_G
 
 /**
  * Catalogue of the real cars of the campaign (factory configuration, never mutated). The Gol GTS
- * 1988 is the same object the Sandbox uses (no duplicate). These cars are kept out of the Sandbox
- * lists so the existing modes stay exactly as they were.
+ * 1988 is the same object the Sandbox uses (no duplicate). The general free-mode catalogue
+ * composes this list without affecting ownership, inventory or campaign progression.
  */
 export const CAMPAIGN_CARS: readonly CarConfig[] = [
   CAR_VW_GOL_GTS_1988,
