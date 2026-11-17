@@ -36,6 +36,7 @@ export interface AcousticVehicleConfig {
     | 'compressionRatio'
     | 'reciprocatingMassKg'
     | 'cam'
+    | 'variableCam'
     | 'combustion'
     | 'intake'
     | 'idleRpm'
@@ -71,6 +72,7 @@ export function carToAcousticConfig(car: CarConfig, quality: AcousticQuality = '
       compressionRatio: e.compressionRatio,
       reciprocatingMassKg: e.reciprocatingMassKg,
       cam: { ...e.cam },
+      variableCam: e.variableCam ? { ...e.variableCam, high: { ...e.variableCam.high } } : undefined,
       combustion: { ...e.combustion },
       intake: { ...e.intake },
       idleRpm: e.idleRpm,

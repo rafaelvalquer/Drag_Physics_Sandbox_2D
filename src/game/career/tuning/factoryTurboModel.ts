@@ -1,0 +1,184 @@
+import type { EngineConfig } from '../../../data/schema';
+import { ATMOSPHERIC_PRESSURE, STANDARD_TEMPERATURE_K } from '../../../core/units';
+import { EngineModel, WILLANS_OFFSET } from '../../../physics/engine/EngineModel';
+import { engineGeometry } from '../../../physics/engine/EngineGeometry';
+import { extendCurve, gridFor, ottoEfficiency, powerPeakRpm } from './breathingModel';
+import type { EngineFamilyDef } from './chapter2Parts';
+import type { BoostControlPart, EcuPart, ExhaustPart, FilterPart, IntercoolerPart, PistonPart, TurboUpgradePart } from './parts';
+
+/**
+ * Tuning of a FACTORY turbocharged engine (resolver v2). The stock WOT curve is the brake torque
+ * of the stock hardware at the stock boost, under the stock ECU torque limiter. A modification
+ * changes the hardware or the calibration; the new curve is derived from the stock operating
+ * point of the same EngineModel the race runs, term by term (as breathingModel.ts does for NA
+ * engines):
+ *
+ *   T_brake = T_ind · (ρ_charge,new / ρ_charge,stock in the Willans line) · η_otto ratio · ignition
+ *             · (1 − knock retard) − T_friction − T_pumping(new MAP, new back pressure)
+ *   clamped by the torque limiter of the ECU (stock: the stock curve; remap: a fraction of the
+ *   mechanical limit of the pistons/rods).
+ *
+ *  - boost target: stock ECU = factory target; Stage 1 = factory + boostAdd; programmable = the
+ *    tune. The wastegate holds at most factory + 0.35 bar (factory actuator) or + its headroom.
+ *  - the boost that actually develops at each speed comes from the game's Turbocharger model
+ *    (spool vs exhaust flow, fixed point with the new curve) and is capped by the compressor flow
+ *    capacity: the factory unit flows 12 % more than its rated point, a hybrid `flowScale` more;
+ *    above that the boost falls with rpm (the turbo "runs out").
+ *  - charge temperature: compressor η 0.65, intercooler effectiveness (factory 0.6);
+ *  - knock: 98 RON runs the family's knock-free boost; above it the ECU retards ignition (7 % of
+ *    indicated torque per bar), less with a better intercooler and lower compression.
+ * Nothing scales power directly.
+ */
+
+const COMPRESSOR_EFFICIENCY = 0.65;
+const FACTORY_INTERCOOLER = 0.6;
+/** Boost the factory wastegate actuator holds above the factory target (bar). */
+export const FACTORY_WASTEGATE_HEADROOM_BAR = 0.35;
+/** Flow capacity of the factory compressor relative to its rated operating point. */
+const FACTORY_COMPRESSOR_MARGIN = 1.12;
+const KNOCK_LOSS_PER_BAR = 0.07;
+
+export interface FactoryTurboParts {
+  family: EngineFamilyDef;
+  filter?: FilterPart;
+  exhaust?: ExhaustPart;
+  ecu?: EcuPart;
+  turbo?: TurboUpgradePart;
+  intercooler?: IntercoolerPart;
+  boostControl?: BoostControlPart;
+  pistons?: PistonPart;
+  /** Boost target set on the dyno (programmable ECU only), bar gauge. */
+  boostBar?: number;
+}
+
+export interface FactoryTurboResult {
+  engine: EngineConfig;
+  steadyBoostBar: { rpm: number; bar: number }[];
+  knockLoss: number;
+  /** Boost target the ECU aims at and what the wastegate can hold (bar). */
+  targetBoostBar: number;
+  wastegateMaxBar: number;
+  torqueLimitNm: number;
+}
+
+/** Highest boost target the wastegate of this build can hold (bar). */
+export function wastegateMaxBar(stock: EngineConfig, bc?: BoostControlPart): number {
+  return stock.turbo!.maxBoostBar + (bc?.wastegateHeadroomBar ?? FACTORY_WASTEGATE_HEADROOM_BAR);
+}
+
+/** Boost target the ECU of this build aims at (bar), before the wastegate limit. */
+export function ecuBoostTarget(stock: EngineConfig, ecu?: EcuPart, tuneBar?: number): number {
+  const b0 = stock.turbo!.maxBoostBar;
+  if (!ecu) return b0;
+  if (ecu.level === 'programmable' && tuneBar !== undefined) return tuneBar;
+  return b0 + ecu.boostAddBar;
+}
+
+export function applyFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboParts): FactoryTurboResult {
+  const t0 = stock.turbo!;
+  const b0 = stock.breathing!;
+  const fam = parts.family;
+  const g = engineGeometry(stock);
+  const vdOver4pi = g.displacement / (4 * Math.PI);
+  const ratedRpm = powerPeakRpm(stock.torqueCurve, stock.revLimitRpm);
+
+  // ---- calibration and hardware ----
+  const wgMax = wastegateMaxBar(stock, parts.boostControl);
+  const target = Math.min(ecuBoostTarget(stock, parts.ecu, parts.boostBar), wgMax);
+  const up = parts.turbo;
+  const turboCfg = {
+    ...t0,
+    maxBoostBar: target,
+    fullBoostFlowFraction: t0.fullBoostFlowFraction * (up?.spoolFlowScale ?? 1),
+    spoolTimeS: t0.spoolTimeS * (up?.spoolTimeScale ?? 1) * (parts.boostControl?.spoolTimeScale ?? 1),
+    compressorBlades: up?.compressorBlades ?? t0.compressorBlades,
+  };
+  const icEff = parts.intercooler?.effectiveness ?? FACTORY_INTERCOOLER;
+  const cr = stock.compressionRatio + (parts.pistons?.compressionAdd ?? 0);
+  const knockFree = (fam.knockFreeBoostBar ?? t0.maxBoostBar) + 0.3 * (stock.compressionRatio - cr) + 0.5 * (icEff - FACTORY_INTERCOOLER);
+  const knockAt = (bar: number): number => KNOCK_LOSS_PER_BAR * Math.max(0, bar - knockFree);
+  const knockStock = (bar: number): number => KNOCK_LOSS_PER_BAR * Math.max(0, bar - (fam.knockFreeBoostBar ?? t0.maxBoostBar));
+  const indicatedScale = (ottoEfficiency(cr) / ottoEfficiency(stock.compressionRatio)) * (1 + (parts.ecu?.ignitionGain ?? 0));
+  const internals = fam.internalsTorqueNm * (parts.pistons?.torqueLimitScale ?? 1);
+  const limitNm = parts.ecu ? internals * parts.ecu.torqueLimitFraction : Infinity;
+  const revAdd = Math.min(parts.ecu?.revLimitAddRpm ?? 0, fam.valvetrainRevAddRpm) + (parts.pistons?.revLimitAddRpm ?? 0);
+  const revLimit = stock.revLimitRpm + revAdd;
+  const filterDrop = parts.filter?.airFilterDropKPa ?? b0.airFilterDropKPa;
+  const backRef = parts.exhaust?.backPressureKPa ?? b0.exhaustBackPressureKPa;
+
+  // ---- stock operating points (same EngineModel the race uses) ----
+  const curveTop = Math.max(stock.torqueCurve.rpm[stock.torqueCurve.rpm.length - 1]!, revLimit + 300);
+  const stockExt = extendCurve(stock, curveTop);
+  const stockModel = new EngineModel(stockExt);
+  const grid = gridFor(stockExt, curveTop);
+  const ops0 = grid.map((r) => stockModel.wotOperatingPoint(r));
+  const stockCurve = grid.map((r) => stockModel.wotOperatingPoint(r).brakeNm);
+  const flowRated = stockModel.wotOperatingPoint(ratedRpm).flow;
+  const flowCap = flowRated * FACTORY_COMPRESSOR_MARGIN * (fam.compressorMarginScale ?? 1) * (up?.flowScale ?? 1);
+  const chargeT = (pr: number, eff: number): number => {
+    const t2 = STANDARD_TEMPERATURE_K * (1 + (Math.pow(pr, 0.2857) - 1) / COMPRESSOR_EFFICIENCY);
+    return t2 - eff * (t2 - STANDARD_TEMPERATURE_K);
+  };
+  const willans = (p: number): number => p - WILLANS_OFFSET * ATMOSPHERIC_PRESSURE;
+
+  let curve = stockCurve.slice();
+  let boosts = grid.map(() => 0);
+  let knockLoss = 0;
+  for (let pass = 0; pass < 6; pass++) {
+    const cand: EngineConfig = { ...stockExt, compressionRatio: cr, turbo: turboCfg, torqueCurve: { rpm: grid, torqueNm: curve } };
+    const model = new EngineModel(cand);
+    const next: number[] = [];
+    boosts = [];
+    knockLoss = 0;
+    for (let i = 0; i < grid.length; i++) {
+      const op0 = ops0[i]!;
+      const rpm = grid[i]!;
+      const r = op0.flow / b0.referenceFlowKgS;
+      const op = model.wotOperatingPoint(rpm);
+      // compressor flow limit: the charge mass flow scales with the absolute pressure at a speed
+      const boostCapPa = ((ATMOSPHERIC_PRESSURE + op0.boost) * flowCap) / Math.max(op0.flow, 1e-6) - ATMOSPHERIC_PRESSURE;
+      const boostPa = Math.max(0, Math.min(op.boost, boostCapPa, target * 1e5));
+      const pr0 = (ATMOSPHERIC_PRESSURE + op0.boost) / ATMOSPHERIC_PRESSURE;
+      const pr1 = (ATMOSPHERIC_PRESSURE + boostPa) / ATMOSPHERIC_PRESSURE;
+      const filterRatio = (ATMOSPHERIC_PRESSURE - filterDrop * 1000 * r * r) / (ATMOSPHERIC_PRESSURE - b0.airFilterDropKPa * 1000 * r * r);
+      const pressureRatio = (pr1 / pr0) * filterRatio;
+      const density = pressureRatio * (chargeT(pr0, FACTORY_INTERCOOLER) / chargeT(pr1, icEff));
+      const kl = knockAt(boostPa / 1e5);
+      knockLoss = Math.max(knockLoss, kl);
+      const knock = (1 - kl) / (1 - knockStock(op0.boost / 1e5));
+      const indicated = ((op0.indicatedNm * willans(op0.map * density)) / willans(op0.map)) * indicatedScale * knock;
+      const map = op0.map * pressureRatio;
+      const back = op0.back + 0.85 * (boostPa - op0.boost) + (backRef - b0.exhaustBackPressureKPa) * 1000 * r * r;
+      const pumping = (back - map) * vdOver4pi;
+      let brake = indicated - op0.frictionNm - pumping;
+      // torque limiter of the ECU: the factory map holds the stock curve; a remap the mechanical limit
+      brake = Math.min(brake, parts.ecu ? limitNm : stockCurve[i]!);
+      next.push(round1(Math.max(brake, 1)));
+      boosts.push(boostPa / 1e5);
+    }
+    const change = Math.max(...next.map((t, i) => Math.abs(t - curve[i]!)));
+    curve = next;
+    if (change < 0.5) break;
+  }
+  const engine: EngineConfig = {
+    ...stock,
+    compressionRatio: cr,
+    revLimitRpm: revLimit,
+    redlineRpm: stock.redlineRpm + revAdd,
+    maxSafeRpm: Math.max(stock.maxSafeRpm, revLimit + (stock.maxSafeRpm - stock.revLimitRpm)),
+    intake: { ...stock.intake, manifoldVolumeL: stock.intake.manifoldVolumeL + (parts.intercooler?.volumeAddL ?? 0) },
+    breathing: { ...b0, airFilterDropKPa: filterDrop, exhaustBackPressureKPa: backRef },
+    turbo: turboCfg,
+    torqueCurve: { rpm: grid, torqueNm: curve },
+  };
+  return {
+    engine,
+    steadyBoostBar: grid.map((rpm, i) => ({ rpm, bar: Math.round(boosts[i]! * 100) / 100 })),
+    knockLoss,
+    targetBoostBar: target,
+    wastegateMaxBar: wgMax,
+    torqueLimitNm: limitNm,
+  };
+}
+
+const round1 = (v: number): number => Math.round(v * 10) / 10;

@@ -33,6 +33,9 @@ export const SURFACES: Record<Theme, Surface> = {
   // campaign street scenes: worn asphalt, faded paint
   distritoIndustrial: { asphalt: '#4a4744', concrete: '#8f8b84', line: '#d9d2b8', centre: '#c9a238', shoulder: '#5f5b55', ground: '#4f4b45', dust: null, cover: 'apron' },
   baixada: { asphalt: '#43474d', concrete: '#8e9297', line: '#dfe3e6', centre: '#d0ae40', shoulder: '#5a5f66', ground: '#3f5a3c', dust: null, cover: 'grass' },
+  patioDasTorres: { asphalt: '#3c3f44', concrete: '#9a9da2', line: '#eef0f2', centre: '#e0b43a', shoulder: '#62656b', ground: '#53565c', dust: null, cover: 'apron' },
+  distritoFinanceiro: { asphalt: '#34373d', concrete: '#a3a6ab', line: '#f2f3f5', centre: '#e8c04a', shoulder: '#5d6066', ground: '#4c4f55', dust: null, cover: 'apron' },
+  corredorDaLiga: { asphalt: '#303236', concrete: '#a6a8ab', line: '#f6f6f2', centre: '#f0c43c', shoulder: '#5a5c60', ground: '#4a4c50', dust: null, cover: 'apron' },
   avenidaNorte: { asphalt: '#3f4246', concrete: '#9a9a97', line: '#eeeee6', centre: '#e0b43a', shoulder: '#66686c', ground: '#55585c', dust: null, cover: 'apron' },
 };
 

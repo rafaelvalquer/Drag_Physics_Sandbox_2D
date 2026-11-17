@@ -1,7 +1,11 @@
 import { validateCar, type CarConfig } from '../../../data/schema';
 import { exhaustPreset } from '../../../data/exhaustPresets';
 import { applyEngineParts, curvePeakCv, engineFuel, powerPeakRpm, TURBO_MAX_COMPRESSION, withStockBreathing, type EngineParts } from './breathingModel';
-import { CATEGORY_LABEL, CATEGORY_ORDER, findPart, type PartCategory, type PartDef, type TirePart } from './parts';
+import { CATEGORY_LABEL, CATEGORY_ORDER, findPartForVersion, type PartCategory, type PartDef, type TurboPart } from './parts';
+import { applyTyre, CLUTCH_TORQUE_MARGIN, deepFreeze, fmtBar, MAX_KNOCK_LOSS, type BuildResult, type BuildTune, type ResolverVersion } from './buildCommon';
+import { resolveV2 } from './BuildResolverV2';
+
+export { CLUTCH_TORQUE_MARGIN, MAX_KNOCK_LOSS, type BuildResult, type BuildTune, type ResolverVersion };
 
 /**
  * Vehicle Build Resolver: base car + installed part ids → the CarConfig the physics runs.
@@ -13,50 +17,35 @@ import { CATEGORY_LABEL, CATEGORY_ORDER, findPart, type PartCategory, type PartD
  *  - an invalid build is rejected with a message in pt-BR, never silently "fixed".
  * Every effect is physical (see breathingModel.ts for the engine, and the comments below).
  */
-export const BUILD_RESOLVER_VERSION = 1;
+/**
+ * Latest resolver version. Version 1 is the Chapter 1 resolver and stays byte-for-byte the same:
+ * a build stored with version 1 is always resolved by version 1 (old saves are never
+ * reinterpreted). Version 2 (Chapter 2) knows the modern parts, gearbox kinds, AWD and engine
+ * families; on a Chapter 1 build it produces exactly the version 1 result (tested).
+ */
+export const BUILD_RESOLVER_VERSION: ResolverVersion = 2;
+export const BUILD_RESOLVER_V1: ResolverVersion = 1;
 
-/** A turbocharged build needs a clutch with this margin over the engine's peak torque. */
-export const CLUTCH_TORQUE_MARGIN = 1.2;
-/** Largest ignition-retard loss a tuner accepts before calling the boost setting unsafe. */
-export const MAX_KNOCK_LOSS = 0.25;
-
-/** Settings made on the dyno by the engine tuners (career unlock). */
-export interface BuildTune {
-  boostBar?: number;
-}
-
-export type BuildResult =
-  | {
-      ok: true;
-      car: CarConfig;
-      parts: PartDef[];
-      key: string;
-      peakTorqueNm: number;
-      peakPowerCv: number;
-      steadyBoostBar: { rpm: number; bar: number }[];
-      knockLoss: number;
-    }
-  | { ok: false; errors: string[] };
-
-export function buildKey(baseId: string, partIds: readonly string[], tune: BuildTune = {}): string {
-  return `${baseId}|${[...new Set(partIds)].sort().join(',')}${tune.boostBar !== undefined ? `|b${tune.boostBar.toFixed(2)}` : ''}`;
+export function buildKey(baseId: string, partIds: readonly string[], tune: BuildTune = {}, version: ResolverVersion = 1): string {
+  const k = `${baseId}|${[...new Set(partIds)].sort().join(',')}${tune.boostBar !== undefined ? `|b${tune.boostBar.toFixed(2)}` : ''}`;
+  return version === 1 ? k : `v${version}|${k}`;
 }
 
 const cache = new Map<string, BuildResult>();
 
-/** Resolves (and caches) a build. The returned car is deeply frozen. */
-export function resolveBuild(base: CarConfig, partIds: readonly string[], tune: BuildTune = {}): BuildResult {
-  const key = buildKey(base.id, partIds, tune);
+/** Resolves (and caches) a build with the given resolver version. The returned car is deeply frozen. */
+export function resolveBuild(base: CarConfig, partIds: readonly string[], tune: BuildTune = {}, version: ResolverVersion = 1): BuildResult {
+  const key = buildKey(base.id, partIds, tune, version);
   const hit = cache.get(key);
   if (hit) return hit;
-  const r = resolveUncached(base, partIds, key, tune);
+  const r = version === 1 ? resolveUncached(base, partIds, key, tune) : resolveV2(base, partIds, key, tune, resolveUncached);
   cache.set(key, r);
   return r;
 }
 
 /** Same as resolveBuild but throws on an invalid build (rivals, tests). */
-export function resolveBuildOrThrow(base: CarConfig, partIds: readonly string[], tune: BuildTune = {}): CarConfig {
-  const r = resolveBuild(base, partIds, tune);
+export function resolveBuildOrThrow(base: CarConfig, partIds: readonly string[], tune: BuildTune = {}, version: ResolverVersion = 1): CarConfig {
+  const r = resolveBuild(base, partIds, tune, version);
   if (!r.ok) throw new Error(`build inválido (${base.id}): ${r.errors.join('; ')}`);
   return r.car;
 }
@@ -65,11 +54,12 @@ export function clearBuildCache(): void {
   cache.clear();
 }
 
+/** Version 1 (Chapter 1). Do not change: saved builds of version 1 must resolve exactly as before. */
 function resolveUncached(base: CarConfig, partIds: readonly string[], key: string, tune: BuildTune): BuildResult {
   const errors: string[] = [];
   const bySlot = new Map<PartCategory, PartDef>();
   for (const id of new Set(partIds)) {
-    const p = findPart(id);
+    const p = findPartForVersion(id, 1);
     if (!p) {
       errors.push(`peça desconhecida: ${id}`);
       continue;
@@ -91,7 +81,7 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
     manifold: get('intake-manifold'),
     cam: get('camshaft'),
     exhaust: get('exhaust'),
-    turbo: get('turbo'),
+    turbo: get('turbo') as TurboPart | undefined,
     boostBar: tune.boostBar,
   };
   if (tune.boostBar !== undefined) {
@@ -184,29 +174,6 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
   const v = validateCar(car);
   if (!v.ok) errors.push(...v.errors);
   if (errors.length) return { ok: false, errors };
-  return { ok: true, car: deepFreeze(v.value!), parts, key, peakTorqueNm, peakPowerCv, steadyBoostBar, knockLoss };
+  return { ok: true, car: deepFreeze(v.value!), parts, key, peakTorqueNm, peakPowerCv, steadyBoostBar, knockLoss, version: 1 };
 }
 
-const fmtBar = (b: number): string => b.toFixed(2).replace('.', ',');
-
-function applyTyre(car: CarConfig, base: CarConfig, t: TirePart): void {
-  car.tires = {
-    ...base.tires,
-    muPeak: t.muPeak,
-    B: t.B,
-    C: t.C,
-    E: t.E,
-    wheelInertiaKgM2: base.tires.wheelInertiaKgM2 + t.wheelInertiaAddKgM2,
-    rollingResistance: base.tires.rollingResistance + t.rollingResistanceAdd,
-    optimalTempC: t.optimalTempC,
-    tempSensitivityPerC: t.tempSensitivityPerC,
-  };
-}
-
-function deepFreeze<T>(o: T): T {
-  if (o && typeof o === 'object' && !Object.isFrozen(o)) {
-    Object.freeze(o);
-    for (const v of Object.values(o as Record<string, unknown>)) deepFreeze(v);
-  }
-  return o;
-}

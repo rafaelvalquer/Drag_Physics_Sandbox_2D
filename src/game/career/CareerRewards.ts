@@ -1,5 +1,6 @@
 import type { CareerEventDef } from './CareerEvents';
 import type { CareerSave, Outcome } from './CareerState';
+import { chapterOf } from './chapters';
 
 /**
  * Prize rules. Credits (CR) and reputation are separate progressions; reputation is never bought.
@@ -7,7 +8,7 @@ import type { CareerSave, Outcome } from './CareerState';
  *  - repeated win: 35 % of the prize and 1 reputation point, until the event's repeat cap;
  *  - a finished loss: 10 % of the prize (max 100 CR) as fuel money, no reputation;
  *  - red light or DNF: nothing.
- * Reputation of the chapter is capped, balances never go negative, and a result is applied once
+ * Reputation is capped per chapter (cumulative cap of the event's chapter), balances never go negative, and a result is applied once
  * per attempt id (see CareerController.recordRace).
  */
 export const REPEAT_SHARE = 0.35;
@@ -16,6 +17,7 @@ export const LOSS_MAX_CR = 100;
 export const REPEAT_REPUTATION = 1;
 /** Repeat wins of one event that still earn reputation. */
 export const REPEAT_REPUTATION_CAP = 5;
+/** Reputation cap at the end of chapter 1 (each chapter has its cumulative cap, see chapters.ts). */
 export const CHAPTER_REPUTATION_CAP = 250;
 
 export interface Reward {
@@ -36,7 +38,7 @@ export function computeReward(save: CareerSave, ev: CareerEventDef, outcome: Out
   if (outcome === 'red-light' || outcome === 'dnf') return { credits: 0, reputation: 0, claimId: null, kind: 'none' };
   if (outcome === 'loss') return { credits: Math.min(LOSS_MAX_CR, round10(ev.rewardCr * LOSS_SHARE)), reputation: 0, claimId: null, kind: 'loss' };
   const claim = firstWinClaimId(ev.id);
-  const room = Math.max(0, CHAPTER_REPUTATION_CAP - save.reputation);
+  const room = Math.max(0, chapterOf(ev.chapter).reputationCap - save.reputation);
   if (!save.claimedRewardIds.includes(claim)) {
     return { credits: ev.rewardCr, reputation: Math.min(ev.reputation, room), claimId: claim, kind: 'first-win' };
   }

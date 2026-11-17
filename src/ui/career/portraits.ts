@@ -81,6 +81,62 @@ const P: Record<PortraitId, PortraitParams> = {
     faceW: 47, jawW: 37, chinY: 176, masc: 1, hairStyle: 'slick-grey', facial: 'stubble', facialColor: '#8d8a86', age: 54,
     cloth: '#0d0f12', clothLight: '#2d3138', clothStyle: 'leather', accent: '#8f1c1c', bg: ['#2a0c0c', '#070708'], tilt: 0, gaze: 0, expression: 'serious',
   },
+  // ---- chapter 2 (blue-white LED backdrops of the league)
+  caio: {
+    skin: '#a8714e', skinShadow: '#7a4b30', skinLight: '#c78f6a', hair: '#15100c', hairLight: '#3e2f24', iris: '#3a2414', lips: '#85503f',
+    faceW: 44, jawW: 32, chinY: 171, masc: 0.8, hairStyle: 'short', facial: 'goatee', facialColor: '#1b1410', glasses: true, age: 29,
+    cloth: '#1b2430', clothLight: '#334457', clothStyle: 'hoodie', accent: '#3fa8ff', bg: ['#0f1e30', '#07090d'], tilt: -2, gaze: 1, expression: 'smile',
+  },
+  guga: {
+    skin: '#dcaa86', skinShadow: '#ab7a5a', skinLight: '#efc6a6', hair: '#3a2a1c', hairLight: '#6a5038', iris: '#3d2b1a', lips: '#98604f',
+    faceW: 46, jawW: 35, chinY: 174, masc: 0.9, hairStyle: 'short', facial: 'stubble', facialColor: '#3a2a1c', age: 30,
+    cloth: '#20324f', clothLight: '#38507a', clothStyle: 'tee', accent: '#e0b43a', bg: ['#162238', '#08090d'], tilt: 1, gaze: 0, expression: 'smile',
+  },
+  camila: {
+    skin: '#f0c7a8', skinShadow: '#c79473', skinLight: '#fbdcc4', hair: '#d9b77a', hairLight: '#f2d89e', iris: '#4c6a86', lips: '#c0606a',
+    faceW: 41, jawW: 28, chinY: 168, masc: 0, hairStyle: 'ponytail', earrings: true, age: 26,
+    cloth: '#e9e9e6', clothLight: '#ffffff', clothStyle: 'jacket', accent: '#1c1f24', bg: ['#1c2436', '#0a0b0e'], tilt: -3, gaze: 2, expression: 'smirk',
+  },
+  ricardo: {
+    skin: '#d39f7c', skinShadow: '#a26f50', skinLight: '#e8bc9a', hair: '#4a4038', hairLight: '#7a6e64', iris: '#2f3f2a', lips: '#93604f',
+    faceW: 47, jawW: 36, chinY: 175, masc: 0.95, hairStyle: 'short', facial: 'beard', facialColor: '#5b5048', age: 45,
+    cloth: '#b0182a', clothLight: '#d43a4a', clothStyle: 'jacket', accent: '#1a1a1a', bg: ['#2a1216', '#09080a'], tilt: 0, gaze: -1, expression: 'neutral',
+  },
+  andre: {
+    skin: '#8a5636', skinShadow: '#5f3720', skinLight: '#a87252', hair: '#0f0b08', hairLight: '#33261d', iris: '#2a1a0e', lips: '#6f3e2e',
+    faceW: 45, jawW: 33, chinY: 172, masc: 0.85, hairStyle: 'undercut', age: 33,
+    cloth: '#2a2e35', clothLight: '#474d57', clothStyle: 'shirt', accent: '#8f969e', bg: ['#1a2030', '#08090c'], tilt: 2, gaze: 0, expression: 'serious',
+  },
+  helena: {
+    skin: '#e6b897', skinShadow: '#b98767', skinLight: '#f5d2b8', hair: '#1a1411', hairLight: '#4a3a30', iris: '#3a2a1c', lips: '#a24f55',
+    faceW: 42, jawW: 29, chinY: 169, masc: 0.05, hairStyle: 'bob', earrings: true, age: 38,
+    cloth: '#121417', clothLight: '#2c3036', clothStyle: 'jacket', accent: '#c9ccd0', bg: ['#141a26', '#07080b'], tilt: 0, gaze: 1, expression: 'serious',
+  },
+  daniel: {
+    skin: '#c8926c', skinShadow: '#976448', skinLight: '#e0b08c', hair: '#21170f', hairLight: '#4c3a2b', iris: '#26384a', lips: '#8c5848',
+    faceW: 45, jawW: 34, chinY: 173, masc: 0.9, hairStyle: 'cap', facial: 'stubble', facialColor: '#2a1e15', age: 28,
+    cloth: '#1f4e8c', clothLight: '#3a6fb0', clothStyle: 'hoodie', accent: '#e8e8e8', bg: ['#10203a', '#07080c'], tilt: -2, gaze: -2, expression: 'smirk',
+  },
+  lucas: {
+    skin: '#e9c09f', skinShadow: '#bb8d6c', skinLight: '#f7d8be', hair: '#0e0c0b', hairLight: '#2f2a26', iris: '#2b1c12', lips: '#a3675a',
+    faceW: 42, jawW: 31, chinY: 170, masc: 0.75, hairStyle: 'undercut', age: 23,
+    cloth: '#d4d6d8', clothLight: '#f2f3f4', clothStyle: 'tee', accent: '#b0182a', bg: ['#251418', '#09080a'], tilt: 3, gaze: 1, expression: 'smile',
+  },
+  felipe: {
+    skin: '#b47c58', skinShadow: '#85523a', skinLight: '#d09a76', hair: '#2c2018', hairLight: '#5a4636', iris: '#2c1d12', lips: '#8a5040',
+    faceW: 44, jawW: 33, chinY: 172, masc: 0.85, hairStyle: 'short', glasses: true, age: 35,
+    cloth: '#e7e8e6', clothLight: '#ffffff', clothStyle: 'shirt', accent: '#20242a', bg: ['#16202e', '#08090c'], tilt: 0, gaze: 0, expression: 'neutral',
+  },
+  bianca: {
+    skin: '#6f4329', skinShadow: '#4b2a18', skinLight: '#8f5d3f', hair: '#0c0907', hairLight: '#30241c', iris: '#26170c', lips: '#6a3328',
+    faceW: 42, jawW: 29, chinY: 169, masc: 0.05, hairStyle: 'curly', earrings: true, age: 29,
+    cloth: '#16181b', clothLight: '#30343a', clothStyle: 'leather', accent: '#c8322b', bg: ['#2a1014', '#08070a'], tilt: -1, gaze: -1, expression: 'smirk',
+  },
+  victor: {
+    skin: '#d6a483', skinShadow: '#a57352', skinLight: '#ebc2a3', hair: '#2a2622', hairLight: '#6a645e', iris: '#2a3442', lips: '#8e5c4e',
+    faceW: 47, jawW: 37, chinY: 176, masc: 1, hairStyle: 'slick-grey', facial: 'beard', facialColor: '#3a3632', age: 47,
+    cloth: '#0d0f12', clothLight: '#2a2f37', clothStyle: 'jacket', accent: '#3a6fb0', bg: ['#0e1a2e', '#060709'], tilt: 0, gaze: 0, expression: 'serious',
+  },
 };
 
 const cache = new Map<PortraitId, string>();

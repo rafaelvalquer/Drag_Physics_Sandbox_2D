@@ -39,6 +39,9 @@ export class ConstraintRow {
   jA = 0;
   dofB: Dof | null = null;
   jB = 0;
+  /** Optional third DOF (a differential: one input shared by two outputs). */
+  dofC: Dof | null = null;
+  jC = 0;
   bias = 0;
   cfm = 0;
   lo = -Infinity;
@@ -54,6 +57,8 @@ export class ConstraintRow {
     this.jA = j;
     this.dofB = null;
     this.jB = 0;
+    this.dofC = null;
+    this.jC = 0;
     return this;
   }
 
@@ -62,6 +67,18 @@ export class ConstraintRow {
     this.jA = ja;
     this.dofB = b;
     this.jB = jb;
+    this.dofC = null;
+    this.jC = 0;
+    return this;
+  }
+
+  set3(a: Dof, ja: number, b: Dof, jb: number, c: Dof, jc: number): this {
+    this.dofA = a;
+    this.jA = ja;
+    this.dofB = b;
+    this.jB = jb;
+    this.dofC = c;
+    this.jC = jc;
     return this;
   }
 
@@ -70,6 +87,7 @@ export class ConstraintRow {
     let s = 0;
     if (this.dofA) s += this.jA * this.dofA.v;
     if (this.dofB) s += this.jB * this.dofB.v;
+    if (this.dofC) s += this.jC * this.dofC.v;
     return s;
   }
 
@@ -81,6 +99,7 @@ export class ConstraintRow {
     let k = 0;
     if (this.dofA) k += this.jA * this.jA * this.dofA.invMass;
     if (this.dofB) k += this.jB * this.jB * this.dofB.invMass;
+    if (this.dofC) k += this.jC * this.jC * this.dofC.invMass;
     const denom = h * k + this.cfm;
     this.effMassInv = denom > 1e-12 ? 1 / denom : 0;
     let l = warmStart && Number.isFinite(this.lambda) ? this.lambda : 0;
@@ -90,6 +109,7 @@ export class ConstraintRow {
     if (l !== 0) {
       if (this.dofA) this.dofA.v += h * this.dofA.invMass * this.jA * l;
       if (this.dofB) this.dofB.v += h * this.dofB.invMass * this.jB * l;
+      if (this.dofC) this.dofC.v += h * this.dofC.invMass * this.jC * l;
     }
   }
 
@@ -106,6 +126,7 @@ export class ConstraintRow {
       this.lambda = next;
       if (this.dofA) this.dofA.v += h * this.dofA.invMass * this.jA * d;
       if (this.dofB) this.dofB.v += h * this.dofB.invMass * this.jB * d;
+      if (this.dofC) this.dofC.v += h * this.dofC.invMass * this.jC * d;
     }
     return Math.abs(d);
   }

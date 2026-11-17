@@ -51,6 +51,12 @@ export const TurboSchema = z.object({
   bovEnabled: z.boolean(),
   /** Pressure ratio drop time constant when the BOV vents. */
   bovVentTimeS: finite(0.02, 1),
+  /**
+   * Where the valve vents: to the atmosphere (aftermarket blow-off valve, audible "pssh") or back
+   * into the compressor inlet (factory diverter/recirculating valve: a soft whoosh inside the
+   * intake duct). Absent = atmosphere (behaviour of the configurations before Chapter 2).
+   */
+  bovVent: z.enum(['atmosphere', 'recirculating']).optional(),
 });
 export type TurboConfig = z.infer<typeof TurboSchema>;
 
@@ -106,6 +112,20 @@ export const EngineSchema = z
     }),
     cam: CamProfileSchema,
     /**
+     * Two-step cam switching (Honda i-VTEC style): above `switchRpm` (with hysteresis) an oil
+     * pressure spool locks the rocker arms onto the high-lift lobes. The WOT torque curve already
+     * contains its effect; the acoustics switch the valve events with the spool's actuation time.
+     */
+    variableCam: z
+      .object({
+        switchRpm: finite(2000, 10000),
+        hysteresisRpm: finite(0, 1000),
+        /** Time the hydraulic spool needs to lock/unlock the rocker pins (s). */
+        actuationTimeS: finite(0.005, 0.3),
+        high: CamProfileSchema,
+      })
+      .optional(),
+    /**
      * Optional breathing restrictions (career parts). Pressure drops grow with the square of the
      * air mass flow (turbulent flow through a filter element / muffler):
      *   Δp = Δp_ref · (ṁ / ṁ_ref)²
@@ -121,6 +141,11 @@ export const EngineSchema = z
         exhaustBackPressureKPa: finite(0, 80),
       })
       .optional(),
+    /**
+     * Engine family (career workshop compatibility: parts declare the families they fit, so a
+     * part of one engine is never installed on another). Absent on the Chapter 1 / sandbox engines.
+     */
+    family: z.string().min(1).max(32).optional(),
     /** Fuel (display + knock limit of boosted builds). */
     fuel: z.enum(['gasoline', 'ethanol']).optional(),
     combustion: z.object({
@@ -196,8 +221,69 @@ export const ShiftSchema = z.object({
 });
 export type ShiftConfig = z.infer<typeof ShiftSchema>;
 
+/** Hydrodynamic torque converter (automatic transmissions). */
+export const TorqueConverterSchema = z.object({
+  /**
+   * Capacity (K) factor at stall in rpm/√(N·m): impeller torque at stall = (n_impeller/K)².
+   * The coupling law used is T_i = (n_i² − n_t²)/K² (fluid coupling shape, zero at speed ratio 1).
+   */
+  kFactor: finite(60, 320),
+  /** Torque ratio (turbine/impeller) at stall; falls linearly to 1 at the coupling point. */
+  stallTorqueRatio: finite(1, 3),
+  /** Speed ratio (turbine/impeller) of the coupling point. */
+  couplingSpeedRatio: finite(0.5, 0.95),
+  /** Turbine + gearbox input member inertia (kg·m²). */
+  turbineInertiaKgM2: finite(0.01, 0.5),
+  lockup: z.object({
+    maxTorqueNm: finite(100, 3000),
+    /** Lowest gear in which the lock-up clutch may close. */
+    minGear: z.number().int().min(1).max(8),
+    engageRatePerS: finite(0.5, 30),
+    /** Turbine speed below which the lock-up clutch opens. */
+    minTurbineRpm: finite(600, 4000),
+  }),
+});
+export type TorqueConverterConfig = z.infer<typeof TorqueConverterSchema>;
+
+/** Clutch-to-clutch power shifts (dual-clutch gearboxes and planetary automatics). */
+export const PowershiftSchema = z.object({
+  /** Torque phase: the oncoming element takes the torque while the offgoing one releases. */
+  torquePhaseS: finite(0.01, 0.6),
+  /** Longest inertia phase (oncoming element slipping until the input speed is synchronized). */
+  inertiaPhaseMaxS: finite(0.02, 1),
+  /** Engine torque reduction requested by the gearbox during the inertia phase (fraction of combustion events). */
+  torqueReduction: finite(0, 0.9),
+  /** Capacity of the oncoming element during the inertia phase (fraction of its maximum). */
+  inertiaCapacity: finite(0.2, 1),
+  /** Downshift: release time of the offgoing element before the rev rise. */
+  downshiftReleaseS: finite(0.01, 0.5),
+  /** Dual-clutch only: next gear is preselected on the idle shaft (no dog change during the shift). */
+  preselect: z.boolean(),
+});
+export type PowershiftConfig = z.infer<typeof PowershiftSchema>;
+
+/** Shift schedule of the automatic modes (D). */
+export const AutoShiftSchema = z.object({
+  /** Upshift speed at full throttle as fraction of the rev limiter. */
+  wotUpshiftFraction: finite(0.6, 1),
+  /** Upshift speed at light throttle (rpm). */
+  lightUpshiftRpm: finite(1200, 5000),
+  /** Pedal above which kickdown is allowed. */
+  kickdownPedal: finite(0.5, 1),
+  /** Kickdown when the engine is below this speed and the lower gear fits under 85 % of the limiter (rpm). */
+  kickdownRpm: finite(1000, 6000),
+  /** Coast downshift speed (rpm). */
+  coastDownshiftRpm: finite(700, 3000),
+});
+export type AutoShiftConfig = z.infer<typeof AutoShiftSchema>;
+
+export const TransmissionKindSchema = z.enum(['manual', 'torque-converter-auto', 'dual-clutch']);
+export type TransmissionKind = z.infer<typeof TransmissionKindSchema>;
+
 export const TransmissionSchema = z.object({
-  gearRatios: z.array(finite(0.4, 6)).min(4).max(7),
+  /** Absent = 'manual' (sequential assisted shift + automatic clutch, the original model). */
+  kind: TransmissionKindSchema.optional(),
+  gearRatios: z.array(finite(0.4, 6)).min(4).max(8),
   finalDrive: finite(1.5, 6.5),
   efficiency: finite(0.7, 0.99),
   inputInertiaKgM2: finite(0.001, 0.2),
@@ -212,6 +298,9 @@ export const TransmissionSchema = z.object({
     antiStallRpm: finite(300, 2000),
   }),
   shift: ShiftSchema,
+  torqueConverter: TorqueConverterSchema.optional(),
+  powershift: PowershiftSchema.optional(),
+  autoShift: AutoShiftSchema.optional(),
 });
 export type TransmissionConfig = z.infer<typeof TransmissionSchema>;
 
@@ -281,6 +370,16 @@ export const BodyStyleSchema = z.enum([
   'corsaGl96',
   'kadettSl92',
   'saveiroGl94',
+  'astra11',
+  'peugeot208Gt17',
+  'golfGtiMk4',
+  'audiA3_8l',
+  'bmw320iF30',
+  'mercedesC200W205',
+  'civicSi08',
+  'jettaTsi12',
+  'lancerEvoX',
+  'bmw335iF30',
 ]);
 export type BodyStyle = z.infer<typeof BodyStyleSchema>;
 
@@ -298,7 +397,7 @@ export const VisualSchema = z.object({
       intercooler: z.boolean(),
       sportTip: z.boolean(),
       /** Tyre sidewall lettering / tread of performance tyres. */
-      tyre: z.enum(['stock', 'sport', 'semiSlick']),
+      tyre: z.enum(['stock', 'sport', 'semiSlick', 'slick']),
     })
     .optional(),
 });
@@ -314,7 +413,20 @@ export const CarSchema = z
     wheelbaseM: finite(1.8, 3.5),
     cgHeightM: finite(0.25, 0.8),
     frontWeightFraction: finite(0.3, 0.7),
-    drivenAxle: z.enum(['rear', 'front']),
+    drivenAxle: z.enum(['rear', 'front', 'awd']),
+    /**
+     * Four-wheel drive: open centre differential (fixed static split) + a bounded centre coupling
+     * (multi-plate / active centre differential) that transfers up to `centerCouplingNm` between
+     * the axles when their speeds differ. Required when drivenAxle = 'awd'.
+     */
+    awd: z
+      .object({
+        frontTorqueFraction: finite(0.2, 0.8),
+        centerCouplingNm: finite(0, 4000),
+        /** Efficiency of the transfer case + extra differential, multiplies the gearbox efficiency. */
+        transferEfficiency: finite(0.8, 1),
+      })
+      .optional(),
     dragCoefficient: finite(0.2, 0.6),
     frontalAreaM2: finite(1.4, 3),
     brakeTorqueNm: finite(500, 8000),
@@ -329,6 +441,12 @@ export const CarSchema = z
     if (c.visual.frontOverhangM + c.wheelbaseM > c.visual.lengthM - 0.4) {
       ctx.addIssue({ code: 'custom', message: 'entre-eixos + balanço dianteiro deve caber no comprimento da carroceria' });
     }
+    if (c.drivenAxle === 'awd' && !c.awd) ctx.addIssue({ code: 'custom', message: 'tração integral precisa da configuração do diferencial central' });
+    const k = c.transmission.kind ?? 'manual';
+    if (k === 'torque-converter-auto' && !c.transmission.torqueConverter)
+      ctx.addIssue({ code: 'custom', message: 'câmbio automático precisa do conversor de torque' });
+    if (k !== 'manual' && (!c.transmission.powershift || !c.transmission.autoShift))
+      ctx.addIssue({ code: 'custom', message: 'câmbio automático/dupla embreagem precisa da estratégia de troca' });
     if (c.cgHeightM > c.wheelbaseM * 0.35) {
       ctx.addIssue({ code: 'custom', message: 'centro de gravidade alto demais para o entre-eixos' });
     }
@@ -338,7 +456,7 @@ export type CarConfig = z.infer<typeof CarSchema>;
 export const TrackSchema = z.object({
   id: z.string(),
   name: z.string(),
-  theme: z.enum(['testTrack', 'desert', 'nightIndustrial', 'airfield', 'distritoIndustrial', 'baixada', 'avenidaNorte']),
+  theme: z.enum(['testTrack', 'desert', 'nightIndustrial', 'airfield', 'distritoIndustrial', 'baixada', 'avenidaNorte', 'patioDasTorres', 'distritoFinanceiro', 'corredorDaLiga']),
   surfaceGrip: finite(0.5, 1.3),
   rollingResistanceFactor: finite(0.5, 2),
   surfaceTempC: finite(-10, 70),

@@ -1,9 +1,13 @@
 import { findCampaignCar } from '../../data/cars/campaign';
+import { CHAPTER2_CARS } from '../../data/cars/chapter2/index';
 import { EVENTS, findEvent, type CareerEventDef } from './CareerEvents';
-import { isChapterComplete, isPartUnlocked, canTuneBoost, unlocksOf } from './CareerProgression';
+import { isChapterComplete, isChapterUnlocked, isPartUnlocked, canTuneBoost, unlocksOf, unlockedChaptersOf } from './CareerProgression';
+import { CHAPTER_1_ID, CHAPTER_2_ID, findChapter, type ChapterId } from './chapters';
+import { DEALER_CARS, offerAvailability, resaleValue } from './chapter2/dealer';
 import { CareerRepository } from './CareerRepository';
 import { computeReward, type Reward } from './CareerRewards';
 import {
+  MAX_GARAGE,
   MAX_RESULTS,
   STARTER_CARS,
   exportCareer,
@@ -13,8 +17,33 @@ import {
   type CareerSave,
   type OwnedCar,
 } from './CareerState';
-import { resolveBuild } from './tuning/BuildResolver';
+import { resolveBuild, type ResolverVersion } from './tuning/BuildResolver';
 import { findPart, type PartCategory, type UnlockId } from './tuning/parts';
+
+const CHAPTER2_CAR_IDS = new Set(CHAPTER2_CARS.map((c) => c.id));
+
+/**
+ * Resolver version a car's build uses. Chapter 2 cars always use version 2 (their gearboxes,
+ * AWD and engine families exist only there). A chapter 1 car stays at the version stored with it
+ * (1 for every car of an old save) until a part of version 2 is installed; from then on it uses 2.
+ * On a chapter 1 build both versions give the identical car (tested), so moving never changes
+ * what the player already had.
+ */
+export function buildVersionFor(car: Pick<OwnedCar, 'baseCarId' | 'buildVersion'>, parts: readonly string[]): ResolverVersion {
+  if (CHAPTER2_CAR_IDS.has(car.baseCarId)) return 2;
+  if ((car.buildVersion ?? 1) === 2) return 2;
+  return parts.some((id) => findPart(id)?.since === 2) ? 2 : 1;
+}
+
+/** Unique id for a new garage car (ids of sold cars are never reused within the garage). */
+function newCarId(s: CareerSave, baseCarId: string): string {
+  for (let i = s.ownedCars.length + 1; ; i++) {
+    const id = `car-${i}-${baseCarId}`.slice(0, 64);
+    if (!s.ownedCars.some((c) => c.id === id)) return id;
+  }
+}
+
+const shortName = (name: string): string => name.replace(/^(Volkswagen|Chevrolet|Fiat|Mercedes-Benz|Mitsubishi|Peugeot|Honda|BMW|Audi) /, '').slice(0, 32);
 
 /**
  * Career operations. Every operation validates first (credits, unlocks, the resolved build) and
@@ -82,9 +111,11 @@ export class CareerController {
     const car: OwnedCar = {
       id: `car-1-${starterCarId}`.slice(0, 64),
       baseCarId: starterCarId,
-      nickname: opts.nickname?.trim() || base.name.replace(/^(Volkswagen|Chevrolet|Fiat) /, '').slice(0, 32),
+      nickname: opts.nickname?.trim() || shortName(base.name),
       paint: { color: base.visual.color, accent: base.visual.accent },
       installedParts: [],
+      buildVersion: 1,
+      purchasePrice: starter.price,
       acquiredAt: s.createdAt,
     };
     s.ownedCars.push(car);
@@ -97,7 +128,7 @@ export class CareerController {
   checkBuild(car: OwnedCar, parts: string[], tune = car.tune ?? {}): OpResult<true> {
     const base = findCampaignCar(car.baseCarId);
     if (!base) return fail('carro base desconhecido');
-    const r = resolveBuild(base, parts, tune);
+    const r = resolveBuild(base, parts, tune, buildVersionFor(car, parts));
     return r.ok ? { ok: true, value: true } : fail(r.errors.join('; '));
   }
 
@@ -128,6 +159,7 @@ export class CareerController {
         n.credits -= p.price;
         c.installedParts = parts;
         c.tune = tuneFor(c, parts);
+          c.buildVersion = buildVersionFor(c, parts);
         if (replaced) n.inventoryPartIds.push(inventoryEntry(replaced, c.baseCarId));
       });
       return { ok: true, value: v };
@@ -155,6 +187,7 @@ export class CareerController {
           if (replaced) n.inventoryPartIds.push(inventoryEntry(replaced, c.baseCarId));
           c.installedParts = parts;
           c.tune = tuneFor(c, parts);
+          c.buildVersion = buildVersionFor(c, parts);
         }),
       };
     } catch (e) {
@@ -176,6 +209,7 @@ export class CareerController {
           const c = n.ownedCars.find((x) => x.id === car.id)!;
           c.installedParts = parts;
           c.tune = tuneFor(c, parts);
+          c.buildVersion = buildVersionFor(c, parts);
           n.inventoryPartIds.push(inventoryEntry(partId, c.baseCarId));
         }),
       };
@@ -205,6 +239,7 @@ export class CareerController {
           const c = n.ownedCars.find((x) => x.id === car.id)!;
           c.installedParts = parts;
           c.tune = tuneFor(c, parts);
+          c.buildVersion = buildVersionFor(c, parts);
           for (const id of removed) n.inventoryPartIds.push(inventoryEntry(id, c.baseCarId));
         }),
       };
@@ -218,8 +253,9 @@ export class CareerController {
     const s = this.save;
     const car = this.activeCar;
     if (!s || !car) return fail('nenhum carro ativo');
-    if (!canTuneBoost(s)) return fail('os preparadores de motor ainda não trabalham para você');
-    if (!car.installedParts.includes('turbo-basic')) return fail('sem turbo não há pressão para ajustar');
+    const programmable = car.installedParts.includes('ecu-programmable');
+    if (!programmable && !canTuneBoost(s)) return fail('os preparadores de motor ainda não trabalham para você');
+    if (!programmable && !car.installedParts.includes('turbo-basic')) return fail('sem turbo (ou sem ECU programável) não há pressão para ajustar');
     const tune = boostBar === undefined ? {} : { boostBar: Math.round(boostBar * 100) / 100 };
     const chk = this.checkBuild(car, car.installedParts, tune);
     if (!chk.ok) return fail(chk.error);
@@ -235,29 +271,89 @@ export class CareerController {
     }
   }
 
-  /** Classified ads: another of the starter models, at the same price. */
+  /**
+   * Buys a car: the chapter 1 classifieds (starter models) or the chapter 2 dealer (one per model,
+   * with its reputation / progress requirements). Credits are debited in the same transaction
+   * that delivers the car; a failed write changes nothing.
+   */
   async buyCar(baseCarId: string): Promise<OpResult> {
     const s = this.save;
-    const offer = STARTER_CARS.find((c) => c.baseCarId === baseCarId);
+    const starter = STARTER_CARS.find((c) => c.baseCarId === baseCarId);
+    const dealer = DEALER_CARS.find((c) => c.baseCarId === baseCarId);
     const base = findCampaignCar(baseCarId);
-    if (!s || !offer || !base) return fail('carro indisponível');
-    if (s.credits < offer.price) return fail(`créditos insuficientes: ${offer.price} CR`);
-    if (s.ownedCars.length >= 12) return fail('garagem cheia');
+    if (!s || !base || (!starter && !dealer)) return fail('carro indisponível');
+    if (dealer) {
+      const a = offerAvailability(s, dealer);
+      if (!a.ok) return fail(a.reason);
+      if (s.ownedCars.some((c) => c.baseCarId === baseCarId)) return fail('você já tem este modelo na garagem');
+    }
+    const price = (dealer ?? starter)!.price;
+    if (s.credits < price) return fail(`créditos insuficientes: ${price.toLocaleString('pt-BR')} CR`);
+    if (s.ownedCars.length >= MAX_GARAGE) return fail('garagem cheia');
     try {
       return {
         ok: true,
         value: await this.commit((n) => {
-          if (n.credits < offer.price) throw new Error('créditos insuficientes');
-          n.credits -= offer.price;
-          const id = `car-${n.ownedCars.length + 1}-${baseCarId}`.slice(0, 64);
+          if (n.credits < price) throw new Error('créditos insuficientes');
+          if (dealer && n.ownedCars.some((c) => c.baseCarId === baseCarId)) throw new Error('você já tem este modelo na garagem');
+          n.credits -= price;
           n.ownedCars.push({
-            id,
+            id: newCarId(n, baseCarId),
             baseCarId,
-            nickname: base.name.replace(/^(Volkswagen|Chevrolet|Fiat) /, '').slice(0, 32),
+            nickname: shortName(base.name),
             paint: { color: base.visual.color, accent: base.visual.accent },
             installedParts: [],
+            buildVersion: CHAPTER2_CAR_IDS.has(baseCarId) ? 2 : 1,
+            purchasePrice: price,
             acquiredAt: new Date().toISOString(),
           });
+        }),
+      };
+    } catch (e) {
+      return fail((e as Error).message);
+    }
+  }
+
+  /**
+   * Sells a car for a share of the price paid. Its installed parts go to the stock of that model
+   * (nothing is lost); the last car of the garage cannot be sold. The active car moves to another.
+   */
+  async sellCar(carId: string): Promise<OpResult<{ save: CareerSave; credits: number }>> {
+    const s = this.save;
+    const car = s?.ownedCars.find((c) => c.id === carId);
+    if (!s || !car) return fail('carro não encontrado');
+    if (s.ownedCars.length <= 1) return fail('você não pode vender o único carro da garagem');
+    const value = resaleValue(car);
+    try {
+      const v = await this.commit((n) => {
+        const i = n.ownedCars.findIndex((c) => c.id === carId);
+        if (i < 0) throw new Error('carro não encontrado');
+        const c = n.ownedCars[i]!;
+        for (const id of c.installedParts) n.inventoryPartIds.push(inventoryEntry(id, c.baseCarId));
+        n.ownedCars.splice(i, 1);
+        n.credits += value;
+        if (n.activeCarId === carId) n.activeCarId = n.ownedCars[0]!.id;
+      });
+      return { ok: true, value: { save: v, credits: value } };
+    } catch (e) {
+      return fail((e as Error).message);
+    }
+  }
+
+  /** Opens a chapter (it must be unlocked). The first time also records the milestone. */
+  async setActiveChapter(chapter: ChapterId): Promise<OpResult> {
+    const s = this.save;
+    if (!s) return fail('nenhuma campanha carregada');
+    if (!findChapter(chapter)) return fail('capítulo desconhecido');
+    if (!isChapterUnlocked(s, chapter)) return fail('capítulo ainda bloqueado');
+    try {
+      return {
+        ok: true,
+        value: await this.commit((n) => {
+          n.chapterId = chapter;
+          if (!n.unlockedChapters.includes(chapter)) n.unlockedChapters.push(chapter);
+          const m = `${chapter}-started`;
+          if (!n.storyMilestones.includes(m)) n.storyMilestones.push(m);
         }),
       };
     } catch (e) {
@@ -295,6 +391,7 @@ export class CareerController {
     if (!s) return fail('nenhuma campanha carregada');
     const ev: CareerEventDef | undefined = findEvent(r.eventId);
     if (!ev) return fail('evento desconhecido');
+    if (!isChapterUnlocked(s, ev.chapter)) return fail('este capítulo ainda está bloqueado');
     const prior = s.results.find((x) => x.attemptId === r.attemptId);
     if (prior) {
       return {
@@ -303,7 +400,7 @@ export class CareerController {
       };
     }
     const before = unlocksOf(s);
-    const wasComplete = isChapterComplete(s);
+    const wasComplete = isChapterComplete(s, ev.chapter);
     let reward: Reward = { credits: 0, reputation: 0, claimId: null, kind: 'none' };
     let stored: CareerRaceResult | null = null;
     let applied = true;
@@ -321,7 +418,13 @@ export class CareerController {
         stored = { ...r, creditsAwarded: reward.credits, reputationAwarded: reward.reputation };
         n.results.push(stored);
         if (n.results.length > MAX_RESULTS) n.results.splice(0, n.results.length - MAX_RESULTS);
-        if (!n.chapterCompletedAt && isChapterComplete(n)) n.chapterCompletedAt = r.completedAt;
+        if (isChapterComplete(n, ev.chapter) && !n.chapterCompletions[ev.chapter]) {
+          n.chapterCompletions[ev.chapter] = r.completedAt;
+          const m = `${ev.chapter}-complete`;
+          if (!n.storyMilestones.includes(m)) n.storyMilestones.push(m);
+        }
+        if (!n.chapterCompletedAt && isChapterComplete(n, CHAPTER_1_ID)) n.chapterCompletedAt = r.completedAt;
+        for (const c of unlockedChaptersOf(n)) if (!n.unlockedChapters.includes(c)) n.unlockedChapters.push(c);
       });
     } catch (e) {
       return fail((e as Error).message);
@@ -336,7 +439,7 @@ export class CareerController {
         result: stored ?? this.save!.results.find((x) => x.attemptId === r.attemptId)!,
         applied,
         newUnlocks,
-        chapterCompleted: !wasComplete && isChapterComplete(this.save!),
+        chapterCompleted: !wasComplete && isChapterComplete(this.save!, ev.chapter),
       },
     };
   }
@@ -361,10 +464,10 @@ export class CareerController {
   }
 }
 
-/** The boost setting survives only while a turbo is installed. */
+/** The boost setting survives only while something can hold it: the kit turbo or a programmable ECU. */
 function tuneFor(car: OwnedCar, parts: string[]): OwnedCar['tune'] {
-  return parts.includes('turbo-basic') ? (car.tune ?? {}) : {};
+  return parts.includes('turbo-basic') || parts.includes('ecu-programmable') ? (car.tune ?? {}) : {};
 }
 
-export { EVENTS };
+export { EVENTS, CHAPTER_2_ID };
 export type { PartCategory };

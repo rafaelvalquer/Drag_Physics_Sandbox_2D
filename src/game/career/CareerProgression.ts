@@ -1,49 +1,66 @@
-import { EVENTS, type CareerEventDef } from './CareerEvents';
+import { ALL_EVENTS, eventsOf, type CareerEventDef } from './CareerEvents';
 import type { CareerSave } from './CareerState';
+import { CHAPTER_1_ID, CHAPTERS, chapterOf, type ChapterId } from './chapters';
 import type { PartCategory, PartDef, UnlockId } from './tuning/parts';
 
-/** What the chapter's progress has unlocked so far (derived from the completed events). */
-export function unlocksOf(save: Pick<CareerSave, 'completedEventIds'>): Set<UnlockId> {
+type Progress = Pick<CareerSave, 'completedEventIds'>;
+
+/** What the career's progress has unlocked so far (derived from the completed events of every chapter). */
+export function unlocksOf(save: Progress): Set<UnlockId> {
   const s = new Set<UnlockId>();
-  for (const e of EVENTS) if (save.completedEventIds.includes(e.id)) for (const u of e.unlocks) s.add(u);
+  for (const e of ALL_EVENTS) if (save.completedEventIds.includes(e.id)) for (const u of e.unlocks) s.add(u);
   return s;
+}
+
+export function isChapterComplete(save: Progress, chapter: ChapterId = CHAPTER_1_ID): boolean {
+  return eventsOf(chapter).every((e) => save.completedEventIds.includes(e.id));
+}
+
+/** A chapter opens when the chapter before it is complete (derived; the save mirrors it in unlockedChapters). */
+export function isChapterUnlocked(save: Progress, chapter: ChapterId): boolean {
+  const c = chapterOf(chapter);
+  return !c.after || isChapterComplete(save, c.after);
+}
+
+export function unlockedChaptersOf(save: Progress): ChapterId[] {
+  return CHAPTERS.filter((c) => isChapterUnlocked(save, c.id)).map((c) => c.id);
 }
 
 export type EventStatus = 'locked' | 'available' | 'completed' | 'final';
 
-export function eventStatus(save: Pick<CareerSave, 'completedEventIds'>, ev: CareerEventDef): EventStatus {
+export function eventStatus(save: Progress, ev: CareerEventDef): EventStatus {
   if (save.completedEventIds.includes(ev.id)) return 'completed';
-  const prev = EVENTS.find((e) => e.order === ev.order - 1);
+  if (!isChapterUnlocked(save, ev.chapter)) return 'locked';
+  const prev = eventsOf(ev.chapter).find((e) => e.order === ev.order - 1);
   if (prev && !save.completedEventIds.includes(prev.id)) return 'locked';
   if (ev.requires && !unlocksOf(save).has(ev.requires)) return 'locked';
   return ev.finale ? 'final' : 'available';
 }
 
-/** The next event to race (first not completed and not locked), or null when the chapter is done. */
-export function nextEvent(save: Pick<CareerSave, 'completedEventIds'>): CareerEventDef | null {
-  return EVENTS.find((e) => {
-    const s = eventStatus(save, e);
-    return s === 'available' || s === 'final';
-  }) ?? null;
-}
-
-export function isChapterComplete(save: Pick<CareerSave, 'completedEventIds'>): boolean {
-  return EVENTS.every((e) => save.completedEventIds.includes(e.id));
+/** The next event of a chapter to race (first not completed and not locked), or null when it is done. */
+export function nextEvent(save: Progress, chapter: ChapterId = CHAPTER_1_ID): CareerEventDef | null {
+  return (
+    eventsOf(chapter).find((e) => {
+      const s = eventStatus(save, e);
+      return s === 'available' || s === 'final';
+    }) ?? null
+  );
 }
 
 /** Shop requirements of a part: its own unlock plus the workshop it is installed in. */
 export function partRequirements(p: PartDef): UnlockId[] {
   const req: UnlockId[] = ['workshop-basic', p.unlock];
-  if (p.category === 'clutch' || p.category === 'differential') req.push('workshop-transmission');
+  if (p.category === 'clutch' || p.category === 'differential' || p.category === 'gearbox' || p.category === 'awd') req.push('workshop-transmission');
   return [...new Set(req)];
 }
 
-export function isPartUnlocked(save: Pick<CareerSave, 'completedEventIds'>, p: PartDef): boolean {
+export function isPartUnlocked(save: Progress, p: PartDef): boolean {
   const u = unlocksOf(save);
   return partRequirements(p).every((r) => u.has(r));
 }
 
-export function canTuneBoost(save: Pick<CareerSave, 'completedEventIds'>): boolean {
+/** Boost setting of the kit turbo on the dyno (chapter 1 tuners). */
+export function canTuneBoost(save: Progress): boolean {
   return unlocksOf(save).has('engine-tuners');
 }
 
@@ -55,6 +72,16 @@ export interface PartStatus {
   label: string;
   /** Longer explanation (tooltip / locked reason). */
   detail: string;
+}
+
+/** Event that grants an unlock (for "win event N to unlock" messages). */
+export function eventUnlocking(u: UnlockId): CareerEventDef | undefined {
+  return ALL_EVENTS.find((e) => e.unlocks.includes(u));
+}
+
+/** Short label of an event: "Noite 3" in chapter 1, "Etapa 3" in chapter 2. */
+export function eventLabel(ev: CareerEventDef): string {
+  return `${chapterOf(ev.chapter).eventWord} ${ev.order}`;
 }
 
 /**
@@ -72,8 +99,10 @@ export function partStatus(
   if (!isPartUnlocked(save, p)) {
     const have = unlocksOf(save);
     const missing = partRequirements(p).find((r) => !have.has(r))!;
-    const ev = EVENTS.find((e) => e.unlocks.includes(missing));
-    return { state: 'locked', label: ev ? `Noite ${ev.order}` : 'Bloqueada', detail: ev ? `Vença a noite ${ev.order} (${ev.title}) para liberar.` : 'Ainda bloqueada.' };
+    const ev = eventUnlocking(missing);
+    if (!ev) return { state: 'locked', label: 'Bloqueada', detail: 'Ainda bloqueada.' };
+    const what = ev.chapter === CHAPTER_1_ID ? 'a noite' : 'a etapa';
+    return { state: 'locked', label: eventLabel(ev), detail: `Vença ${what} ${ev.order} (${ev.title}) para liberar.` };
   }
   const price = `${p.price.toLocaleString('pt-BR')} CR`;
   if (save.credits < p.price)

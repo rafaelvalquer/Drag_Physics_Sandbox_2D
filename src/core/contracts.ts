@@ -12,6 +12,8 @@ export type ShiftState =
   | 'GEAR_CHANGE'
   | 'REV_MATCH'
   | 'CLUTCH_ENGAGE'
+  | 'TORQUE_PHASE'
+  | 'INERTIA_PHASE'
   | 'COMPLETE';
 
 export type ClutchMode = 'OPEN' | 'LAUNCH' | 'SHIFT' | 'LOCKED' | 'ANTI_STALL' | 'MANUAL_TEST';
@@ -118,6 +120,14 @@ export interface VehicleTelemetry {
   physicsStepMs: number;
   ignitionEvents: number;
   afterfire: boolean;
+  /** Front axle tyre force of a four-wheel-drive car (N); 0 otherwise. */
+  frontTireForce?: number;
+  /** Torque transferred by the centre coupling (front ← rear positive, N·m). */
+  centerCouplingTorque?: number;
+  /** Torque converter turbine/impeller speed ratio (automatics). */
+  converterSpeedRatio?: number;
+  /** Automatic gearbox mode: D (schedule) or M (manual requests); null for the manual gearbox. */
+  gearboxMode?: 'D' | 'M' | null;
 }
 
 export interface InputState {

@@ -3,6 +3,7 @@ import type { CarConfig } from '../../data/schema';
 import { findRival, type RivalDef } from './CareerEvents';
 import type { OwnedCar } from './CareerState';
 import { resolveBuild, type BuildResult } from './tuning/BuildResolver';
+import { buildVersionFor } from './CareerController';
 
 /**
  * Cars of the career, built by the same resolver for rivals and for the player: the rival's
@@ -15,7 +16,7 @@ function painted(car: CarConfig, paint: { color: string; accent: string }, nickn
 export function rivalBuild(r: RivalDef): Extract<BuildResult, { ok: true }> {
   const base = findCampaignCar(r.baseCarId);
   if (!base) throw new Error(`carro base desconhecido: ${r.baseCarId}`);
-  const b = resolveBuild(base, r.parts, r.tune ?? {});
+  const b = resolveBuild(base, r.parts, r.tune ?? {}, r.buildVersion ?? 1);
   if (!b.ok) throw new Error(`build do rival ${r.id} inválido: ${b.errors.join('; ')}`);
   return b;
 }
@@ -29,7 +30,7 @@ export function rivalCar(rivalId: string): CarConfig {
 export function ownedCarBuild(o: OwnedCar): BuildResult {
   const base = findCampaignCar(o.baseCarId);
   if (!base) return { ok: false, errors: [`carro base desconhecido: ${o.baseCarId}`] };
-  return resolveBuild(base, o.installedParts, o.tune ?? {});
+  return resolveBuild(base, o.installedParts, o.tune ?? {}, buildVersionFor(o, o.installedParts));
 }
 
 export function ownedCarConfig(o: OwnedCar): CarConfig {

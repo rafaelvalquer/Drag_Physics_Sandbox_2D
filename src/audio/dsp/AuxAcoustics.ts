@@ -106,6 +106,9 @@ export class AuxAcoustics {
   private readonly hasTurbo: boolean;
   private readonly blades: number;
   private readonly bovFitted: boolean;
+  /** Factory diverter valve venting into the compressor inlet (heard through the intake duct). */
+  private readonly bovRecirculating: boolean;
+  private readonly bovDuctLp: OnePole;
   private readonly teeth: number;
   private readonly mech: number;
   private readonly gearRatios: number[];
@@ -174,6 +177,8 @@ export class AuxAcoustics {
     this.hasTurbo = cfg.engine.induction === 'turbo' && !!cfg.engine.turbo;
     this.blades = cfg.engine.turbo?.compressorBlades ?? 6;
     this.bovFitted = cfg.engine.turbo?.bovEnabled ?? false;
+    this.bovRecirculating = cfg.engine.turbo?.bovVent === 'recirculating';
+    this.bovDuctLp = new OnePole(sampleRate, 1400);
     this.teeth = cfg.acoustic.gearTeeth;
     this.mech = cfg.acoustic.mechanicalNoise;
     this.gearRatios = cfg.gearRatios;
@@ -243,7 +248,11 @@ export class AuxAcoustics {
       const whine = Math.sin(TWO_PI * this.turboPhase) * smoothstep(1500, 6000, f) * nyqFade * (0.25 + boostBar);
       const hiss = this.hissBp.process(rng.bipolar()) * boostBar * (0.4 + c.throttle);
       let bov = 0;
-      if (c.bovFlow > 0.002) bov = this.bovBp.process(this.bovLp.lowpass(rng.bipolar())) * c.bovFlow * 3.2;
+      if (c.bovFlow > 0.002) {
+        bov = this.bovBp.process(this.bovLp.lowpass(rng.bipolar())) * c.bovFlow * 3.2;
+        // recirculated: the jet stays inside the duct; only a low, muffled whoosh gets out
+        if (this.bovRecirculating) bov = this.bovDuctLp.lowpass(bov) * 0.35;
+      } else if (this.bovRecirculating) this.bovDuctLp.lowpass(0);
       let surge = 0;
       if (!this.bovFitted && boostBar > 0.15 && c.throttle < 0.12) {
         // compressor surge: flow reversal cycles at ≈ 12–25 Hz while the trapped boost bleeds off

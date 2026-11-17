@@ -25,8 +25,10 @@ describe('vehicle artwork pipeline', () => {
     expect(new Set(styles).size).toBe(LAB_CARS.length);
     const outlines = LAB_CARS.map((c) => JSON.stringify(DESIGNS[c.visual.bodyStyle].outline));
     expect(new Set(outlines).size).toBe(LAB_CARS.length);
-    const glass = LAB_CARS.map((c) => JSON.stringify(DESIGNS[c.visual.bodyStyle].glass));
-    expect(new Set(glass).size).toBe(LAB_CARS.length);
+    // versions of one body generation (F30 320i / 335i M Sport) share the greenhouse, nothing else
+    const SIBLINGS: Record<string, string> = { bmw335iF30: 'bmw320iF30' };
+    const glass = LAB_CARS.filter((c) => !SIBLINGS[c.visual.bodyStyle]).map((c) => JSON.stringify(DESIGNS[c.visual.bodyStyle].glass));
+    expect(new Set(glass).size).toBe(glass.length);
     const wheels = LAB_CARS.map((c) => JSON.stringify(DESIGNS[c.visual.bodyStyle].wheel));
     expect(new Set(wheels).size).toBeGreaterThanOrEqual(6);
   });

@@ -52,6 +52,20 @@ export interface EngineParts {
   turbo?: TurboPart;
   /** Wastegate setting of the turbo (bar); default: the kit's. */
   boostBar?: number;
+  // ---- resolver v2 only (absent in every v1 build, which keeps v1 results unchanged) ----
+  /** Ported head: flow capacity gain where the valves choke. */
+  head?: { flowGain: number };
+  /** Compression ratio change (pistons): Otto efficiency ratio on the indicated torque. */
+  compressionAdd?: number;
+  /** Ignition advance of a remap (indicated torque fraction). */
+  ignitionGain?: number;
+  /** Rev limit raise of the ECU (valve train permitting). */
+  revLimitAddRpm?: number;
+}
+
+/** Otto cycle efficiency 1 − r^(1−γ) (γ = 1.3 for the real charge). */
+export function ottoEfficiency(cr: number): number {
+  return 1 - Math.pow(cr, -0.3);
 }
 
 /** Stock breathing assumed for an engine that has none documented (estimated values). */
@@ -100,7 +114,7 @@ const smoothstep = (a: number, b: number, x: number): number => {
 };
 
 /** The stock curve extended (linearly, along its last slope) up to a higher speed limit. */
-function extendCurve(e: EngineConfig, toRpm: number): EngineConfig {
+export function extendCurve(e: EngineConfig, toRpm: number): EngineConfig {
   const rpm = [...e.torqueCurve.rpm];
   const t = [...e.torqueCurve.torqueNm];
   const last = rpm[rpm.length - 1]!;
@@ -117,7 +131,7 @@ function extendCurve(e: EngineConfig, toRpm: number): EngineConfig {
 }
 
 /** Speed grid of a modified curve: the stock points plus a 400 rpm grid up to the new limit. */
-function gridFor(e: EngineConfig, toRpm: number): number[] {
+export function gridFor(e: EngineConfig, toRpm: number): number[] {
   const out = new Set<number>(e.torqueCurve.rpm);
   for (let r = 1000; r <= toRpm; r += 400) out.add(r);
   out.add(toRpm);
@@ -144,7 +158,12 @@ export function applyEngineParts(stock: EngineConfig, parts: EngineParts): Breat
   const torqueRpm = torquePeakRpm(stock.torqueCurve);
 
   // ---- hardware changes stored in the configuration ----
-  const revAdd = parts.cam?.revLimitAddRpm ?? 0;
+  const revAdd = (parts.cam?.revLimitAddRpm ?? 0) + (parts.revLimitAddRpm ?? 0);
+  const compression = stock.compressionRatio + (parts.compressionAdd ?? 0);
+  // v2 only: compression (Otto) and ignition advance act on the indicated work; 1 in every v1 build
+  const indicatedScale =
+    parts.compressionAdd || parts.ignitionGain ? (ottoEfficiency(compression) / ottoEfficiency(stock.compressionRatio)) * (1 + (parts.ignitionGain ?? 0)) : 1;
+  const headGain = parts.head?.flowGain ?? 0;
   const revLimit = stock.revLimitRpm + revAdd;
   const curveTop = Math.max(stock.torqueCurve.rpm[stock.torqueCurve.rpm.length - 1]!, revLimit + 300);
   const filterDrop = parts.filter?.airFilterDropKPa ?? b0.airFilterDropKPa;
@@ -196,11 +215,11 @@ export function applyEngineParts(stock: EngineConfig, parts: EngineParts): Breat
         (1 + LIFT_GAIN_PER_MM * c.liftAddMm * smoothstep(0.55, 1.15, x)) *
         (1 - OVERLAP_LOSS_PER_DEG * overlapAdd * Math.max(0, 0.6 - x) / 0.6)
       : 1;
-    const ramRatio = ram(rpm, tunedNew) / ram(rpm, tunedStock);
+    const ramRatio = (ram(rpm, tunedNew) / ram(rpm, tunedStock)) * (headGain ? 1 + headGain * smoothstep(0.5, 1.1, x) : 1);
     const willans = (p: number): number => p - WILLANS_OFFSET * ATMOSPHERIC_PRESSURE;
     // Willans line: indicated work ∝ (charge − offset); the charge follows MAP × trapped-mass ratios
     const chargeRatio = residualRatio * camRatio * ramRatio;
-    const indicated = (op.indicatedNm * willans(map * chargeRatio)) / willans(op.map);
+    const indicated = ((op.indicatedNm * willans(map * chargeRatio)) / willans(op.map)) * indicatedScale;
     const pumping = (back - map) * vdOver4pi;
     na.push(indicated - op.frictionNm - pumping);
     naIndicated.push(indicated);
@@ -211,6 +230,7 @@ export function applyEngineParts(stock: EngineConfig, parts: EngineParts): Breat
     ...stock,
     revLimitRpm: revLimit,
     redlineRpm: stock.redlineRpm + revAdd,
+    compressionRatio: compression,
     maxSafeRpm: Math.max(stock.maxSafeRpm, revLimit + (stock.maxSafeRpm - stock.revLimitRpm)),
     cam,
     intake: {

@@ -1,5 +1,7 @@
 import type { PortraitId } from './CareerEvents';
-import { EVENTS, rivalOf } from './CareerEvents';
+import { ALL_EVENTS, rivalOf } from './CareerEvents';
+import { CAIO } from './chapter2/events';
+import { CHAPTER_1_ID, CHAPTER_2_ID, type ChapterId } from './chapters';
 import { UNLOCK_LABEL, type UnlockId } from './tuning/parts';
 
 /**
@@ -15,6 +17,8 @@ export interface StoryLine {
 
 export interface StoryScene {
   id: string;
+  /** Chapter of the scene (chapter-wide triggers play only in their chapter). Default: chapter 1. */
+  chapter?: ChapterId;
   trigger: StoryTrigger;
   eventId?: string;
   lines: StoryLine[];
@@ -29,6 +33,17 @@ export const SPEAKER_NAME: Record<PortraitId, string> = {
   leonardo: 'Leonardo "Léo AP"',
   paula: 'Paula "Giro"',
   marcos: 'Marcos "Rei da Madrugada"',
+  caio: 'Caio',
+  guga: 'Gustavo "Guga"',
+  camila: 'Camila "THP"',
+  ricardo: 'Ricardo "GTI"',
+  andre: 'André "A3"',
+  helena: 'Helena "C200"',
+  daniel: 'Daniel "320"',
+  lucas: 'Lucas "Si"',
+  felipe: 'Felipe "TSI"',
+  bianca: 'Bianca "Evo"',
+  victor: 'Victor "335"',
 };
 
 /** Nina's fixed lines of the script. */
@@ -38,7 +53,41 @@ export const NINA = {
   defeat: 'Olha o tempo da largada e a patinação. Nem sempre o problema é falta de motor.',
 } as const;
 
+/** Nina's lines of chapter 2. */
+export const NINA_C2 = {
+  intro:
+    'Lembra quando ninguém sabia seu nome? Agora um grupo bem mais seleto quer te conhecer. Importados, motor moderno, uma liga de madrugada que não aparece em lugar nenhum.',
+  intro2: 'Pode ir com o carro que trouxe você até aqui. Se ele estiver bem preparado, carro caro nenhum ganha só por ser caro.',
+  caio: 'Esse é o Caio. Eletrônica e turbo. Ele vai mexer onde a minha chave não alcança.',
+} as const;
+
+/** Speaker of each unlock line (Caio for electronics and turbo, Nina for the rest). */
+const UNLOCK_SPEAKER: Partial<Record<UnlockId, PortraitId>> = {
+  'c2-ecu': 'caio',
+  'c2-intercooler': 'caio',
+  'c2-boost-control': 'caio',
+  'c2-programmable': 'caio',
+  'c2-turbo-hybrid': 'caio',
+  'c2-internals': 'caio',
+};
+
 const UNLOCK_INTRO: Partial<Record<UnlockId, string>> = {
+  // ---- chapter 2
+  'c2-ecu': CAIO.ecu,
+  'c2-intercooler': 'Ar mais frio é ar mais denso. Intercooler maior segura a temperatura quando a pressão sobe, e afasta a detonação.',
+  'c2-boost-control': 'O atuador de fábrica só segura um pouco acima da pressão original. Com controle de boost a wastegate obedece a ECU.',
+  'c2-engine-family':
+    'Peças por família de motor: comando, coletor, cabeçote, pistões e volante. Cada uma só aparece para o motor em que ela cabe.',
+  'c2-gearbox': 'Agora dá para mexer no câmbio automático e no de dupla embreagem: mais capacidade de torque e trocas mais rápidas. Embreagem de manual não serve para eles.',
+  'c2-suspension': 'Suspensão de arrancada: cada tração pede um acerto. Tração dianteira quer peso na frente; traseira, o carro sentando atrás.',
+  'c2-programmable': CAIO.dyno,
+  'c2-turbo-hybrid': 'Turbina híbrida: mais vazão em cima, enche um pouco mais tarde. Só com ECU programável, senão a pressão nem muda.',
+  'c2-internals': 'Pistões forjados. Não dão potência sozinhos, mas sobem o limite de torque que o motor aguenta.',
+  'c2-tires-slick': 'Slick de arrancada. Gruda como nada, mas só quando estiver quente.',
+  'c2-awd': 'Acerto do diferencial central: o acoplamento passa torque para o outro eixo mais cedo. Só para tração integral.',
+  'c2-final-challenge': 'O Victor aceitou correr com você. Corredor da Liga, quatrocentos metros.',
+  'c2-dealer-335i': 'O Victor disse que, se você quiser, a revenda libera uma 335i igual à dele.',
+  // ---- chapter 1
   'workshop-basic': 'A oficina está aberta para você. Começa pelo que deixa o motor respirar: filtro e escape.',
   'part-manifold': 'Chegou um coletor de dutos mais curtos. Ganha em cima, perde um pouco embaixo: pensa no seu câmbio antes de comprar.',
   'part-tires-sport': 'Pneu esportivo é o upgrade mais honesto que existe. De nada adianta motor se a roda gira em falso.',
@@ -53,6 +102,7 @@ const UNLOCK_INTRO: Partial<Record<UnlockId, string>> = {
 
 function buildScenes(): StoryScene[] {
   const s: StoryScene[] = [
+    ...chapter2Scenes(),
     { id: 'intro', trigger: 'start', lines: [{ speaker: 'nina', text: NINA.intro }] },
     {
       id: 'workshop-first',
@@ -83,21 +133,65 @@ function buildScenes(): StoryScene[] {
       ],
     },
   ];
-  for (const e of EVENTS) {
+  for (const e of ALL_EVENTS) {
     const r = rivalOf(e);
-    s.push({ id: `pre-${e.id}`, trigger: 'pre-race', eventId: e.id, lines: [{ speaker: r.portrait, text: r.lines.before }] });
-    s.push({ id: `win-${e.id}`, trigger: 'victory', eventId: e.id, lines: [{ speaker: r.portrait, text: r.lines.win }] });
-    if (r.lines.lose) s.push({ id: `lose-${e.id}`, trigger: 'defeat', eventId: e.id, lines: [{ speaker: r.portrait, text: r.lines.lose }] });
+    const chapter = e.chapter;
+    s.push({ id: `pre-${e.id}`, chapter, trigger: 'pre-race', eventId: e.id, lines: [{ speaker: r.portrait, text: r.lines.before }] });
+    s.push({ id: `win-${e.id}`, chapter, trigger: 'victory', eventId: e.id, lines: [{ speaker: r.portrait, text: r.lines.win }] });
+    if (r.lines.lose) s.push({ id: `lose-${e.id}`, chapter, trigger: 'defeat', eventId: e.id, lines: [{ speaker: r.portrait, text: r.lines.lose }] });
     const unl = e.unlocks.filter((u) => UNLOCK_INTRO[u]);
     if (unl.length)
       s.push({
         id: `unlock-${e.id}`,
+        chapter,
         trigger: 'unlock',
         eventId: e.id,
-        lines: unl.map((u) => ({ speaker: 'nina' as const, text: `${UNLOCK_LABEL[u]}: ${UNLOCK_INTRO[u]!}` })),
+        lines: unl.map((u) => ({ speaker: UNLOCK_SPEAKER[u] ?? ('nina' as const), text: `${UNLOCK_LABEL[u]}: ${UNLOCK_INTRO[u]!}` })),
       });
   }
   return s;
+}
+
+function chapter2Scenes(): StoryScene[] {
+  const c = CHAPTER_2_ID;
+  return [
+    {
+      id: 'c2-intro',
+      chapter: c,
+      trigger: 'start',
+      lines: [
+        { speaker: 'nina', text: NINA_C2.intro },
+        { speaker: 'nina', text: NINA_C2.intro2 },
+        { speaker: 'nina', text: NINA_C2.caio },
+        { speaker: 'caio', text: CAIO.intro },
+      ],
+    },
+    { id: 'c2-workshop', chapter: c, trigger: 'workshop', lines: [{ speaker: 'caio', text: CAIO.workshop }] },
+    {
+      id: 'c2-first-defeat',
+      chapter: c,
+      trigger: 'defeat',
+      lines: [{ speaker: 'caio', text: 'Antes de comprar peça, olha o dinamômetro e a telemetria. Às vezes o tempo está na largada, às vezes na troca.' }],
+    },
+    {
+      id: 'c2-final-challenge',
+      chapter: c,
+      trigger: 'final-challenge',
+      lines: [
+        { speaker: 'nina', text: 'Victor. Seis cilindros turbo, câmbio automático de oito marchas, tudo acertado com calma. Ele não erra.' },
+        { speaker: 'caio', text: 'O carro dele está no limite do que o motor aguenta com segurança. Se você quer passar, tem que ser no acerto e na largada.' },
+      ],
+    },
+    {
+      id: 'c2-completion',
+      chapter: c,
+      trigger: 'completion',
+      lines: [
+        { speaker: 'nina', text: 'Dono da Liga. Você ganhou de carro mais caro, mais novo e mais forte. Ganhou porque entendeu cada um deles.' },
+        { speaker: 'caio', text: 'E o dinamômetro guardou tudo. Quando quiser continuar mexendo, a oficina está aberta.' },
+      ],
+    },
+  ];
 }
 
 export const STORY_SCENES: readonly StoryScene[] = buildScenes();
@@ -106,7 +200,9 @@ export function findScene(id: string): StoryScene | undefined {
   return STORY_SCENES.find((x) => x.id === id);
 }
 
-/** Scenes of a trigger (optionally for one event) that the player has not seen yet. */
-export function pendingScenes(trigger: StoryTrigger, seen: readonly string[], eventId?: string): StoryScene[] {
-  return STORY_SCENES.filter((x) => x.trigger === trigger && (x.eventId === undefined || x.eventId === eventId) && !seen.includes(x.id));
+/** Scenes of a trigger (optionally for one event) of a chapter that the player has not seen yet. */
+export function pendingScenes(trigger: StoryTrigger, seen: readonly string[], eventId?: string, chapter: ChapterId = CHAPTER_1_ID): StoryScene[] {
+  return STORY_SCENES.filter(
+    (x) => x.trigger === trigger && (x.chapter ?? CHAPTER_1_ID) === chapter && (x.eventId === undefined || x.eventId === eventId) && !seen.includes(x.id),
+  );
 }

@@ -4,6 +4,7 @@ import { building, periodic, ridge, wrapped, type Ctx } from './environmentArt';
 import { litFar, type LightingState } from './LightingController';
 import { canvas, type Theme } from './trackArt';
 import { LAYER_H, LAYER_W } from './environmentArt';
+import { chapter2Layer } from './environmentChapter2';
 
 /**
  * Parallax scenery of the campaign's three night street venues. Same contract as the other
@@ -16,9 +17,9 @@ import { LAYER_H, LAYER_W } from './environmentArt';
  *   with graffiti, cold LED light.
  * - Avenida Norte: a closed avenue with light towers, shuttered shops and a crowd behind barriers.
  */
-export const CAMPAIGN_LAYER_THEMES: ReadonlySet<Theme> = new Set<Theme>(['distritoIndustrial', 'baixada', 'avenidaNorte']);
+export const CAMPAIGN_LAYER_THEMES: ReadonlySet<Theme> = new Set<Theme>(['distritoIndustrial', 'baixada', 'avenidaNorte', 'patioDasTorres', 'distritoFinanceiro', 'corredorDaLiga']);
 
-interface Painter {
+export interface Painter {
   ctx: Ctx;
   W: number;
   H: number;
@@ -47,14 +48,15 @@ export function buildCampaignLayer(theme: Theme, layer: 0 | 1 | 2, l: LightingSt
   };
   if (theme === 'distritoIndustrial') distrito(p);
   else if (theme === 'baixada') baixada(p);
-  else avenida(p);
+  else if (theme === 'avenidaNorte') avenida(p);
+  else chapter2Layer(theme, p);
   return c;
 }
 
 // ------------------------------------------------------------------------------- shared pieces
 
 /** Radial light glow (additive look on a dark scene). */
-function glow(ctx: Ctx, x: number, y: number, r: number, rgb: string, a: number): void {
+export function glow(ctx: Ctx, x: number, y: number, r: number, rgb: string, a: number): void {
   const g = ctx.createRadialGradient(x, y, 0, x, y, r);
   g.addColorStop(0, `rgba(${rgb},${a.toFixed(3)})`);
   g.addColorStop(1, `rgba(${rgb},0)`);
@@ -63,7 +65,7 @@ function glow(ctx: Ctx, x: number, y: number, r: number, rgb: string, a: number)
 }
 
 /** Light cone from a lamp head down to the ground. */
-function cone(ctx: Ctx, x: number, y: number, w: number, h: number, rgb: string, a: number): void {
+export function cone(ctx: Ctx, x: number, y: number, w: number, h: number, rgb: string, a: number): void {
   const g = ctx.createLinearGradient(0, y, 0, y + h);
   g.addColorStop(0, `rgba(${rgb},${a.toFixed(3)})`);
   g.addColorStop(1, `rgba(${rgb},0)`);
@@ -78,7 +80,7 @@ function cone(ctx: Ctx, x: number, y: number, w: number, h: number, rgb: string,
 }
 
 /** Street lamp: pole, arm and head, with its glow and cone. */
-function streetLamp(p: Painter, x: number, foot: number, h: number, rgb: string, armLeft = false): void {
+export function streetLamp(p: Painter, x: number, foot: number, h: number, rgb: string, armLeft = false): void {
   const { ctx, px, C } = p;
   ctx.fillStyle = C('#4b5058');
   ctx.fillRect(x, foot - h, px(4), h);
@@ -92,7 +94,7 @@ function streetLamp(p: Painter, x: number, foot: number, h: number, rgb: string,
 }
 
 /** Generic parked car silhouette (no make): body, glasshouse, wheels; optional lights. */
-function parkedCar(p: Painter, x: number, foot: number, color: string, facingRight: boolean, lights: 'none' | 'tail' | 'hazard'): void {
+export function parkedCar(p: Painter, x: number, foot: number, color: string, facingRight: boolean, lights: 'none' | 'tail' | 'hazard'): void {
   const { ctx, px, C, rng } = p;
   const w = px(92 + rng.next() * 16);
   const hgt = px(22);
@@ -141,7 +143,7 @@ function parkedCar(p: Painter, x: number, foot: number, color: string, facingRig
 }
 
 /** Abstract graffiti piece: outlined stroke letters (invented shapes), drips and a fill. */
-function graffiti(p: Painter, x: number, y: number, w: number, h: number, palette: string[]): void {
+export function graffiti(p: Painter, x: number, y: number, w: number, h: number, palette: string[]): void {
   const { ctx, rng, px } = p;
   const n = 3 + Math.floor(rng.next() * 3);
   const lw = w / n;
@@ -187,7 +189,7 @@ function corrugated(ctx: Ctx, x: number, top: number, w: number, h: number, colo
 }
 
 /** Person silhouette (head, shoulders, torso) for crowds; optional phone screen. */
-function person(ctx: Ctx, x: number, foot: number, s: number, cloth: string, skin: string, phone: boolean): void {
+export function person(ctx: Ctx, x: number, foot: number, s: number, cloth: string, skin: string, phone: boolean): void {
   ctx.fillStyle = cloth;
   ctx.beginPath();
   ctx.roundRect(x - 7 * s, foot - 30 * s, 14 * s, 30 * s, [5 * s, 5 * s, 0, 0]);
@@ -469,7 +471,7 @@ function baixada(p: Painter): void {
 
 // ------------------------------------------------------------------------------- Avenida Norte
 
-function lightTower(p: Painter, x: number, foot: number, h: number): void {
+export function lightTower(p: Painter, x: number, foot: number, h: number): void {
   const { ctx, px, C } = p;
   const white = '235,240,255';
   ctx.strokeStyle = C('#6a7078');

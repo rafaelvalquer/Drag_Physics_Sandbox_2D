@@ -1,11 +1,16 @@
 import { z } from 'zod';
-import { CHAPTER_1_ID } from './CareerEvents';
+import { CHAPTER_1_ID, CHAPTER_2_ID, CHAPTER_IDS, type ChapterId } from './chapters';
 
 /**
  * Career save (one document per slot, so every operation is a single atomic write).
  * Versioned: `version` is the save format; `migrateCareerSave` upgrades older documents.
+ *  - v1: chapter 1 only.
+ *  - v2: several chapters (unlocked chapters, active chapter, completion per chapter, story
+ *    milestones), the build resolver version of every owned car, gearbox preference per car and
+ *    the price paid (resale). A v1 save is migrated without losing anything: cars, credits, parts,
+ *    reputation, results and seen dialogues are kept; its cars keep resolver version 1.
  */
-export const CAREER_SAVE_VERSION = 1;
+export const CAREER_SAVE_VERSION = 2;
 export const DEFAULT_SLOT = 'slot-1';
 /** Budget the player has to buy the first car. */
 export const START_CREDITS = 4500;
@@ -18,6 +23,9 @@ export const STARTER_CARS = [
   { baseCarId: 'fiat-uno-mille-1995', price: 2200 },
 ] as const;
 
+/** Most cars a garage holds. */
+export const MAX_GARAGE = 16;
+
 const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 const iso = z.string().min(10).max(40);
 
@@ -27,11 +35,20 @@ export const OwnedCarSchema = z.object({
   nickname: z.string().min(1).max(32),
   paint: z.object({ color: hex, accent: hex }),
   installedParts: z.array(z.string().min(1).max(64)).max(16),
-  /** Dyno settings of the engine tuners (absent = kit defaults). */
-  tune: z.object({ boostBar: z.number().min(0.3).max(1.2).optional() }).optional(),
+  /** Dyno settings of the engine tuners (absent = kit / ECU defaults). */
+  tune: z.object({ boostBar: z.number().min(0.3).max(2.2).optional() }).optional(),
+  /**
+   * Build resolver version of this car (1: chapter 1 resolver). A car stays at 1 until a part of
+   * version 2 is installed; then it moves to 2 for good (on a chapter 1 build both give the same car).
+   */
+  buildVersion: z.union([z.literal(1), z.literal(2)]).default(1),
+  /** Price paid (CR); resale value derives from it. */
+  purchasePrice: z.number().int().min(0).optional(),
   acquiredAt: iso,
 });
 export type OwnedCar = z.infer<typeof OwnedCarSchema>;
+
+export const ChapterIdSchema = z.enum(CHAPTER_IDS);
 
 export const RunSummarySchema = z.object({
   name: z.string().max(64),
@@ -76,18 +93,25 @@ export const CareerSaveSchema = z
   .object({
     version: z.literal(CAREER_SAVE_VERSION),
     slotId: z.string().min(1).max(32),
-    chapterId: z.literal(CHAPTER_1_ID),
+    /** Active chapter (the one the garage and the map show). */
+    chapterId: ChapterIdSchema,
+    unlockedChapters: z.array(ChapterIdSchema).min(1),
+    /** Completion time of each completed chapter. */
+    chapterCompletions: z.record(z.string(), iso),
     /** Optimistic-concurrency counter: every write increments it. */
     revision: z.number().int().min(0),
     credits: z.number().int().min(0),
     reputation: z.number().int().min(0),
-    ownedCars: z.array(OwnedCarSchema).max(12),
+    ownedCars: z.array(OwnedCarSchema).max(MAX_GARAGE),
     activeCarId: z.string().nullable(),
-    inventoryPartIds: z.array(z.string()).max(64),
+    inventoryPartIds: z.array(z.string()).max(160),
     completedEventIds: z.array(z.string()),
     claimedRewardIds: z.array(z.string()),
     seenStorySceneIds: z.array(z.string()),
+    /** Story milestones (chapter started, characters met, titles won). */
+    storyMilestones: z.array(z.string().max(64)).max(64),
     results: z.array(CareerRaceResultSchema).max(MAX_RESULTS),
+    /** Completion of chapter 1 (kept from v1; chapterCompletions holds every chapter). */
     chapterCompletedAt: iso.nullable(),
     createdAt: iso,
     updatedAt: iso,
@@ -99,6 +123,9 @@ export const CareerSaveSchema = z
     if (new Set(ids).size !== ids.length) ctx.addIssue({ code: 'custom', message: 'carros com o mesmo id' });
     const att = s.results.map((r) => r.attemptId);
     if (new Set(att).size !== att.length) ctx.addIssue({ code: 'custom', message: 'tentativas repetidas' });
+    if (!s.unlockedChapters.includes(s.chapterId)) ctx.addIssue({ code: 'custom', message: 'capítulo ativo não está liberado' });
+    for (const k of Object.keys(s.chapterCompletions))
+      if (!(CHAPTER_IDS as readonly string[]).includes(k)) ctx.addIssue({ code: 'custom', message: `capítulo desconhecido: ${k}` });
   });
 export type CareerSave = z.infer<typeof CareerSaveSchema>;
 
@@ -108,6 +135,8 @@ export function newCareerSave(slotId = DEFAULT_SLOT, now = new Date()): CareerSa
     version: CAREER_SAVE_VERSION,
     slotId,
     chapterId: CHAPTER_1_ID,
+    unlockedChapters: [CHAPTER_1_ID],
+    chapterCompletions: {},
     revision: 0,
     credits: START_CREDITS,
     reputation: 0,
@@ -117,6 +146,7 @@ export function newCareerSave(slotId = DEFAULT_SLOT, now = new Date()): CareerSa
     completedEventIds: [],
     claimedRewardIds: [],
     seenStorySceneIds: [],
+    storyMilestones: [],
     results: [],
     chapterCompletedAt: null,
     createdAt: t,
@@ -134,9 +164,35 @@ export function parseCareerSave(input: unknown): ParseResult {
   return { ok: false, errors: r.error.issues.map((i) => `${i.path.join('.') || '(raiz)'}: ${i.message}`) };
 }
 
-/** Upgrades older save formats. Version 1 is the first one: nothing to migrate yet. */
+/**
+ * Upgrades older save formats, one version at a time. Never drops data: an unknown or newer
+ * document is returned as it is and the schema rejects it with a message.
+ */
 export function migrateCareerSave(input: unknown): unknown {
-  return input;
+  if (!input || typeof input !== 'object') return input;
+  let doc = input as Record<string, unknown>;
+  if (doc.version === 1) doc = migrateV1toV2(doc);
+  return doc;
+}
+
+/**
+ * v1 → v2. The chapter id of v1 ("chapter-1") stays the active chapter; a career that already
+ * completed chapter 1 gets chapter 2 unlocked (the player opens it from the garage). Owned cars
+ * keep resolver version 1, so their builds resolve exactly as before.
+ */
+function migrateV1toV2(v1: Record<string, unknown>): Record<string, unknown> {
+  const completedAt = typeof v1.chapterCompletedAt === 'string' ? v1.chapterCompletedAt : null;
+  const cars = Array.isArray(v1.ownedCars) ? v1.ownedCars : [];
+  const chapter: ChapterId = v1.chapterId === CHAPTER_1_ID ? CHAPTER_1_ID : (v1.chapterId as ChapterId);
+  return {
+    ...v1,
+    version: 2,
+    chapterId: chapter,
+    unlockedChapters: completedAt ? [CHAPTER_1_ID, CHAPTER_2_ID] : [CHAPTER_1_ID],
+    chapterCompletions: completedAt ? { [CHAPTER_1_ID]: completedAt } : {},
+    storyMilestones: completedAt ? ['chapter-1-complete'] : [],
+    ownedCars: cars.map((c) => (c && typeof c === 'object' ? { ...(c as object), buildVersion: 1 } : c)),
+  };
 }
 
 /** Export file: the save wrapped with a format tag. */

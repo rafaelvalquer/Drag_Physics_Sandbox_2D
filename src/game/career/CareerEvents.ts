@@ -1,6 +1,9 @@
 import type { AiProfile } from '../ai/DragAI';
 import type { RaceDistanceId } from '../race/RaceController';
 import type { UnlockId } from './tuning/parts';
+import type { ResolverVersion } from './tuning/buildCommon';
+import { CHAPTER_1_ID, CHAPTER_1_TITLE, type ChapterId } from './chapters';
+import { CHAPTER2_EVENTS, CHAPTER2_REGIONS, CHAPTER2_RIVALS } from './chapter2/events';
 
 /**
  * Chapter 1 — "Madrugada Zero": rivals and events as structured data. The lines are the exact
@@ -8,10 +11,12 @@ import type { UnlockId } from './tuning/parts';
  * the same build resolver as the player's), and the driver: reaction time, launch/throttle control
  * (traction), shift points. The AI never gets torque or speed the physics did not produce.
  */
-export const CHAPTER_1_ID = 'chapter-1';
-export const CHAPTER_1_TITLE = 'Madrugada Zero';
+export { CHAPTER_1_ID, CHAPTER_1_TITLE };
 
-export type PortraitId = 'nina' | 'lara' | 'eduardo' | 'roberto' | 'fernando' | 'leonardo' | 'paula' | 'marcos';
+export type PortraitId =
+  | 'nina' | 'lara' | 'eduardo' | 'roberto' | 'fernando' | 'leonardo' | 'paula' | 'marcos'
+  // chapter 2
+  | 'caio' | 'guga' | 'camila' | 'ricardo' | 'andre' | 'helena' | 'daniel' | 'lucas' | 'felipe' | 'bianca' | 'victor';
 
 export interface RivalDef {
   id: string;
@@ -22,6 +27,8 @@ export interface RivalDef {
   baseCarId: string;
   /** Build id (documentation / results). */
   buildId: string;
+  /** Build resolver version of the rival's build (chapter 1: 1). */
+  buildVersion?: ResolverVersion;
   parts: string[];
   tune?: { boostBar?: number };
   paint: { color: string; accent: string };
@@ -31,12 +38,15 @@ export interface RivalDef {
   lines: { before: string; win: string; lose?: string };
 }
 
+export type CareerTrackId = 'distrito-industrial' | 'baixada' | 'avenida-norte' | 'patio-das-torres' | 'distrito-financeiro' | 'corredor-da-liga';
+
 export interface CareerEventDef {
   id: string;
+  chapter: ChapterId;
   order: number;
   title: string;
   rivalId: string;
-  trackId: 'distrito-industrial' | 'baixada' | 'avenida-norte';
+  trackId: CareerTrackId;
   regionLabel: string;
   distance: RaceDistanceId;
   /** Full prize of the first win (CR). */
@@ -48,6 +58,7 @@ export interface CareerEventDef {
   finale?: boolean;
 }
 
+/** Chapter 1 rivals. */
 export const RIVALS: readonly RivalDef[] = [
   {
     id: 'lara',
@@ -165,7 +176,7 @@ export const RIVALS: readonly RivalDef[] = [
   },
 ];
 
-export const EVENTS: readonly CareerEventDef[] = [
+const CH1: readonly Omit<CareerEventDef, 'chapter'>[] = [
   {
     id: 'e1-primeira-noite',
     order: 1,
@@ -254,18 +265,40 @@ export const EVENTS: readonly CareerEventDef[] = [
   },
 ];
 
-export const REGIONS: readonly { id: CareerEventDef['trackId']; label: string; blurb: string }[] = [
+/** Chapter 1 events (kept under this name: chapter 1 code and tests use it). */
+export const EVENTS: readonly CareerEventDef[] = CH1.map((e) => ({ ...e, chapter: CHAPTER_1_ID }));
+export { CHAPTER2_EVENTS, CHAPTER2_RIVALS };
+
+/** Every event of every chapter, in chapter order. */
+export const ALL_EVENTS: readonly CareerEventDef[] = [...EVENTS, ...CHAPTER2_EVENTS];
+export const ALL_RIVALS: readonly RivalDef[] = [...RIVALS, ...CHAPTER2_RIVALS];
+
+export function eventsOf(chapter: ChapterId): readonly CareerEventDef[] {
+  return chapter === CHAPTER_1_ID ? EVENTS : CHAPTER2_EVENTS;
+}
+
+export interface RegionDef {
+  id: CareerTrackId;
+  label: string;
+  blurb: string;
+  chapter: ChapterId;
+}
+
+const CH1_REGIONS: readonly Omit<RegionDef, 'chapter'>[] = [
   { id: 'distrito-industrial', label: 'Distrito Industrial', blurb: 'Galpões, postes de luz amarela e asfalto gasto.' },
   { id: 'baixada', label: 'Baixada', blurb: 'Concreto sob o viaduto, luz fria e prédios ao fundo.' },
   { id: 'avenida-norte', label: 'Avenida Norte', blurb: 'Avenida isolada, torres de luz e público atrás das barreiras.' },
 ];
 
+/** Regions of every chapter. */
+export const REGIONS: readonly RegionDef[] = [...CH1_REGIONS.map((r) => ({ ...r, chapter: CHAPTER_1_ID as ChapterId })), ...CHAPTER2_REGIONS];
+
 export function findEvent(id: string): CareerEventDef | undefined {
-  return EVENTS.find((e) => e.id === id);
+  return ALL_EVENTS.find((e) => e.id === id);
 }
 
 export function findRival(id: string): RivalDef | undefined {
-  return RIVALS.find((r) => r.id === id);
+  return ALL_RIVALS.find((r) => r.id === id);
 }
 
 export function rivalOf(e: CareerEventDef): RivalDef {

@@ -221,7 +221,7 @@ export class TrackRenderer {
 
     // ---- lamp posts and their light on the road
     // street venues of the campaign are lit by closely spaced public lamps
-    const lampStep = { nightIndustrial: 30, distritoIndustrial: 32, baixada: 40, avenidaNorte: 36 }[theme as string] ?? 75;
+    const lampStep = { nightIndustrial: 30, distritoIndustrial: 32, baixada: 40, avenidaNorte: 36, patioDasTorres: 34, distritoFinanceiro: 30, corredorDaLiga: 28 }[theme as string] ?? 75;
     for (let x = lampStep < 75 ? 8 : 20; x < track.lengthM + 10; x += lampStep) {
       this.prop('lamp', x, this.frontProps, WALL_FOOT_PX + 0.15 * PPM_BASE);
       if (lighting.trackLamps) {
@@ -274,6 +274,20 @@ export class TrackRenderer {
       case 'avenidaNorte':
         this.prop('sign', 100, this.frontProps, front, { variant: 0 });
         this.prop('sign', L - 200, this.frontProps, front, { variant: 2 });
+        break;
+      case 'patioDasTorres':
+        this.prop('sign', 90, this.frontProps, front, { variant: 1 });
+        this.prop('sign', L - 210, this.frontProps, front, { variant: 3 });
+        break;
+      case 'distritoFinanceiro':
+        this.prop('sign', 110, this.frontProps, front, { variant: 4 });
+        this.prop('sign', L - 230, this.frontProps, front, { variant: 0 });
+        break;
+      case 'corredorDaLiga':
+        this.prop('grandstand', -10, this.backWorld, foot, { variant: 2 });
+        this.prop('sign', 60, this.frontProps, front, { variant: 2 });
+        this.prop('sign', 260, this.frontProps, front, { variant: 4 });
+        this.prop('sign', L - 180, this.frontProps, front, { variant: 1 });
         break;
       case 'airfield':
         this.prop('tower', 150, this.backWorld, foot);

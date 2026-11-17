@@ -45,6 +45,46 @@ export const CAREER_TRACKS: readonly TrackConfig[] = [
     gradePercent: 0,
     lengthM: 1000,
   },
+  // ---- chapter 2: "Liga da Madrugada"
+  {
+    id: 'patio-das-torres',
+    name: 'Pátio das Torres',
+    theme: 'patioDasTorres',
+    surfaceGrip: 0.96, // car-park asphalt, swept
+    rollingResistanceFactor: 1.0,
+    surfaceTempC: 18,
+    ambientTempC: 16,
+    ambientPressurePa: 101300,
+    windMs: 0,
+    gradePercent: 0,
+    lengthM: 900,
+  },
+  {
+    id: 'distrito-financeiro',
+    name: 'Distrito Financeiro',
+    theme: 'distritoFinanceiro',
+    surfaceGrip: 0.98, // new avenue asphalt
+    rollingResistanceFactor: 1.0,
+    surfaceTempC: 17,
+    ambientTempC: 15,
+    ambientPressurePa: 101500,
+    windMs: -0.5,
+    gradePercent: 0,
+    lengthM: 1000,
+  },
+  {
+    id: 'corredor-da-liga',
+    name: 'Corredor da Liga',
+    theme: 'corredorDaLiga',
+    surfaceGrip: 1.0, // the league preps the launch area
+    rollingResistanceFactor: 1.0,
+    surfaceTempC: 19,
+    ambientTempC: 16,
+    ambientPressurePa: 101400,
+    windMs: 0,
+    gradePercent: 0,
+    lengthM: 1000,
+  },
 ];
 
 export function findCareerTrack(id: string): TrackConfig {

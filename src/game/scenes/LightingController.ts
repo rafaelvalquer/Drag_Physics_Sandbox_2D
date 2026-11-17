@@ -45,10 +45,13 @@ export const THEME_TIME: Record<TrackConfig['theme'], TimeOfDay> = {
   distritoIndustrial: 'night',
   baixada: 'night',
   avenidaNorte: 'night',
+  patioDasTorres: 'night',
+  distritoFinanceiro: 'night',
+  corredorDaLiga: 'night',
 };
 
 /** Themes that are only ever lit at night (the campaign's street scenes). */
-export const NIGHT_ONLY_THEMES: ReadonlySet<TrackConfig['theme']> = new Set(['distritoIndustrial', 'baixada', 'avenidaNorte']);
+export const NIGHT_ONLY_THEMES: ReadonlySet<TrackConfig['theme']> = new Set(['distritoIndustrial', 'baixada', 'avenidaNorte', 'patioDasTorres', 'distritoFinanceiro', 'corredorDaLiga']);
 
 const BASE: Record<TimeOfDay, LightingState> = {
   day: {
@@ -133,6 +136,24 @@ function themed(theme: TrackConfig['theme'], s: LightingState): LightingState {
     out.haze = '#1d1f32';
     out.ambient = '#c4c4e0';
     out.intensity = 0.66;
+  } else if (theme === 'patioDasTorres') {
+    // blue-white LED of office car parks
+    out.sky = ['#03060e', '#0c1730', '#22324e'];
+    out.haze = '#152238';
+    out.ambient = '#b8cff0';
+    out.intensity = 0.62;
+  } else if (theme === 'distritoFinanceiro') {
+    // bright skyline, architectural light, cool haze
+    out.sky = ['#040812', '#111f3a', '#34416a'];
+    out.haze = '#1c2846';
+    out.ambient = '#c8d6f2';
+    out.intensity = 0.68;
+  } else if (theme === 'corredorDaLiga') {
+    // flood-lit event: the brightest night scene
+    out.sky = ['#05060c', '#141a2c', '#3c4058'];
+    out.haze = '#262a3c';
+    out.ambient = '#e2e6f6';
+    out.intensity = 0.74;
   } else if (theme === 'airfield' && s.time === 'day') {
     out.sky = ['#3b7cc2', '#8fbfe6', '#e2eef6'];
     out.haze = '#d3e2ec';

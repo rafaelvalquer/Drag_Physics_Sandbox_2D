@@ -85,6 +85,28 @@ export class EngineAcoustics {
   // LUTs over the cycle angle measured from the cylinder's firing TDC
   private readonly lutExhaust = new Float64Array(LUT + 1);
   private readonly lutIntake = new Float64Array(LUT + 1);
+  /**
+   * Second valve-event set of an engine with switchable cam lobes (e.g. Honda i-VTEC): the
+   * high-lift tables and constants, blended in while the rocker lock pins travel.
+   */
+  private readonly cam2: {
+    lutExhaust: Float64Array;
+    lutIntake: Float64Array;
+    evoRad: number;
+    evcRad: number;
+    ivcRad: number;
+    valveAreaM2: number;
+    prFired: number;
+    prMotored: number;
+    switchOmega: number;
+    hystOmega: number;
+    rate: number;
+  } | null = null;
+  /** Position of the cam switching (0 = low lobes, 1 = high lobes locked). */
+  camBlend = 0;
+  private camTarget = 0;
+  /** Number of cam-lobe switchings (diagnostics and tests). */
+  camSwitches = 0;
   private readonly lutVolume = new Float64Array(LUT + 1); // V/Vd (incl. clearance)
   private readonly lutDVdTheta = new Float64Array(LUT + 1); // d(V/Vd)/dθ (1/rad)
   private readonly lutRecip = new Float64Array(LUT + 1); // cos α + λ cos 2α
@@ -266,6 +288,39 @@ export class EngineAcoustics {
     this.evoPressureRatioFired = compression * expansion * heat;
     this.evoPressureRatioMotored = compression * expansion;
 
+    if (e.variableCam) {
+      const h = e.variableCam.high;
+      const lutEx = new Float64Array(LUT + 1);
+      const lutIn = new Float64Array(LUT + 1);
+      const evo2 = h.evoDeg * DEG;
+      const evc2 = h.evcDeg * DEG;
+      const ivo2 = h.ivoDeg * DEG;
+      const ivc2 = h.ivcDeg * DEG;
+      for (let k = 0; k <= LUT; k++) {
+        const a = (k / LUT) * FOUR_PI;
+        lutEx[k] = lift01(a, evo2, evc2);
+        lutIn[k] = lift01(a, ivo2, ivc2);
+      }
+      const vEvo2 = this.lutVolume[Math.round((evo2 / FOUR_PI) * LUT)]!;
+      const vIvc2 = this.lutVolume[Math.round(((ivc2 % FOUR_PI) / FOUR_PI) * LUT)]!;
+      const comp2 = Math.pow(vIvc2 / vTdc, 1.3);
+      const exp2 = Math.pow(vTdc / vEvo2, 1.3);
+      const lift2 = h.exhaustLiftMm / 1000;
+      this.cam2 = {
+        lutExhaust: lutEx,
+        lutIntake: lutIn,
+        evoRad: evo2,
+        evcRad: evc2,
+        ivcRad: ivc2,
+        valveAreaM2: 2 * Math.min(Math.PI * dv * lift2, (Math.PI * dv * dv) / 4) * 0.7,
+        prFired: comp2 * exp2 * heat,
+        prMotored: comp2 * exp2,
+        switchOmega: (e.variableCam.switchRpm * 2 * Math.PI) / 60,
+        hystOmega: (e.variableCam.hysteresisRpm * 2 * Math.PI) / 60,
+        rate: 1 / e.variableCam.actuationTimeS,
+      };
+    }
+
     this.exhaust = new ExhaustNetwork(sampleRate, cfg.exhaust, e.bankOfCylinder, e.induction === 'turbo', this.lowQuality, 298, e.egt.idleK);
 
     // intake: shared representative runner + airbox Helmholtz resonator
@@ -366,7 +421,30 @@ export class EngineAcoustics {
     const zExh = (rhoExh * this.cExh) / this.headerAreaM2;
     const rhoAir = pMan / (R_AIR_SPECIFIC * (this.ambientK + 15));
     const zAir = (rhoAir * this.cAir) / this.runnerAreaM2;
-    const cdA = this.valveAreaM2;
+    // Switchable cam lobes: the ECU commands the spool above the switch speed under load (with
+    // hysteresis); the oil pressure moves the lock pins over the actuation time, so the valve
+    // events cross over continuously and the pin engagement is a mechanical click in the head.
+    const c2 = this.cam2;
+    let blend = 0;
+    if (c2) {
+      if (this.camTarget === 0 && absW > c2.switchOmega && c.throttle > 0.35) this.camTarget = 1;
+      else if (this.camTarget === 1 && (absW < c2.switchOmega - c2.hystOmega || c.throttle < 0.2)) this.camTarget = 0;
+      const before = this.camBlend;
+      const step = c2.rate * dt;
+      this.camBlend = this.camTarget > before ? Math.min(1, before + step) : Math.max(0, before - step);
+      if ((before < 0.5) !== (this.camBlend < 0.5)) {
+        this.camSwitches++;
+        if (!this.lowQuality) this.tick = Math.max(this.tick, 1.4);
+      }
+      blend = this.camBlend;
+    }
+    const hiSet = c2 !== null && blend >= 0.5;
+    const evoRad = hiSet ? c2.evoRad : this.evoRad;
+    const evcRad = hiSet ? c2.evcRad : this.evcRad;
+    const ivcRad = hiSet ? c2.ivcRad : this.ivcRad;
+    const prFired = hiSet ? c2.prFired : this.evoPressureRatioFired;
+    const prMotored = hiSet ? c2.prMotored : this.evoPressureRatioMotored;
+    const cdA = c2 ? this.valveAreaM2 + (c2.valveAreaM2 - this.valveAreaM2) * blend : this.valveAreaM2;
     const gam = GAMMA_EXHAUST;
 
     let intakeFlow = 0;
@@ -403,19 +481,19 @@ export class EngineAcoustics {
           }
         }
         // exhaust valve opening: blowdown initial pressure
-        if ((prev < this.evoRad && a >= this.evoRad) || (wrapped && a >= this.evoRad)) {
-          const ratio =
-            this.evoPressureRatioMotored + (this.evoPressureRatioFired - this.evoPressureRatioMotored) * Math.min(this.burnAmp[i]!, 2);
+        if ((prev < evoRad && a >= evoRad) || (wrapped && a >= evoRad)) {
+          const ratio = prMotored + (prFired - prMotored) * Math.min(this.burnAmp[i]!, 2);
           this.pc[i] = pMan * ratio - pExh;
         }
         // valve closing ticks (lash): exhaust at EVC, intake at IVC
-        const evc = this.evcRad % FOUR_PI;
-        const ivc = this.ivcRad % FOUR_PI;
+        const evc = evcRad % FOUR_PI;
+        const ivc = ivcRad % FOUR_PI;
         if ((prev < evc && a >= evc) || (prev < ivc && a >= ivc)) ticks += 1;
       }
 
       // exhaust port
-      const lx = this.lut(this.lutExhaust, a);
+      let lx = this.lut(this.lutExhaust, a);
+      if (c2 && blend > 0) lx += (this.lut(c2.lutExhaust, a) - lx) * blend;
       this.exhaustValve[i] = lx;
       let src = 0;
       if (lx > 1e-4) {
@@ -455,7 +533,8 @@ export class EngineAcoustics {
       this.exhaustSrc[i] = src;
 
       // intake suction while the intake valve is open
-      const li = this.lut(this.lutIntake, a);
+      let li = this.lut(this.lutIntake, a);
+      if (c2 && blend > 0) li += (this.lut(c2.lutIntake, a) - li) * blend;
       if (li > 1e-4) {
         const dVdt = this.lut(this.lutDVdTheta, a) * this.vd * omega;
         intakeFlow += li * dVdt;

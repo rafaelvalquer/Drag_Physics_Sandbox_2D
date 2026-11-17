@@ -1,0 +1,322 @@
+# Relatório acústico — Capítulo 2 (gerado por scripts/audio-chapter2.ts)
+
+## Chevrolet Astra 2.0 Flexpower 2011 (GM Família II 2.0 8V Flexpower (Astra 2011), 4 cil.)
+- **antes** 48000 Hz high: CPU 8.4 % do tempo real, nanResets 0, clip 0, clique máx 106.4
+  - WOT: bandas 59% / 37% / 3% / 1%, centroide 508 Hz, >4 kHz 1.1 %
+  - ordens a 3011 rpm: ordem de ignição -34.4 dB, meias ordens -60.9 dB (Δ 26.5 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.000 vs. pico sob carga 0.000 (escape WOT pico 0.57)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.028/0.05 · block 0.009/0.09 · exhaust 0.023/0.57 · turbo 0.000/0.00 · tire 0.023/0.18 · transmission 0.004/0.05 · environment 0.003/0.02
+- **depois** 44100 Hz high: CPU 7.0 % do tempo real, nanResets 0, clip 0, clique máx 83.6
+  - WOT: bandas 60% / 36% / 3% / 1%, centroide 482 Hz, >4 kHz 0.9 %
+  - ordens a 3011 rpm: ordem de ignição -35.7 dB, meias ordens -63.9 dB (Δ 28.2 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.000 vs. pico sob carga 0.000 (escape WOT pico 0.46)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.034/0.06 · block 0.010/0.08 · exhaust 0.020/0.46 · turbo 0.000/0.00 · tire 0.023/0.20 · transmission 0.004/0.04 · environment 0.003/0.02
+- **depois** 44100 Hz low: CPU 6.1 % do tempo real, nanResets 0, clip 0, clique máx 70.4
+  - WOT: bandas 49% / 48% / 3% / 0%, centroide 458 Hz, >4 kHz 0.3 %
+  - ordens a 3011 rpm: ordem de ignição -26.9 dB, meias ordens -54.3 dB (Δ 27.4 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.000 vs. pico sob carga 0.000 (escape WOT pico 0.48)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.034/0.07 · block 0.010/0.09 · exhaust 0.054/0.48 · turbo 0.000/0.00 · tire 0.023/0.20 · transmission 0.004/0.04 · environment 0.003/0.02
+- **depois** 48000 Hz high: CPU 7.5 % do tempo real, nanResets 0, clip 0, clique máx 97.0
+  - WOT: bandas 61% / 35% / 3% / 1%, centroide 454 Hz, >4 kHz 0.8 %
+  - ordens a 3011 rpm: ordem de ignição -35.6 dB, meias ordens -62.2 dB (Δ 26.6 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.000 vs. pico sob carga 0.000 (escape WOT pico 0.47)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.034/0.06 · block 0.010/0.10 · exhaust 0.021/0.47 · turbo 0.000/0.00 · tire 0.023/0.18 · transmission 0.005/0.06 · environment 0.003/0.02
+- **depois** 48000 Hz low: CPU 6.6 % do tempo real, nanResets 0, clip 0, clique máx 80.2
+  - WOT: bandas 50% / 47% / 3% / 0%, centroide 446 Hz, >4 kHz 0.3 %
+  - ordens a 3011 rpm: ordem de ignição -26.8 dB, meias ordens -54.7 dB (Δ 28.0 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.000 vs. pico sob carga 0.000 (escape WOT pico 0.44)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.034/0.07 · block 0.010/0.09 · exhaust 0.054/0.44 · turbo 0.000/0.00 · tire 0.023/0.18 · transmission 0.005/0.06 · environment 0.003/0.02
+
+## Peugeot 208 GT 1.6 THP 2017 (PSA 1.6 THP flex (208 GT 2017), 4 cil.)
+- **antes** 48000 Hz high: CPU 8.5 % do tempo real, nanResets 0, clip 0, clique máx 9.6
+  - WOT: bandas 59% / 15% / 3% / 22%, centroide 3364 Hz, >4 kHz 22.4 %
+  - ordens a 3087 rpm: ordem de ignição -49.9 dB, meias ordens -74.1 dB (Δ 24.1 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.110 vs. pico sob carga 0.139 (escape WOT pico 0.55)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.049/0.09 · block 0.021/0.16 · exhaust 0.009/0.55 · turbo 0.034/0.14 · tire 0.025/0.19 · transmission 0.004/0.05 · environment 0.004/0.02
+- **depois** 44100 Hz high: CPU 7.9 % do tempo real, nanResets 0, clip 0, clique máx 25.5
+  - WOT: bandas 68% / 21% / 3% / 8%, centroide 1026 Hz, >4 kHz 7.7 %
+  - ordens a 3087 rpm: ordem de ignição -48.5 dB, meias ordens -73.6 dB (Δ 25.1 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.059 vs. pico sob carga 0.069 (escape WOT pico 0.48)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.043/0.08 · block 0.019/0.16 · exhaust 0.009/0.48 · turbo 0.017/0.07 · tire 0.025/0.16 · transmission 0.004/0.04 · environment 0.004/0.03
+- **depois** 44100 Hz low: CPU 7.1 % do tempo real, nanResets 0, clip 0, clique máx 25.6
+  - WOT: bandas 65% / 25% / 3% / 7%, centroide 974 Hz, >4 kHz 7.0 %
+  - ordens a 3087 rpm: ordem de ignição -40.0 dB, meias ordens -64.6 dB (Δ 24.6 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.059 vs. pico sob carga 0.069 (escape WOT pico 0.48)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.049/0.10 · block 0.019/0.15 · exhaust 0.023/0.48 · turbo 0.017/0.07 · tire 0.025/0.16 · transmission 0.004/0.04 · environment 0.004/0.03
+- **depois** 48000 Hz high: CPU 8.5 % do tempo real, nanResets 0, clip 0, clique máx 12.9
+  - WOT: bandas 64% / 20% / 3% / 13%, centroide 2029 Hz, >4 kHz 12.6 %
+  - ordens a 3087 rpm: ordem de ignição -48.5 dB, meias ordens -73.1 dB (Δ 24.5 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.069 vs. pico sob carga 0.087 (escape WOT pico 0.46)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.043/0.08 · block 0.019/0.14 · exhaust 0.009/0.46 · turbo 0.021/0.09 · tire 0.025/0.19 · transmission 0.004/0.05 · environment 0.004/0.02
+- **depois** 48000 Hz low: CPU 7.6 % do tempo real, nanResets 0, clip 0, clique máx 12.9
+  - WOT: bandas 62% / 24% / 3% / 12%, centroide 1889 Hz, >4 kHz 11.5 %
+  - ordens a 3087 rpm: ordem de ignição -39.9 dB, meias ordens -63.3 dB (Δ 23.4 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.069 vs. pico sob carga 0.087 (escape WOT pico 0.46)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.049/0.10 · block 0.019/0.17 · exhaust 0.023/0.46 · turbo 0.021/0.09 · tire 0.025/0.19 · transmission 0.004/0.05 · environment 0.004/0.02
+
+## Volkswagen Golf GTI 1.8T 2003 (VW EA113 1.8T 20V 180 cv (Golf GTI), 4 cil.)
+- **antes** 48000 Hz high: CPU 8.5 % do tempo real, nanResets 0, clip 0, clique máx 11.1
+  - WOT: bandas 67% / 14% / 3% / 15%, centroide 2316 Hz, >4 kHz 15.5 %
+  - ordens a 3025 rpm: ordem de ignição -49.1 dB, meias ordens -73.0 dB (Δ 23.9 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.099 vs. pico sob carga 0.106 (escape WOT pico 0.55)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.051/0.10 · block 0.019/0.17 · exhaust 0.008/0.55 · turbo 0.028/0.11 · tire 0.025/0.21 · transmission 0.004/0.06 · environment 0.004/0.02
+- **depois** 44100 Hz high: CPU 7.8 % do tempo real, nanResets 0, clip 0, clique máx 16.5
+  - WOT: bandas 75% / 14% / 2% / 9%, centroide 1440 Hz, >4 kHz 9.1 %
+  - ordens a 3025 rpm: ordem de ignição -47.3 dB, meias ordens -74.1 dB (Δ 26.7 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.073 vs. pico sob carga 0.084 (escape WOT pico 0.55)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.057/0.11 · block 0.019/0.14 · exhaust 0.010/0.55 · turbo 0.022/0.08 · tire 0.025/0.19 · transmission 0.005/0.06 · environment 0.004/0.03
+- **depois** 44100 Hz low: CPU 7.1 % do tempo real, nanResets 0, clip 0, clique máx 16.1
+  - WOT: bandas 68% / 21% / 2% / 9%, centroide 1449 Hz, >4 kHz 9.0 %
+  - ordens a 3025 rpm: ordem de ignição -38.6 dB, meias ordens -62.4 dB (Δ 23.8 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.073 vs. pico sob carga 0.084 (escape WOT pico 0.55)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.059/0.13 · block 0.019/0.15 · exhaust 0.024/0.55 · turbo 0.022/0.08 · tire 0.025/0.19 · transmission 0.005/0.06 · environment 0.004/0.03
+- **depois** 48000 Hz high: CPU 8.2 % do tempo real, nanResets 0, clip 0, clique máx 13.6
+  - WOT: bandas 75% / 14% / 2% / 9%, centroide 1439 Hz, >4 kHz 8.9 %
+  - ordens a 3025 rpm: ordem de ignição -47.3 dB, meias ordens -71.3 dB (Δ 24.0 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.077 vs. pico sob carga 0.082 (escape WOT pico 0.53)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.057/0.11 · block 0.019/0.17 · exhaust 0.010/0.53 · turbo 0.021/0.08 · tire 0.025/0.21 · transmission 0.005/0.07 · environment 0.004/0.02
+- **depois** 48000 Hz low: CPU 7.7 % do tempo real, nanResets 0, clip 0, clique máx 13.5
+  - WOT: bandas 68% / 21% / 2% / 9%, centroide 1441 Hz, >4 kHz 8.8 %
+  - ordens a 3025 rpm: ordem de ignição -38.5 dB, meias ordens -62.9 dB (Δ 24.3 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.077 vs. pico sob carga 0.082 (escape WOT pico 0.54)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.059/0.13 · block 0.019/0.15 · exhaust 0.024/0.54 · turbo 0.021/0.08 · tire 0.025/0.21 · transmission 0.005/0.07 · environment 0.004/0.02
+
+## Audi A3 1.8T 2005 (Audi 1.8T 20V 180 cv (A3 8L), 4 cil.)
+- **antes** 48000 Hz high: CPU 8.4 % do tempo real, nanResets 0, clip 0, clique máx 10.6
+  - WOT: bandas 67% / 14% / 3% / 16%, centroide 2344 Hz, >4 kHz 15.7 %
+  - ordens a 3025 rpm: ordem de ignição -49.1 dB, meias ordens -73.0 dB (Δ 23.9 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.099 vs. pico sob carga 0.111 (escape WOT pico 0.55)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.051/0.10 · block 0.019/0.14 · exhaust 0.008/0.55 · turbo 0.028/0.11 · tire 0.025/0.17 · transmission 0.004/0.05 · environment 0.003/0.02
+- **depois** 44100 Hz high: CPU 7.7 % do tempo real, nanResets 0, clip 0, clique máx 12.7
+  - WOT: bandas 76% / 14% / 2% / 8%, centroide 1334 Hz, >4 kHz 8.2 %
+  - ordens a 3025 rpm: ordem de ignição -53.7 dB, meias ordens -80.4 dB (Δ 26.7 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.065 vs. pico sob carga 0.076 (escape WOT pico 0.44)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.050/0.10 · block 0.018/0.15 · exhaust 0.005/0.44 · turbo 0.019/0.08 · tire 0.025/0.19 · transmission 0.004/0.05 · environment 0.004/0.02
+- **depois** 44100 Hz low: CPU 7.0 % do tempo real, nanResets 0, clip 0, clique máx 13.0
+  - WOT: bandas 73% / 16% / 2% / 8%, centroide 1350 Hz, >4 kHz 8.3 %
+  - ordens a 3025 rpm: ordem de ignição -44.8 dB, meias ordens -68.5 dB (Δ 23.7 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.065 vs. pico sob carga 0.076 (escape WOT pico 0.45)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.050/0.11 · block 0.018/0.14 · exhaust 0.013/0.45 · turbo 0.019/0.08 · tire 0.025/0.19 · transmission 0.004/0.05 · environment 0.004/0.02
+- **depois** 48000 Hz high: CPU 8.3 % do tempo real, nanResets 0, clip 0, clique máx 11.5
+  - WOT: bandas 75% / 14% / 2% / 8%, centroide 1359 Hz, >4 kHz 8.3 %
+  - ordens a 3025 rpm: ordem de ignição -53.7 dB, meias ordens -77.6 dB (Δ 23.9 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.068 vs. pico sob carga 0.077 (escape WOT pico 0.42)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.050/0.10 · block 0.018/0.13 · exhaust 0.005/0.42 · turbo 0.019/0.08 · tire 0.025/0.17 · transmission 0.004/0.04 · environment 0.003/0.02
+- **depois** 48000 Hz low: CPU 7.8 % do tempo real, nanResets 0, clip 0, clique máx 11.4
+  - WOT: bandas 73% / 16% / 2% / 8%, centroide 1368 Hz, >4 kHz 8.3 %
+  - ordens a 3025 rpm: ordem de ignição -44.7 dB, meias ordens -69.0 dB (Δ 24.2 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.068 vs. pico sob carga 0.077 (escape WOT pico 0.42)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.050/0.11 · block 0.018/0.15 · exhaust 0.013/0.42 · turbo 0.019/0.08 · tire 0.025/0.17 · transmission 0.004/0.04 · environment 0.003/0.02
+
+## Mercedes-Benz C200 W205 2015 (Mercedes M274 2.0 turbo 184 cv (C200), 4 cil.)
+- **antes** 48000 Hz high: CPU 8.4 % do tempo real, nanResets 0, clip 0, clique máx 3.5
+  - WOT: bandas 59% / 17% / 4% / 21%, centroide 3035 Hz, >4 kHz 20.6 %
+  - ordens a 3016 rpm: ordem de ignição -48.3 dB, meias ordens -73.9 dB (Δ 25.7 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.107 vs. pico sob carga 0.133 (escape WOT pico 0.04)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.054/0.10 · block 0.025/0.16 · exhaust 0.008/0.04 · turbo 0.036/0.13 · tire 0.028/0.24 · transmission 0.005/0.05 · environment 0.004/0.03
+- **depois** 44100 Hz high: CPU 7.8 % do tempo real, nanResets 0, clip 0, clique máx 5.5
+  - WOT: bandas 66% / 24% / 4% / 7%, centroide 1191 Hz, >4 kHz 7.1 %
+  - ordens a 3016 rpm: ordem de ignição -61.8 dB, meias ordens -88.7 dB (Δ 26.9 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.051 vs. pico sob carga 0.059 (escape WOT pico 0.01)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.035/0.07 · block 0.019/0.12 · exhaust 0.002/0.01 · turbo 0.015/0.06 · tire 0.029/0.24 · transmission 0.002/0.03 · environment 0.004/0.02
+- **depois** 44100 Hz low: CPU 7.4 % do tempo real, nanResets 0, clip 0, clique máx 5.5
+  - WOT: bandas 70% / 21% / 3% / 6%, centroide 1055 Hz, >4 kHz 6.1 %
+  - ordens a 3016 rpm: ordem de ignição -52.9 dB, meias ordens -77.2 dB (Δ 24.3 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.051 vs. pico sob carga 0.059 (escape WOT pico 0.02)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.040/0.08 · block 0.019/0.13 · exhaust 0.005/0.02 · turbo 0.015/0.06 · tire 0.029/0.24 · transmission 0.002/0.03 · environment 0.004/0.02
+- **depois** 48000 Hz high: CPU 8.6 % do tempo real, nanResets 0, clip 0, clique máx 5.0
+  - WOT: bandas 66% / 23% / 4% / 8%, centroide 1424 Hz, >4 kHz 8.3 %
+  - ordens a 3016 rpm: ordem de ignição -61.9 dB, meias ordens -87.3 dB (Δ 25.4 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.048 vs. pico sob carga 0.060 (escape WOT pico 0.01)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.035/0.07 · block 0.019/0.12 · exhaust 0.002/0.01 · turbo 0.016/0.06 · tire 0.028/0.24 · transmission 0.002/0.02 · environment 0.004/0.02
+- **depois** 48000 Hz low: CPU 7.7 % do tempo real, nanResets 0, clip 0, clique máx 5.0
+  - WOT: bandas 70% / 20% / 3% / 7%, centroide 1254 Hz, >4 kHz 7.1 %
+  - ordens a 3016 rpm: ordem de ignição -52.9 dB, meias ordens -77.9 dB (Δ 25.0 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.048 vs. pico sob carga 0.060 (escape WOT pico 0.02)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.040/0.08 · block 0.019/0.12 · exhaust 0.005/0.02 · turbo 0.016/0.06 · tire 0.028/0.24 · transmission 0.002/0.02 · environment 0.004/0.02
+
+## BMW 320i F30 2014 (BMW N20 2.0 TwinPower Turbo 184 hp (320i), 4 cil.)
+- **antes** 48000 Hz high: CPU 8.5 % do tempo real, nanResets 0, clip 0, clique máx 4.7
+  - WOT: bandas 66% / 22% / 4% / 9%, centroide 1090 Hz, >4 kHz 8.5 %
+  - ordens a 3153 rpm: ordem de ignição -47.5 dB, meias ordens -73.1 dB (Δ 25.6 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.078 vs. pico sob carga 0.091 (escape WOT pico 0.04)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.055/0.10 · block 0.030/0.18 · exhaust 0.008/0.04 · turbo 0.024/0.09 · tire 0.030/0.25 · transmission 0.004/0.04 · environment 0.004/0.03
+- **depois** 44100 Hz high: CPU 8.0 % do tempo real, nanResets 0, clip 0, clique máx 6.9
+  - WOT: bandas 69% / 24% / 3% / 4%, centroide 669 Hz, >4 kHz 3.6 %
+  - ordens a 3153 rpm: ordem de ignição -57.3 dB, meias ordens -83.1 dB (Δ 25.8 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.043 vs. pico sob carga 0.049 (escape WOT pico 0.01)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.043/0.08 · block 0.027/0.15 · exhaust 0.003/0.01 · turbo 0.013/0.05 · tire 0.030/0.24 · transmission 0.003/0.03 · environment 0.004/0.03
+- **depois** 44100 Hz low: CPU 7.1 % do tempo real, nanResets 0, clip 0, clique máx 6.9
+  - WOT: bandas 73% / 21% / 3% / 3%, centroide 596 Hz, >4 kHz 3.1 %
+  - ordens a 3153 rpm: ordem de ignição -48.4 dB, meias ordens -72.2 dB (Δ 23.8 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.043 vs. pico sob carga 0.049 (escape WOT pico 0.03)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.047/0.09 · block 0.027/0.15 · exhaust 0.008/0.03 · turbo 0.013/0.05 · tire 0.030/0.24 · transmission 0.003/0.03 · environment 0.004/0.03
+- **depois** 48000 Hz high: CPU 8.5 % do tempo real, nanResets 0, clip 0, clique máx 6.5
+  - WOT: bandas 70% / 23% / 3% / 4%, centroide 671 Hz, >4 kHz 3.5 %
+  - ordens a 3153 rpm: ordem de ignição -57.1 dB, meias ordens -82.5 dB (Δ 25.4 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.041 vs. pico sob carga 0.048 (escape WOT pico 0.01)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.043/0.08 · block 0.027/0.15 · exhaust 0.003/0.01 · turbo 0.013/0.05 · tire 0.030/0.25 · transmission 0.003/0.03 · environment 0.004/0.03
+- **depois** 48000 Hz low: CPU 8.1 % do tempo real, nanResets 0, clip 0, clique máx 6.6
+  - WOT: bandas 73% / 21% / 3% / 3%, centroide 601 Hz, >4 kHz 3.0 %
+  - ordens a 3153 rpm: ordem de ignição -48.3 dB, meias ordens -73.5 dB (Δ 25.2 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.041 vs. pico sob carga 0.048 (escape WOT pico 0.03)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.047/0.09 · block 0.027/0.15 · exhaust 0.008/0.03 · turbo 0.013/0.05 · tire 0.030/0.25 · transmission 0.003/0.03 · environment 0.004/0.03
+
+## Honda Civic Si 2008 (Honda K20Z3 2.0 i-VTEC 192 cv (Civic Si), 4 cil.)
+- **antes** 48000 Hz high: CPU 7.5 % do tempo real, nanResets 0, clip 0, clique máx 64.7
+  - WOT: bandas 54% / 43% / 2% / 0%, centroide 535 Hz, >4 kHz 0.5 %
+  - ordens a 3104 rpm: ordem de ignição -34.5 dB, meias ordens -61.2 dB (Δ 26.7 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.000 vs. pico sob carga 0.000 (escape WOT pico 0.57)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.029/0.05 · block 0.022/0.12 · exhaust 0.027/0.57 · turbo 0.000/0.00 · tire 0.025/0.20 · transmission 0.004/0.04 · environment 0.004/0.02
+- **depois** 44100 Hz high: CPU 7.3 % do tempo real, nanResets 0, clip 0, clique máx 90.3
+  - WOT: bandas 52% / 45% / 2% / 0%, centroide 490 Hz, >4 kHz 0.5 %
+  - ordens a 3104 rpm: ordem de ignição -32.6 dB, meias ordens -59.4 dB (Δ 26.9 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.000 vs. pico sob carga 0.000 (escape WOT pico 0.64)
+  - came: 10 trocas; na corrida a 6036 rpm: centroide escape 398 → 407 Hz, nível -30.4 → -29.6 dB, maior passo em 10 ms 1.9 dB
+  - canais na corrida (rms/pico): intake 0.042/0.08 · block 0.024/0.13 · exhaust 0.033/0.64 · turbo 0.000/0.00 · tire 0.025/0.21 · transmission 0.005/0.05 · environment 0.004/0.03
+- **depois** 44100 Hz low: CPU 6.4 % do tempo real, nanResets 0, clip 0, clique máx 64.0
+  - WOT: bandas 54% / 44% / 1% / 0%, centroide 418 Hz, >4 kHz 0.1 %
+  - ordens a 3104 rpm: ordem de ignição -23.9 dB, meias ordens -48.9 dB (Δ 25.0 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.000 vs. pico sob carga 0.000 (escape WOT pico 0.60)
+  - came: 10 trocas; na corrida a 6036 rpm: centroide escape 404 → 400 Hz, nível -22.4 → -21.1 dB, maior passo em 10 ms 2.4 dB
+  - canais na corrida (rms/pico): intake 0.040/0.08 · block 0.024/0.13 · exhaust 0.086/0.60 · turbo 0.000/0.00 · tire 0.025/0.21 · transmission 0.005/0.05 · environment 0.004/0.03
+- **depois** 48000 Hz high: CPU 7.5 % do tempo real, nanResets 0, clip 0, clique máx 71.6
+  - WOT: bandas 53% / 45% / 2% / 0%, centroide 485 Hz, >4 kHz 0.4 %
+  - ordens a 3104 rpm: ordem de ignição -32.6 dB, meias ordens -59.4 dB (Δ 26.8 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.000 vs. pico sob carga 0.000 (escape WOT pico 0.62)
+  - came: 10 trocas; na corrida a 6036 rpm: centroide escape 382 → 404 Hz, nível -30.2 → -29.5 dB, maior passo em 10 ms 1.9 dB
+  - canais na corrida (rms/pico): intake 0.042/0.08 · block 0.024/0.13 · exhaust 0.033/0.62 · turbo 0.000/0.00 · tire 0.025/0.20 · transmission 0.005/0.05 · environment 0.004/0.02
+- **depois** 48000 Hz low: CPU 6.9 % do tempo real, nanResets 0, clip 0, clique máx 49.2
+  - WOT: bandas 55% / 44% / 1% / 0%, centroide 416 Hz, >4 kHz 0.1 %
+  - ordens a 3104 rpm: ordem de ignição -23.9 dB, meias ordens -49.1 dB (Δ 25.1 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.000 vs. pico sob carga 0.000 (escape WOT pico 0.60)
+  - came: 10 trocas; na corrida a 6036 rpm: centroide escape 399 → 389 Hz, nível -22.1 → -21.0 dB, maior passo em 10 ms 3.0 dB
+  - canais na corrida (rms/pico): intake 0.040/0.08 · block 0.024/0.13 · exhaust 0.087/0.60 · turbo 0.000/0.00 · tire 0.025/0.20 · transmission 0.005/0.05 · environment 0.004/0.02
+
+## Volkswagen Jetta Highline TSI 2012 (VW EA888 2.0 TSI 200 cv (Jetta), 4 cil.)
+- **antes** 48000 Hz high: CPU 8.6 % do tempo real, nanResets 0, clip 0, clique máx 3.2
+  - WOT: bandas 60% / 19% / 4% / 16%, centroide 2570 Hz, >4 kHz 16.3 %
+  - ordens a 3017 rpm: ordem de ignição -47.7 dB, meias ordens -72.1 dB (Δ 24.4 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.097 vs. pico sob carga 0.118 (escape WOT pico 0.03)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.051/0.10 · block 0.024/0.16 · exhaust 0.007/0.03 · turbo 0.030/0.12 · tire 0.029/0.25 · transmission 0.004/0.05 · environment 0.004/0.03
+- **depois** 44100 Hz high: CPU 7.9 % do tempo real, nanResets 0, clip 0, clique máx 5.2
+  - WOT: bandas 62% / 26% / 5% / 6%, centroide 1089 Hz, >4 kHz 6.5 %
+  - ordens a 3017 rpm: ordem de ignição -47.6 dB, meias ordens -73.2 dB (Δ 25.5 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.060 vs. pico sob carga 0.067 (escape WOT pico 0.03)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.044/0.09 · block 0.022/0.14 · exhaust 0.008/0.03 · turbo 0.016/0.07 · tire 0.029/0.26 · transmission 0.003/0.04 · environment 0.004/0.03
+- **depois** 44100 Hz low: CPU 7.3 % do tempo real, nanResets 0, clip 0, clique máx 5.2
+  - WOT: bandas 60% / 29% / 5% / 6%, centroide 1077 Hz, >4 kHz 6.3 %
+  - ordens a 3017 rpm: ordem de ignição -38.9 dB, meias ordens -64.5 dB (Δ 25.6 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.060 vs. pico sob carga 0.067 (escape WOT pico 0.08)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.049/0.10 · block 0.021/0.15 · exhaust 0.021/0.08 · turbo 0.016/0.07 · tire 0.029/0.26 · transmission 0.003/0.04 · environment 0.004/0.03
+- **depois** 48000 Hz high: CPU 8.4 % do tempo real, nanResets 0, clip 0, clique máx 4.0
+  - WOT: bandas 61% / 26% / 5% / 9%, centroide 1625 Hz, >4 kHz 9.2 %
+  - ordens a 3017 rpm: ordem de ignição -47.6 dB, meias ordens -71.8 dB (Δ 24.2 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.061 vs. pico sob carga 0.074 (escape WOT pico 0.03)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.044/0.09 · block 0.022/0.14 · exhaust 0.008/0.03 · turbo 0.019/0.07 · tire 0.029/0.25 · transmission 0.003/0.04 · environment 0.004/0.03
+- **depois** 48000 Hz low: CPU 7.7 % do tempo real, nanResets 0, clip 0, clique máx 4.1
+  - WOT: bandas 58% / 28% / 5% / 9%, centroide 1599 Hz, >4 kHz 9.0 %
+  - ordens a 3017 rpm: ordem de ignição -38.8 dB, meias ordens -64.6 dB (Δ 25.8 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.061 vs. pico sob carga 0.074 (escape WOT pico 0.08)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.049/0.10 · block 0.022/0.14 · exhaust 0.022/0.08 · turbo 0.019/0.07 · tire 0.029/0.25 · transmission 0.003/0.04 · environment 0.004/0.03
+
+## Mitsubishi Lancer Evolution X 2012 (Mitsubishi 4B11T 2.0 turbo 295 cv (Evo X), 4 cil.)
+- **antes** 48000 Hz high: CPU 8.6 % do tempo real, nanResets 0, clip 0, clique máx 3.2
+  - WOT: bandas 55% / 22% / 3% / 20%, centroide 2723 Hz, >4 kHz 20.0 %
+  - ordens a 3081 rpm: ordem de ignição -47.2 dB, meias ordens -73.9 dB (Δ 26.7 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.127 vs. pico sob carga 0.160 (escape WOT pico 0.05)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.061/0.11 · block 0.036/0.19 · exhaust 0.011/0.05 · turbo 0.044/0.16 · tire 0.041/0.27 · transmission 0.005/0.04 · environment 0.006/0.04
+- **depois** 44100 Hz high: CPU 7.7 % do tempo real, nanResets 0, clip 0, clique máx 3.8
+  - WOT: bandas 57% / 32% / 2% / 9%, centroide 1408 Hz, >4 kHz 8.9 %
+  - ordens a 3081 rpm: ordem de ignição -43.0 dB, meias ordens -69.7 dB (Δ 26.8 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.086 vs. pico sob carga 0.102 (escape WOT pico 0.07)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.062/0.11 · block 0.039/0.22 · exhaust 0.019/0.07 · turbo 0.027/0.10 · tire 0.042/0.22 · transmission 0.007/0.06 · environment 0.005/0.04
+- **depois** 44100 Hz low: CPU 7.1 % do tempo real, nanResets 0, clip 0, clique máx 4.0
+  - WOT: bandas 58% / 32% / 2% / 9%, centroide 1386 Hz, >4 kHz 8.7 %
+  - ordens a 3081 rpm: ordem de ignição -37.8 dB, meias ordens -65.2 dB (Δ 27.4 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.086 vs. pico sob carga 0.102 (escape WOT pico 0.11)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.066/0.13 · block 0.039/0.21 · exhaust 0.034/0.11 · turbo 0.027/0.10 · tire 0.042/0.22 · transmission 0.007/0.06 · environment 0.005/0.04
+- **depois** 48000 Hz high: CPU 8.3 % do tempo real, nanResets 0, clip 0, clique máx 3.5
+  - WOT: bandas 57% / 32% / 2% / 9%, centroide 1417 Hz, >4 kHz 8.8 %
+  - ordens a 3081 rpm: ordem de ignição -42.8 dB, meias ordens -69.2 dB (Δ 26.3 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.076 vs. pico sob carga 0.097 (escape WOT pico 0.06)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.062/0.11 · block 0.040/0.21 · exhaust 0.019/0.06 · turbo 0.026/0.10 · tire 0.041/0.27 · transmission 0.007/0.05 · environment 0.006/0.04
+- **depois** 48000 Hz low: CPU 7.7 % do tempo real, nanResets 0, clip 0, clique máx 3.6
+  - WOT: bandas 58% / 32% / 2% / 8%, centroide 1377 Hz, >4 kHz 8.5 %
+  - ordens a 3081 rpm: ordem de ignição -37.6 dB, meias ordens -63.6 dB (Δ 26.0 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.076 vs. pico sob carga 0.097 (escape WOT pico 0.12)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.066/0.13 · block 0.040/0.23 · exhaust 0.035/0.12 · turbo 0.026/0.10 · tire 0.041/0.27 · transmission 0.007/0.05 · environment 0.006/0.04
+
+## BMW 335i M Sport F30 2013 (BMW N55 3.0 6 em linha TwinPower Turbo 306 hp (335i), 6 cil.)
+- **antes** 48000 Hz high: CPU 9.5 % do tempo real, nanResets 0, clip 0, clique máx 4.0
+  - WOT: bandas 19% / 62% / 6% / 13%, centroide 2228 Hz, >4 kHz 13.4 %
+  - ordens a 3130 rpm: ordem de ignição -59.6 dB, meias ordens -74.9 dB (Δ 15.3 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.094 vs. pico sob carga 0.100 (escape WOT pico 0.04)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.015/0.03 · block 0.049/0.19 · exhaust 0.010/0.04 · turbo 0.025/0.10 · tire 0.036/0.30 · transmission 0.005/0.06 · environment 0.006/0.04
+- **depois** 44100 Hz high: CPU 8.8 % do tempo real, nanResets 0, clip 0, clique máx 7.3
+  - WOT: bandas 24% / 66% / 5% / 4%, centroide 1026 Hz, >4 kHz 4.3 %
+  - ordens a 3130 rpm: ordem de ignição -69.0 dB, meias ordens -84.6 dB (Δ 15.6 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.041 vs. pico sob carga 0.051 (escape WOT pico 0.01)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.013/0.03 · block 0.047/0.19 · exhaust 0.004/0.01 · turbo 0.012/0.05 · tire 0.035/0.27 · transmission 0.003/0.03 · environment 0.006/0.04
+- **depois** 44100 Hz low: CPU 8.3 % do tempo real, nanResets 0, clip 0, clique máx 7.3
+  - WOT: bandas 29% / 62% / 5% / 4%, centroide 998 Hz, >4 kHz 4.3 %
+  - ordens a 3130 rpm: ordem de ignição -64.3 dB, meias ordens -77.7 dB (Δ 13.5 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.041 vs. pico sob carga 0.051 (escape WOT pico 0.02)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.012/0.03 · block 0.046/0.19 · exhaust 0.007/0.02 · turbo 0.012/0.05 · tire 0.035/0.27 · transmission 0.003/0.03 · environment 0.006/0.04
+- **depois** 48000 Hz high: CPU 9.5 % do tempo real, nanResets 0, clip 0, clique máx 5.5
+  - WOT: bandas 24% / 65% / 5% / 6%, centroide 1308 Hz, >4 kHz 5.6 %
+  - ordens a 3130 rpm: ordem de ignição -68.9 dB, meias ordens -83.6 dB (Δ 14.7 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.053 vs. pico sob carga 0.056 (escape WOT pico 0.01)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.013/0.03 · block 0.046/0.18 · exhaust 0.004/0.01 · turbo 0.014/0.06 · tire 0.036/0.30 · transmission 0.003/0.03 · environment 0.006/0.04
+- **depois** 48000 Hz low: CPU 8.7 % do tempo real, nanResets 0, clip 0, clique máx 5.4
+  - WOT: bandas 29% / 61% / 5% / 5%, centroide 1273 Hz, >4 kHz 5.5 %
+  - ordens a 3130 rpm: ordem de ignição -64.3 dB, meias ordens -77.1 dB (Δ 12.8 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.053 vs. pico sob carga 0.056 (escape WOT pico 0.02)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.012/0.03 · block 0.046/0.18 · exhaust 0.007/0.02 · turbo 0.014/0.06 · tire 0.036/0.30 · transmission 0.003/0.03 · environment 0.006/0.04
+

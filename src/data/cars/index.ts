@@ -10,6 +10,7 @@ import {
 } from '../engines';
 import { exhaustPreset } from '../exhaustPresets';
 import { CAR_VW_GOL_GTS_1988 } from './vwGolGts1988';
+import { CHAPTER2_CARS } from './chapter2/index';
 
 export { CAR_VW_GOL_GTS_1988 } from './vwGolGts1988';
 
@@ -357,7 +358,11 @@ export const CARS: readonly CarConfig[] = [
   CAR_VW_GOL_GTS_1988,
 ];
 
-export const LAB_CARS: readonly CarConfig[] = [...CARS, CAR_AURORA_V12_LAB];
+/**
+ * Every car the Sandbox, Race and Dyno modes list. The ten Chapter 2 cars are the same objects
+ * the career uses (one catalogue, no duplicate entry); Chapter 1 campaign cars stay career-only.
+ */
+export const LAB_CARS: readonly CarConfig[] = [...CARS, CAR_AURORA_V12_LAB, ...CHAPTER2_CARS];
 
 export function findCar(id: string): CarConfig | undefined {
   return LAB_CARS.find((c) => c.id === id);

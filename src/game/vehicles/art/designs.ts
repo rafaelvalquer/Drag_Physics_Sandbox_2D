@@ -1,6 +1,18 @@
 import type { BodyStyle } from '../../../data/schema';
 import type { P } from './svg';
 import { celta03, chevetteSl88, corsaGl96, kadettSl92, saveiroGl94, unoMille95 } from './designsCampaign';
+import {
+  astra11,
+  audiA3_8l,
+  bmw320iF30,
+  bmw335iF30,
+  civicSi08,
+  golfGtiMk4,
+  jettaTsi12,
+  lancerEvoX,
+  mercedesC200W205,
+  peugeot208Gt17,
+} from './designsChapter2';
 
 /**
  * Side-view design of each body style. Original artwork for the fictional cars of this game.
@@ -1114,6 +1126,16 @@ export const DESIGNS: Record<BodyStyle, VehicleDesign> = {
   corsaGl96,
   kadettSl92,
   saveiroGl94,
+  astra11,
+  peugeot208Gt17,
+  golfGtiMk4,
+  audiA3_8l,
+  bmw320iF30,
+  mercedesC200W205,
+  civicSi08,
+  jettaTsi12,
+  lancerEvoX,
+  bmw335iF30,
 };
 
 /** Height of the upper outline (v) at position u, measured on the roof side of the silhouette. */

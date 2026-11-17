@@ -4,9 +4,24 @@ import { findCampaignCar } from '../data/cars/campaign';
 import type { CarConfig, TrackConfig } from '../data/schema';
 import { CAREER_TRACKS, findCareerTrack } from '../data/tracks/career';
 import { AI_PROFILES, DragAI } from '../game/ai/DragAI';
-import { CareerController, parseInventoryEntry } from '../game/career/CareerController';
-import { CHAPTER_1_TITLE, EVENTS, REGIONS, findEvent, rivalOf, type CareerEventDef, type RivalDef } from '../game/career/CareerEvents';
-import { eventStatus, isChapterComplete, isPartUnlocked, nextEvent, partStatus, stockStatus, canTuneBoost, partRequirements, unlocksOf } from '../game/career/CareerProgression';
+import { CareerController, buildVersionFor, parseInventoryEntry } from '../game/career/CareerController';
+import { REGIONS, eventsOf, findEvent, rivalOf, type CareerEventDef, type RivalDef } from '../game/career/CareerEvents';
+import {
+  eventLabel,
+  eventStatus,
+  isChapterComplete,
+  isChapterUnlocked,
+  isPartUnlocked,
+  nextEvent,
+  partStatus,
+  stockStatus,
+  canTuneBoost,
+  partRequirements,
+  unlocksOf,
+} from '../game/career/CareerProgression';
+import { CHAPTER_1_ID, CHAPTER_2_ID, CHAPTERS, chapterOf, type ChapterId } from '../game/career/chapters';
+import { DEALER_CARS, offerAvailability, resaleValue } from '../game/career/chapter2/dealer';
+import { incompatibility } from '../game/career/tuning/BuildResolverV2';
 import { CareerRepository, CareerTabLock } from '../game/career/CareerRepository';
 import { evaluateRace, type Comment } from '../game/career/CareerResultEvaluator';
 import { DEFAULT_SLOT, STARTER_CARS, type CareerRaceResult, type OutcomeSchema, type OwnedCar, type RunSummary } from '../game/career/CareerState';
@@ -15,7 +30,7 @@ import type { RaceRecord } from '../game/career/CareerController';
 import { TelemetryProbe, runHeadlessRace } from '../game/career/headlessRace';
 import { ownedCarBuild, ownedCarConfig, rivalBuild, rivalCar } from '../game/career/RivalBuildFactory';
 import { BUILD_RESOLVER_VERSION, resolveBuild, type BuildResult } from '../game/career/tuning/BuildResolver';
-import { CATEGORY_LABEL, PARTS, UNLOCK_LABEL, WORKSHOP_TABS, findPart, type PartCategory, type PartDef } from '../game/career/tuning/parts';
+import { ALL_PARTS, CATEGORY_LABEL, CATEGORY_ORDER, UNLOCK_LABEL, WORKSHOP_TABS, findPart, type PartCategory, type PartDef } from '../game/career/tuning/parts';
 import { RACE_DISTANCES, RaceController, type LaneResult, type RaceLane } from '../game/race/RaceController';
 import { runAccelerationTest } from '../game/race/accelerationTest';
 import type { CameraMode, RenderVehicle, TrackMarker, TreeLights } from '../game/scenes/RaceScene';
@@ -33,7 +48,7 @@ import { portraitSvg } from '../ui/career/portraits';
 import { SHIFT_MESSAGES } from './SandboxMode';
 import '../ui/career/career.css';
 
-type Screen = 'menu' | 'choose' | 'garage' | 'workshop' | 'dyno' | 'events' | 'rival' | 'race' | 'result' | 'ending' | 'history' | 'market';
+type Screen = 'menu' | 'choose' | 'garage' | 'workshop' | 'dyno' | 'events' | 'rival' | 'race' | 'result' | 'ending' | 'history' | 'market' | 'chapters';
 type Outcome = (typeof OutcomeSchema)['options'][number];
 
 const CAMERAS: CameraMode[] = ['follow', 'wide', 'start'];
@@ -42,13 +57,38 @@ const f2 = (v: number | null | undefined): string => (v === null || v === undefi
 const f3 = (v: number | null | undefined): string => (v === null || v === undefined ? '—' : v.toFixed(3).replace('.', ','));
 const cr = (v: number): string => `${v.toLocaleString('pt-BR')} CR`;
 
+/** pt-BR label of the driven axles. */
+export function driveLabel(c: CarConfig): string {
+  return c.drivenAxle === 'awd' ? 'integral' : c.drivenAxle === 'rear' ? 'traseira' : 'dianteira';
+}
+
+/** pt-BR label of the gearbox type. */
+export function gearboxLabel(c: CarConfig): string {
+  const n = c.transmission.gearRatios.length;
+  const k = c.transmission.kind ?? 'manual';
+  if (k === 'dual-clutch') return `dupla embreagem, ${n} marchas (D/M)`;
+  if (k === 'torque-converter-auto') return `automático com conversor, ${n} marchas (D/M)`;
+  return `manual, ${n} marchas`;
+}
+
+/** Tune that survives a part change: only the kit turbo or a programmable ECU holds a boost setting. */
+function keptTune(car: OwnedCar, parts: readonly string[]): { boostBar?: number } {
+  return parts.includes('turbo-basic') || parts.includes('ecu-programmable') ? (car.tune ?? {}) : {};
+}
+
+/** Resolves a hypothetical part list of an owned car with the resolver version it would use. */
+function resolveOwned(car: OwnedCar, parts: readonly string[], tune = keptTune(car, parts)): BuildResult {
+  return resolveBuild(findCampaignCar(car.baseCarId)!, parts, tune, buildVersionFor(car, parts));
+}
+
 interface Estimate {
   t100: number | null;
   t402: number | null;
 }
 
 /**
- * Campaign mode — chapter 1 "Madrugada Zero". Screens are DOM overlays over the night track; the
+ * Campaign mode — chapter 1 "Madrugada Zero" and chapter 2 "Liga da Madrugada" (one career, one
+ * save; the active chapter picks the events, regions and story). Screens are DOM overlays over the night track; the
  * race reuses the RaceController, SimulationRunner, HUD and DragAI of the Race mode. Every change
  * of the career goes through CareerController (atomic, idempotent, validated).
  */
@@ -103,7 +143,7 @@ export class CareerMode implements Mode {
     this.root = h('div', { class: 'career', 'data-testid': 'career' });
     ctx.overlay.append(this.root);
     clear(ctx.panel);
-    ctx.panel.append(h('h2', {}, 'Campanha'), h('div', { class: 'hint' }, 'Capítulo 1 — Madrugada Zero. Use a tela central para navegar.'));
+    ctx.panel.append(h('h2', {}, 'Campanha'), h('div', { class: 'hint' }, 'Capítulo 1 — Madrugada Zero · Capítulo 2 — Liga da Madrugada. Use a tela central para navegar.'));
     const inp = ctx.input;
     this.offs.push(
       inp.on('upshift', () => this.shift(1)),
@@ -208,6 +248,8 @@ export class CareerMode implements Mode {
         return this.historyScreen();
       case 'market':
         return this.marketScreen();
+      case 'chapters':
+        return this.chaptersScreen();
       default:
         return h('div');
     }
@@ -215,19 +257,22 @@ export class CareerMode implements Mode {
 
   private frame(title: string, testid: string, ...children: (HTMLElement | string | null)[]): HTMLElement {
     const s = this.controller.save;
+    const ch = chapterOf(this.chapter);
+    const evs = eventsOf(ch.id);
+    const done = s ? evs.filter((e) => s.completedEventIds.includes(e.id)).length : 0;
     const status = s
       ? h(
           'div',
           { class: 'career-status' },
           h('span', { 'data-testid': 'career-credits' }, cr(s.credits)),
           h('span', { 'data-testid': 'career-reputation' }, `Reputação ${s.reputation}`),
-          h('span', {}, `${s.completedEventIds.length}/7 noites`),
+          h('span', { 'data-testid': 'career-chapter-progress' }, `${done}/${evs.length} ${ch.id === CHAPTER_1_ID ? 'noites' : 'etapas'}`),
         )
       : null;
     return h(
       'div',
       { class: 'career-screen', 'data-testid': testid },
-      h('header', {}, h('div', { class: 'career-title' }, h('small', {}, `Capítulo 1 · ${CHAPTER_1_TITLE}`), h('h1', {}, title)), status),
+      h('header', {}, h('div', { class: 'career-title' }, h('small', { 'data-testid': 'career-chapter' }, `Capítulo ${ch.number} · ${ch.title}`), h('h1', {}, title)), status),
       h('div', { class: 'career-body' }, ...children.filter((c): c is HTMLElement | string => c !== null)),
     );
   }
@@ -250,12 +295,14 @@ export class CareerMode implements Mode {
 
   private menuScreen(): HTMLElement {
     const s = this.controller.save;
+    const ch = this.chapter;
+    const evs = eventsOf(ch);
     const prog = s
       ? h(
           'div',
           { class: 'career-progress' },
-          h('div', { class: 'bar' }, h('i', { style: `width:${(s.completedEventIds.length / 7) * 100}%` })),
-          h('span', {}, isChapterComplete(s) ? 'Capítulo concluído' : `Próxima noite: ${nextEvent(s)?.title ?? '—'}`),
+          h('div', { class: 'bar' }, h('i', { style: `width:${(evs.filter((e) => s.completedEventIds.includes(e.id)).length / evs.length) * 100}%` })),
+          h('span', {}, isChapterComplete(s, ch) ? 'Capítulo concluído' : `Próximo desafio: ${nextEvent(s, ch)?.title ?? '—'}`),
         )
       : h('div', { class: 'hint' }, 'Nenhuma campanha salva.');
     return this.frame(
@@ -268,7 +315,13 @@ export class CareerMode implements Mode {
         h(
           'div',
           { class: 'career-menu-main' },
-          h('p', { class: 'lead' }, 'Sete noites. Três regiões. Um carro de rua e o que você souber fazer com ele.'),
+          h(
+            'p',
+            { class: 'lead' },
+            ch === CHAPTER_1_ID
+              ? 'Sete noites. Três regiões. Um carro de rua e o que você souber fazer com ele.'
+              : 'Dez etapas. Três regiões novas. Importados, motores modernos e quem souber preparar.',
+          ),
           prog,
           this.nav(
             ['Nova campanha', 'career-new', () => this.confirmNew(), !s],
@@ -276,6 +329,7 @@ export class CareerMode implements Mode {
               ? ([
                   ['Continuar', 'career-continue', () => this.continueCareer(), true],
                   ['Garagem', 'career-garage', () => this.show('garage')],
+                  ...((isChapterUnlocked(s, CHAPTER_2_ID) ? [['Capítulos', 'career-chapters', () => this.show('chapters')]] : []) as [string, string, () => void][]),
                   ['Histórico', 'career-history', () => this.show('history')],
                   ['Exportar save', 'career-export', () => this.exportSave()],
                 ] as [string, string, () => void, boolean?][])
@@ -296,9 +350,68 @@ export class CareerMode implements Mode {
 
   private continueCareer(): void {
     const s = this.controller.save!;
-    if (isChapterComplete(s) && s.seenStorySceneIds.includes('completion')) this.show('garage');
-    else if (isChapterComplete(s)) this.show('ending');
-    else this.show('garage');
+    const ch = this.chapter;
+    const completionScene = ch === CHAPTER_1_ID ? 'completion' : 'c2-completion';
+    // chapter 1 done and chapter 2 never opened: offer the new chapter
+    if (ch === CHAPTER_1_ID && isChapterComplete(s) && s.seenStorySceneIds.includes('completion') && !s.storyMilestones.includes(`${CHAPTER_2_ID}-started`)) {
+      this.show('chapters');
+      return;
+    }
+    if (isChapterComplete(s, ch) && !s.seenStorySceneIds.includes(completionScene)) {
+      this.endingChapter = ch;
+      this.show('ending');
+    } else this.show('garage');
+  }
+
+  /** Chapter selector: chapter 2 opens after chapter 1; progress of both is kept. */
+  private chaptersScreen(): HTMLElement {
+    const s = this.controller.save!;
+    return this.frame(
+      'Capítulos',
+      'career-chapters-screen',
+      h(
+        'div',
+        { class: 'career-grid two' },
+        CHAPTERS.map((c) => {
+          const open = isChapterUnlocked(s, c.id);
+          const evs = eventsOf(c.id);
+          const done = evs.filter((e) => s.completedEventIds.includes(e.id)).length;
+          const active = s.chapterId === c.id;
+          return h(
+            'div',
+            { class: `career-card chapter ${open ? '' : 'locked'} ${active ? 'active' : ''}`, 'data-testid': `chapter-${c.id}`, 'data-open': open ? '1' : '0' },
+            h('small', {}, `Capítulo ${c.number}`),
+            h('h3', {}, c.title),
+            h('p', { class: 'hint' }, c.blurb),
+            h('div', { class: 'career-progress' }, h('div', { class: 'bar' }, h('i', { style: `width:${(done / evs.length) * 100}%` })), h('span', {}, `${done}/${evs.length} ${c.id === CHAPTER_1_ID ? 'noites' : 'etapas'}`)),
+            open
+              ? h(
+                  'button',
+                  {
+                    class: active ? '' : 'primary',
+                    'data-testid': `chapter-open-${c.id}`,
+                    disabled: active,
+                    onclick: () => void this.openChapter(c.id),
+                  },
+                  active ? 'Capítulo atual' : done ? 'Voltar a este capítulo' : 'Começar capítulo',
+                )
+              : h('div', { class: 'hint' }, 'Conclua o capítulo anterior para liberar.'),
+          );
+        }),
+      ),
+      this.nav(['Voltar', 'chapters-back', () => this.show(this.controller.save ? 'garage' : 'menu')]),
+    );
+  }
+
+  private async openChapter(id: ChapterId): Promise<void> {
+    if (!this.guard()) return;
+    const r = await this.controller.setActiveChapter(id);
+    if (!r.ok) {
+      toast(r.error, 'error');
+      return;
+    }
+    this.estimates.clear();
+    this.playScenes('start', undefined, () => this.show('garage'));
   }
 
   private exportSave(): void {
@@ -330,7 +443,7 @@ export class CareerMode implements Mode {
         { class: 'career-card starter', 'data-testid': `starter-${s.baseCarId}` },
         this.preview(car, 360, 170),
         h('h3', {}, car.name),
-        h('div', { class: 'spec' }, `${car.engine.ratedPowerCv.toLocaleString('pt-BR')} cv · ${Math.max(...car.engine.torqueCurve.torqueNm).toFixed(0)} N·m · ${car.massKg} kg · tração ${car.drivenAxle === 'rear' ? 'traseira' : 'dianteira'}`),
+        h('div', { class: 'spec' }, `${car.engine.ratedPowerCv.toLocaleString('pt-BR')} cv · ${Math.max(...car.engine.torqueCurve.torqueNm).toFixed(0)} N·m · ${car.massKg} kg · tração ${driveLabel(car)}`),
         h('p', { class: 'hint' }, car.description),
         h('div', { class: 'price' }, cr(s.price)),
         h('button', { class: 'primary', 'data-testid': `choose-${s.baseCarId}`, onclick: () => void this.startCareer(s.baseCarId) }, 'Comprar este carro'),
@@ -361,7 +474,8 @@ export class CareerMode implements Mode {
   /** Plays the pending scenes of a trigger, marks them seen, then continues. */
   playScenes(trigger: StoryTrigger, eventId: string | undefined, then: () => void): void {
     const s = this.controller.save;
-    const scenes = s ? pendingScenes(trigger, s.seenStorySceneIds, eventId) : [];
+    const chapter = eventId ? (findEvent(eventId)?.chapter ?? this.chapter) : trigger === 'completion' ? this.endingChapter : this.chapter;
+    const scenes = s ? pendingScenes(trigger, s.seenStorySceneIds, eventId, chapter) : [];
     if (!scenes.length) {
       then();
       return;
@@ -425,8 +539,10 @@ export class CareerMode implements Mode {
       h('dt', {}, 'Massa'),
       h('dd', {}, `${c.massKg} kg`),
       h('dt', {}, 'Tração'),
-      h('dd', {}, c.drivenAxle === 'rear' ? 'traseira' : 'dianteira'),
-      h('dt', {}, 'Embreagem'),
+      h('dd', { 'data-testid': 'stat-drive' }, driveLabel(c)),
+      h('dt', {}, 'Câmbio'),
+      h('dd', { 'data-testid': 'stat-gearbox' }, gearboxLabel(c)),
+      h('dt', {}, (c.transmission.kind ?? 'manual') === 'manual' ? 'Embreagem' : 'Capacidade do câmbio'),
       h('dd', {}, `${c.transmission.clutch.maxTorqueNm} N·m`),
       h('dt', {}, 'Relação final'),
       h('dd', {}, c.transmission.finalDrive.toFixed(3).replace('.', ',')),
@@ -440,8 +556,9 @@ export class CareerMode implements Mode {
     const car = this.controller.activeCar!;
     const b = ownedCarBuild(car);
     const cfg = ownedCarConfig(car);
-    const stock = resolveBuild(findCampaignCar(car.baseCarId)!, []);
-    const nxt = nextEvent(s);
+    const stock = resolveOwned(car, [], {});
+    const ch = this.chapter;
+    const nxt = nextEvent(s, ch);
     const others = s.ownedCars.filter((c) => c.id !== car.id);
     const workshopOpen = unlocksOf(s).has('workshop-basic');
     return this.frame(
@@ -473,20 +590,100 @@ export class CareerMode implements Mode {
           stock.ok && b.ok && car.installedParts.length
             ? h('div', { class: 'hint' }, `Original: ${stock.peakPowerCv.toFixed(0)} cv / ${stock.peakTorqueNm.toFixed(0)} N·m`)
             : null,
-          h('h3', {}, 'Próxima noite'),
+          h('h3', {}, ch === CHAPTER_1_ID ? 'Próxima noite' : 'Próxima etapa'),
           nxt
             ? h('div', { class: 'career-next', 'data-testid': 'garage-next-event' }, `${nxt.order}. ${nxt.title} — ${rivalOf(nxt).name} "${rivalOf(nxt).nickname}", ${RACE_DISTANCES[nxt.distance].label}, ${nxt.regionLabel}`)
             : h('div', { class: 'career-next' }, 'Capítulo concluído.'),
+          s.ownedCars.length > 1
+            ? h(
+                'button',
+                { 'data-testid': 'garage-sell', onclick: () => void this.sellActive() },
+                `Vender este carro (${cr(resaleValue(car))})`,
+              )
+            : null,
         ),
       ),
       this.nav(
         ['Eventos', 'garage-events', () => this.show('events'), true],
+        ...((isChapterUnlocked(s, CHAPTER_2_ID) ? [['Capítulos', 'garage-chapters', () => this.show('chapters')]] : []) as [string, string, () => void][]),
         ...((workshopOpen ? [['Oficina', 'garage-workshop', () => this.playScenes('workshop', undefined, () => this.show('workshop'))]] : []) as [string, string, () => void][]),
         ['Dinamômetro', 'garage-dyno', () => this.show('dyno')],
-        ['Classificados', 'garage-market', () => this.show('market')],
+        [isChapterUnlocked(s, CHAPTER_2_ID) ? 'Classificados e revenda' : 'Classificados', 'garage-market', () => this.show('market')],
         ['Histórico', 'garage-history', () => this.show('history')],
-        ...((isChapterComplete(s) ? [['Final do capítulo', 'garage-ending', () => this.show('ending')]] : []) as [string, string, () => void][]),
+        ...((isChapterComplete(s, ch)
+          ? [
+              [
+                'Final do capítulo',
+                'garage-ending',
+                () => {
+                  this.endingChapter = ch;
+                  this.show('ending');
+                },
+              ],
+            ]
+          : []) as [string, string, () => void][]),
         ['Menu', 'garage-menu', () => this.show('menu')],
+      ),
+    );
+  }
+
+  private async sellActive(): Promise<void> {
+    if (!this.guard()) return;
+    const car = this.controller.activeCar!;
+    const value = resaleValue(car);
+    const n = car.installedParts.length;
+    if (!confirm(`Vender ${car.nickname} por ${cr(value)}?${n ? ` As ${n} peças instaladas vão para o estoque deste modelo.` : ''} Esta venda não pode ser desfeita.`)) return;
+    const r = await this.controller.sellCar(car.id);
+    if (!r.ok) toast(r.error, 'error');
+    else toast(`${car.nickname} vendido por ${cr(r.value.credits)}.`);
+    this.show('garage');
+  }
+
+  private async buyCarConfirmed(baseCarId: string, price: number): Promise<void> {
+    if (!this.guard()) return;
+    const car = findCampaignCar(baseCarId)!;
+    if (!confirm(`Comprar ${car.name} por ${cr(price)}?`)) return;
+    const r = await this.controller.buyCar(baseCarId);
+    if (!r.ok) toast(r.error, 'error');
+    else toast(`${car.name} comprado. Selecione-o na garagem.`);
+    this.show('market');
+  }
+
+  /** Chapter 2 dealer: the ten cars of the league, each with its requirements. */
+  private dealerSection(): HTMLElement | null {
+    const s = this.controller.save!;
+    if (!isChapterUnlocked(s, CHAPTER_2_ID)) return null;
+    return h(
+      'section',
+      { class: 'career-dealer', 'data-testid': 'career-dealer' },
+      h('h2', {}, 'Revenda da Liga'),
+      h('p', { class: 'hint' }, 'Preços de balanceamento do jogo (fictícios). Um carro por modelo; Evo e 335i pedem reputação.'),
+      h(
+        'div',
+        { class: 'career-grid three' },
+        DEALER_CARS.map((o) => {
+          const car = findCampaignCar(o.baseCarId)!;
+          const a = offerAvailability(s, o);
+          const owned = s.ownedCars.some((c) => c.baseCarId === o.baseCarId);
+          return h(
+            'div',
+            { class: `career-card ${a.ok ? '' : 'locked'}`, 'data-testid': `dealer-${o.baseCarId}` },
+            this.preview(car, 320, 150),
+            h('h3', {}, car.name),
+            h('div', { class: 'spec' }, `${car.engine.ratedPowerCv} cv · ${Math.max(...car.engine.torqueCurve.torqueNm).toFixed(0)} N·m · ${car.massKg} kg · ${driveLabel(car)} · ${gearboxLabel(car)}`),
+            h('div', { class: 'price' }, cr(o.price)),
+            !a.ok ? h('div', { class: 'hint', 'data-testid': `dealer-reason-${o.baseCarId}` }, a.reason) : null,
+            h(
+              'button',
+              {
+                'data-testid': `dealer-buy-${o.baseCarId}`,
+                disabled: !a.ok || owned || s.credits < o.price,
+                onclick: () => void this.buyCarConfirmed(o.baseCarId, o.price),
+              },
+              owned ? 'Na garagem' : 'Comprar',
+            ),
+          );
+        }),
       ),
     );
   }
@@ -527,6 +724,7 @@ export class CareerMode implements Mode {
           );
         }),
       ),
+      this.dealerSection(),
       this.nav(['Voltar à garagem', 'market-back', () => this.show('garage')]),
     );
   }
@@ -554,9 +752,15 @@ export class CareerMode implements Mode {
   private workshopScreen(): HTMLElement {
     const s = this.controller.save!;
     const car = this.controller.activeCar!;
-    const tab = WORKSHOP_TABS.find((t) => t.id === this.workshopTab) ?? WORKSHOP_TABS[0]!;
+    const visible = this.visibleParts(car);
+    // a category is shown when it has parts for this car; a car of resolver version 1 keeps every
+    // chapter 1 slot (its factory part), exactly as the chapter 1 workshop showed it
+    const legacy = buildVersionFor(car, car.installedParts) === 1;
+    const catVisible = (c: PartCategory): boolean => visible.some((p) => p.category === c) || (legacy && CATEGORY_ORDER.includes(c));
+    const tabs = WORKSHOP_TABS.map((t) => ({ ...t, categories: t.categories.filter(catVisible) })).filter((t) => t.categories.length);
+    const tab = tabs.find((t) => t.id === this.workshopTab) ?? tabs[0]!;
     const before = ownedCarBuild(car);
-    const parts = PARTS.filter((p) => tab.categories.includes(p.category));
+    const parts = visible.filter((p) => tab.categories.includes(p.category));
     const stockSel = this.selectedPart?.startsWith('stock:') ? (this.selectedPart.slice(6) as PartCategory) : null;
     const sel = stockSel ? undefined : this.selectedPart ? findPart(this.selectedPart) : parts[0];
     const left = h(
@@ -576,7 +780,7 @@ export class CareerMode implements Mode {
       h(
         'div',
         { class: 'ws-tabs' },
-        WORKSHOP_TABS.map((t) =>
+        tabs.map((t) =>
           h(
             'button',
             {
@@ -628,6 +832,25 @@ export class CareerMode implements Mode {
     );
   }
 
+  /**
+   * Parts the shop offers for this car: parts of resolver version 2 appear once chapter 2 is open,
+   * and only those that fit the car (engine family, induction, gearbox, driven axles). An AP part
+   * never shows on an N55; a manual clutch never shows on a DSG.
+   */
+  private visibleParts(car: OwnedCar): PartDef[] {
+    const s = this.controller.save!;
+    const base = findCampaignCar(car.baseCarId)!;
+    const c2 = isChapterUnlocked(s, CHAPTER_2_ID);
+    const v2 = buildVersionFor(car, car.installedParts) === 2;
+    return ALL_PARTS.filter((p) => {
+      if (car.installedParts.includes(p.id)) return true;
+      if (p.since === 2 && !c2) return false;
+      // version 2 compatibility rules apply to the cars resolved by version 2 and to v2 parts
+      if ((v2 || p.since === 2) && incompatibility(base, p)) return false;
+      return true;
+    });
+  }
+
   private async restoreAll(n: number): Promise<void> {
     if (!this.guard()) return;
     if (!confirm(`Voltar o carro ao original? ${n === 1 ? 'A peça vai' : `As ${n} peças vão`} para o estoque e pode${n === 1 ? '' : 'm'} ser reinstalada${n === 1 ? '' : 's'} depois.`)) return;
@@ -663,7 +886,7 @@ export class CareerMode implements Mode {
     const base = findCampaignCar(car.baseCarId)!;
     const inSlot = car.installedParts.filter((id) => findPart(id)?.category === cat);
     const nextParts = car.installedParts.filter((id) => !inSlot.includes(id));
-    const after = resolveBuild(base, nextParts, nextParts.includes('turbo-basic') ? (car.tune ?? {}) : {});
+    const after = resolveOwned(car, nextParts);
     const button = inSlot.length
       ? h(
           'button',
@@ -747,8 +970,7 @@ export class CareerMode implements Mode {
     const owned = s.inventoryPartIds.includes(`${p.id}@${car.baseCarId}`);
     const unlocked = isPartUnlocked(s, p);
     const nextParts = installed ? car.installedParts.filter((x) => x !== p.id) : CareerController.withPart(car.installedParts, p.id).parts;
-    const tune = nextParts.includes('turbo-basic') ? (car.tune ?? {}) : {};
-    const after = resolveBuild(findCampaignCar(car.baseCarId)!, nextParts, tune);
+    const after = resolveOwned(car, nextParts);
     const reqs = partRequirements(p).map((u) => `${UNLOCK_LABEL[u]}${unlocksOf(s).has(u) ? ' ✓' : ''}`);
     const cmpHost = this.compareTable(before, after, installed ? 'Sem a peça' : 'Depois');
     const act = async (fn: () => Promise<{ ok: boolean; error?: string }>, okMsg: string): Promise<void> => {
@@ -791,18 +1013,23 @@ export class CareerMode implements Mode {
     const b = ownedCarBuild(car);
     const canvas = h('canvas', { class: 'career-dyno-chart', 'data-testid': 'career-dyno-chart' }) as HTMLCanvasElement;
     const info = h('div', { class: 'hint', 'data-testid': 'career-dyno-info' }, 'Medindo no dinamômetro…');
+    const programmable = car.installedParts.includes('ecu-programmable');
+    const factoryBoost = findCampaignCar(car.baseCarId)!.engine.turbo?.maxBoostBar;
+    // programmable ECU (Caio): factory boost + 0.1 … + 0.8 bar; kit turbo (tuners): 0.4 … 1.0 bar
+    const [bMin, bMax, bDef] =
+      programmable && factoryBoost !== undefined ? [factoryBoost + 0.1, factoryBoost + 0.8, b.ok ? Math.max(...b.steadyBoostBar.map((x) => x.bar), factoryBoost) : factoryBoost] : [0.4, 1.0, 0.6];
     const tuneRow =
-      canTuneBoost(s) && car.installedParts.includes('turbo-basic')
+      (canTuneBoost(s) && car.installedParts.includes('turbo-basic')) || (programmable && factoryBoost !== undefined)
         ? h(
             'div',
             { class: 'row' },
-            h('label', {}, 'Pressão do turbo (preparadores)'),
+            h('label', {}, programmable ? 'Pressão alvo da ECU programável (Caio)' : 'Pressão do turbo (preparadores)'),
             h('input', {
               type: 'range',
-              min: '0.4',
-              max: '1.0',
+              min: bMin.toFixed(2),
+              max: bMax.toFixed(2),
               step: '0.05',
-              value: String(car.tune?.boostBar ?? 0.6),
+              value: String(car.tune?.boostBar ?? bDef),
               'data-testid': 'career-boost',
               onchange: (e: Event) =>
                 void (async () => {
@@ -812,7 +1039,7 @@ export class CareerMode implements Mode {
                   this.show('dyno');
                 })(),
             }),
-            h('span', {}, `${f2(car.tune?.boostBar ?? 0.6)} bar`),
+            h('span', {}, car.tune?.boostBar !== undefined ? `${f2(car.tune.boostBar)} bar` : programmable ? 'mapa padrão' : `${f2(0.6)} bar`),
           )
         : null;
     setTimeout(() => this.runDyno(b, canvas, info), 20);
@@ -869,19 +1096,20 @@ export class CareerMode implements Mode {
   private eventsScreen(): HTMLElement {
     const s = this.controller.save!;
     const label = { locked: 'bloqueado', available: 'disponível', completed: 'concluído', final: 'desafio final' } as const;
+    const ch = this.chapter;
     return this.frame(
-      'Noites',
+      ch === CHAPTER_1_ID ? 'Noites' : 'Etapas da Liga',
       'career-events',
       h(
         'div',
         { class: 'career-regions' },
-        REGIONS.map((r) =>
+        REGIONS.filter((r) => r.chapter === ch).map((r) =>
           h(
             'section',
             { class: `region ${r.id}` },
             h('h2', {}, r.label),
             h('div', { class: 'hint' }, r.blurb),
-            EVENTS.filter((e) => e.trackId === r.id).map((e) => {
+            eventsOf(ch).filter((e) => e.trackId === r.id).map((e) => {
               const st = eventStatus(s, e);
               const rv = rivalOf(e);
               return h(
@@ -908,9 +1136,16 @@ export class CareerMode implements Mode {
   }
 
   selectedEvent: string | null = null;
+  /** Chapter whose ending screen is shown. */
+  private endingChapter: ChapterId = CHAPTER_1_ID;
+
+  /** Active chapter of the save. */
+  get chapter(): ChapterId {
+    return this.controller.save?.chapterId ?? CHAPTER_1_ID;
+  }
 
   private rivalScreen(): HTMLElement {
-    const ev = findEvent(this.selectedEvent ?? '') ?? nextEvent(this.controller.save!) ?? EVENTS[0]!;
+    const ev = findEvent(this.selectedEvent ?? '') ?? nextEvent(this.controller.save!, this.chapter) ?? eventsOf(this.chapter)[0]!;
     const rv = rivalOf(ev);
     const rb = rivalBuild(rv);
     const s = this.controller.save!;
@@ -918,7 +1153,7 @@ export class CareerMode implements Mode {
     this.trackCfg = findCareerTrack(ev.trackId);
     this.runner.setTrack(this.trackCfg);
     return this.frame(
-      ev.finale ? 'Desafio final' : `Noite ${ev.order}`,
+      ev.finale ? 'Desafio final' : eventLabel(ev),
       'career-rival',
       h(
         'div',
@@ -938,7 +1173,7 @@ export class CareerMode implements Mode {
             h('dt', {}, 'Carro'),
             h('dd', {}, rb.car.name),
             h('dt', {}, 'Ficha'),
-            h('dd', {}, `${rb.peakPowerCv.toFixed(0)} cv · ${rb.peakTorqueNm.toFixed(0)} N·m · ${rb.car.massKg} kg${rb.car.engine.induction === 'turbo' ? ' · turbo (não original)' : ''}`),
+            h('dd', {}, `${rb.peakPowerCv.toFixed(0)} cv · ${rb.peakTorqueNm.toFixed(0)} N·m · ${rb.car.massKg} kg${rb.car.engine.induction === 'turbo' && findCampaignCar(rv.baseCarId)!.engine.induction !== 'turbo' ? ' · turbo (não original)' : ''} · ${driveLabel(rb.car)} · ${gearboxLabel(rb.car)}`),
             h('dt', {}, 'Peças'),
             h('dd', {}, rv.parts.length ? rv.parts.map((id) => findPart(id)!.name).join(', ') : 'original de fábrica'),
             h('dt', {}, 'Piloto'),
@@ -1078,7 +1313,7 @@ export class CareerMode implements Mode {
       opponentResult: opponent,
       outcome,
       completedAt: new Date().toISOString(),
-      buildVersion: BUILD_RESOLVER_VERSION,
+      buildVersion: pb.ok ? pb.version : BUILD_RESOLVER_VERSION,
       playerBuildKey: pb.ok ? pb.key : '',
       opponentBuildKey: rb.key,
     };
@@ -1098,8 +1333,10 @@ export class CareerMode implements Mode {
     });
     const trigger: StoryTrigger = outcome === 'win' ? 'victory' : 'defeat';
     const after = (): void => {
-      if (r.value.chapterCompleted) this.show('ending');
-      else this.show('result');
+      if (r.value.chapterCompleted) {
+        this.endingChapter = ev.chapter;
+        this.show('ending');
+      } else this.show('result');
     };
     // result first, then the scenes on top of it
     this.show('result');
@@ -1157,7 +1394,7 @@ export class CareerMode implements Mode {
     const row = (label: string, a: string, b: string): HTMLElement => h('tr', {}, h('td', {}, label), h('td', {}, a), h('td', {}, b));
     const title = { win: 'Vitória', loss: 'Derrota', 'red-light': 'Queima de largada', dnf: 'Não completou' }[r.outcome];
     const rivalLine = won ? rv.lines.win : rv.lines.lose;
-    const nxt = nextEvent(this.controller.save!);
+    const nxt = nextEvent(this.controller.save!, ev.chapter);
     return this.frame(
       title,
       'career-result',
@@ -1205,7 +1442,7 @@ export class CareerMode implements Mode {
       this.nav(
         ['Revanche', 'result-retry', () => this.startRace(ev), !won],
         ['Garagem', 'result-garage', () => this.show('garage'), won],
-        ['Noites', 'result-events', () => this.show('events')],
+        [ev.chapter === CHAPTER_1_ID ? 'Noites' : 'Etapas', 'result-events', () => this.show('events')],
       ),
     );
   }
@@ -1214,15 +1451,18 @@ export class CareerMode implements Mode {
     const s = this.controller.save!;
     const car = this.controller.activeCar!;
     const wins = s.results.filter((r) => r.outcome === 'win').length;
-    const best = s.results.filter((r) => r.playerResult.et !== null && r.eventId === 'e7-rei-da-madrugada' && r.outcome === 'win').map((r) => r.playerResult.et!);
+    const ch = this.endingChapter;
+    const finale = eventsOf(ch).find((e) => e.finale)!;
+    const titleText = ch === CHAPTER_1_ID ? 'Rei da Madrugada' : 'Dono da Liga';
+    const best = s.results.filter((r) => r.playerResult.et !== null && r.eventId === finale.id && r.outcome === 'win').map((r) => r.playerResult.et!);
     const b = ownedCarBuild(car);
     const host = this.frame(
-      'Rei da Madrugada',
+      titleText,
       'career-ending',
       h(
         'div',
         { class: 'career-ending' },
-        h('div', { class: 'ending-shop' }, this.preview(ownedCarConfig(car), 620, 260, 'studio'), h('div', { class: 'ending-title', 'data-testid': 'ending-title' }, 'Rei da Madrugada')),
+        h('div', { class: 'ending-shop' }, this.preview(ownedCarConfig(car), 620, 260, 'studio'), h('div', { class: 'ending-title', 'data-testid': 'ending-title' }, titleText)),
         h(
           'dl',
           { class: 'career-stats' },
@@ -1237,10 +1477,14 @@ export class CareerMode implements Mode {
           h('dt', {}, 'Melhor ET na final'),
           h('dd', {}, best.length ? `${f3(Math.min(...best))} s` : '—'),
           h('dt', {}, 'Concluído em'),
-          h('dd', {}, s.chapterCompletedAt?.slice(0, 10) ?? '—'),
+          h('dd', {}, (s.chapterCompletions[ch] ?? (ch === CHAPTER_1_ID ? s.chapterCompletedAt : null))?.slice(0, 10) ?? '—'),
         ),
       ),
-      this.nav(['Garagem', 'ending-garage', () => this.show('garage'), true], ['Menu', 'ending-menu', () => this.show('menu')]),
+      this.nav(
+        ...((ch === CHAPTER_1_ID && isChapterUnlocked(s, CHAPTER_2_ID) ? [['Capítulo 2: Liga da Madrugada', 'ending-chapter2', () => this.show('chapters'), true]] : []) as [string, string, () => void, boolean?][]),
+        ['Garagem', 'ending-garage', () => this.show('garage'), ch !== CHAPTER_1_ID],
+        ['Menu', 'ending-menu', () => this.show('menu')],
+      ),
     );
     setTimeout(() => this.playScenes('completion', undefined, () => undefined), 400);
     return host;
@@ -1256,7 +1500,7 @@ export class CareerMode implements Mode {
         ? h(
             'table',
             { class: 'results' },
-            h('tr', {}, h('th', {}, 'Data'), h('th', {}, 'Noite'), h('th', {}, 'Resultado'), h('th', {}, 'RT'), h('th', {}, 'ET'), h('th', {}, 'Rival ET'), h('th', {}, 'Prêmio')),
+            h('tr', {}, h('th', {}, 'Data'), h('th', {}, 'Evento'), h('th', {}, 'Resultado'), h('th', {}, 'RT'), h('th', {}, 'ET'), h('th', {}, 'Rival ET'), h('th', {}, 'Prêmio')),
             rows.map((r) =>
               h(
                 'tr',
@@ -1375,5 +1619,27 @@ function stockSpec(car: CarConfig, cat: PartCategory): string {
       return `Relação final original: ${car.transmission.finalDrive.toFixed(3).replace('.', ',')}.`;
     case 'tires':
       return `Pneus de rua originais (μ de pico ${car.tires.muPeak.toFixed(2).replace('.', ',')}).`;
+    case 'ecu':
+      return e.turbo
+        ? `ECU original: pressão de fábrica ${e.turbo.maxBoostBar.toFixed(2).replace('.', ',')} bar e o limitador de torque da curva original.`
+        : `ECU original: corte em ${e.revLimitRpm} rpm.`;
+    case 'intercooler':
+      return 'Intercooler original de fábrica (≈ 60 % de eficiência).';
+    case 'boost-control':
+      return 'Wastegate original: segura ≈ 0,35 bar acima da pressão de fábrica.';
+    case 'cylinder-head':
+      return 'Cabeçote original, dutos de fundição.';
+    case 'pistons':
+      return `Pistões e bielas originais; taxa ${e.compressionRatio.toFixed(1).replace('.', ',')}:1.`;
+    case 'flywheel':
+      return `Volante original (inércia do motor ${e.inertiaKgM2.toFixed(3).replace('.', ',')} kg·m²).`;
+    case 'gearbox':
+      return car.transmission.kind === 'dual-clutch'
+        ? `Embreagens da dupla embreagem originais: ${car.transmission.clutch.maxTorqueNm} N·m.`
+        : `Elementos e conversor originais: ${car.transmission.clutch.maxTorqueNm} N·m.`;
+    case 'awd':
+      return car.awd ? `Diferencial central original: ${car.awd.centerCouplingNm} N·m de acoplamento.` : 'Sem tração integral.';
+    case 'suspension':
+      return 'Suspensão original de rua.';
   }
 }

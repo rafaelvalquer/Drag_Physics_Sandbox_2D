@@ -176,7 +176,9 @@ export class DragAI {
 
     // shifting
     const g = sim.gear;
-    if (g >= 1 && g < sim.gearbox.gearCount && !sim.shift.active && sim.simTime - this.lastShiftAt > 0.4) {
+    // an automatic with torque converter is driven in D: its shift schedule does the shifting
+    const selfShifting = sim.transmissionKind === 'torque-converter-auto';
+    if (!selfShifting && g >= 1 && g < sim.gearbox.gearCount && !sim.shift.active && sim.simTime - this.lastShiftAt > 0.4) {
       const target = this.shiftPoints[g - 1]! + p.shiftOffsetRpm + (this.shiftJitter[g - 1] ?? 0);
       // Engine rpm only reflects road speed once the clutch is locked; skilled drivers also ignore
       // revs produced by wheelspin.
@@ -197,14 +199,15 @@ export class DragAI {
    * converted to a pedal position with the engine torque map, and corrected by an integral trim on
    * the measured slip ratio. Only the pedal is written – the physics is the same as the player's.
    */
-  private launchPedal(sim: VehicleSimulation, torqueNm: number): number {
+  private launchPedal(sim: VehicleSimulation, torqueNm: number, minPedal = 0.5 / 1.15): number {
     const e = sim.car.engine;
     const launchRpm = sim.car.transmission.clutch.launchRpm;
     const boost = sim.engine.turbo ? sim.engine.turbo.boostPa : 0;
     const torqueAt = (p: number): number =>
       sim.engine.steadyNetTorque(sim.engine.plateOpeningForPedal(p), launchTargetRpm(p, e.idleRpm, launchRpm), boost);
-    // launch at least half-way between idle and the launch speed (a low-rpm launch bogs)
-    const pMin = 0.5 / 1.15;
+    // launch at least half-way between idle and the launch speed (a low-rpm launch bogs), unless
+    // the tyres are already spinning there (boost building on a turbo engine)
+    const pMin = minPedal;
     if (torqueAt(1) <= torqueNm) return 1;
     if (torqueAt(pMin) >= torqueNm) return pMin;
     let lo = pMin;
@@ -244,8 +247,13 @@ export class DragAI {
     // Launch (clutch still slipping): the pedal also sets the speed the clutch logic holds, so
     // pick the pedal whose torque at that speed matches the tire-limited request.
     if (sim.clutchCtl.mode !== 'LOCKED') {
-      this.pedal = this.launchPedal(sim, tEngine);
-      this.tcTrim = 0;
+      // Slip feedback during the launch only takes torque away: with a turbo the torque of a
+      // given pedal keeps rising while the boost builds, so the driver lifts as the tyre goes past
+      // its peak slip. Without excess slip the trim stays 0 and the launch is the feed-forward one.
+      const errL = clamp((slipTarget - slip) / slipTarget, -3, 1);
+      this.tcTrim = Math.min(0, clamp(this.tcTrim + dt * tc.trimGain * errL * 0.5, -0.6, 0.6));
+      const floor = this.tcTrim < 0 ? 0.15 : 0.5 / 1.15;
+      this.pedal = this.launchPedal(sim, tEngine * Math.max(1 + this.tcTrim, 0.25), floor);
       return;
     }
     const err = clamp((slipTarget - slip) / slipTarget, -3, 1);
