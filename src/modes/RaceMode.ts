@@ -190,12 +190,15 @@ export class RaceMode implements Mode {
       h(
         'select',
         { 'data-testid': testid, onchange: (e: Event) => on((e.target as HTMLSelectElement).value as T) },
-        [
-          ...(testid === 'race-opponent' ? opts.filter(([v]) => v === '').map(([v, label]) => h('option', { value: v, selected: value === v }, label)) : []),
-          ...CAR_GROUPS.map((group) => h('optgroup', { label: group.label },
-            group.cars.map((car) => h('option', { value: car.id, selected: car.id === value }, car.name)),
-          )),
-        ],
+        // car selectors list the grouped catalogue; the others (AI level, distance, tree) their own options
+        testid === 'race-car' || testid === 'race-opponent'
+          ? [
+              ...(testid === 'race-opponent' ? opts.filter(([v]) => v === '').map(([v, label]) => h('option', { value: v, selected: value === v }, label)) : []),
+              ...CAR_GROUPS.map((group) => h('optgroup', { label: group.label },
+                group.cars.map((car) => h('option', { value: car.id, selected: car.id === value }, car.name)),
+              )),
+            ]
+          : opts.map(([v, label]) => h('option', { value: v, selected: value === v }, label)),
       ) as HTMLSelectElement;
     const cars = LAB_CARS.map((c) => [c.id, c.name] as [string, string]);
     this.resultsHost = h('div', { 'data-testid': 'results' });

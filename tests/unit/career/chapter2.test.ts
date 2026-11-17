@@ -235,6 +235,27 @@ describe('save v2 and migration', () => {
     expect(b.ok && v1.ok && b.key === v1.key).toBe(true);
   });
 
+  it('a v1 save still stored in the old format opens chapter 2 and accepts changes', async () => {
+    // regression: load() migrated the save, but every write re-read the raw v1 document
+    // ("Cannot read properties of undefined (reading 'includes')" when opening chapter 2)
+    const store = new MemoryStore();
+    await store.put('career', v1Doc(true));
+    const c = new CareerController(new CareerRepository(store, 'slot-1'));
+    await c.load();
+    const open = await c.setActiveChapter(CHAPTER_2_ID);
+    expect(open.ok, open.ok ? '' : open.error).toBe(true);
+    expect(c.save!.chapterId).toBe(CHAPTER_2_ID);
+    expect(c.save!.version).toBe(CAREER_SAVE_VERSION);
+    expect(c.save!.storyMilestones).toContain('chapter-2-started');
+    expect(c.save!.revision).toBe(10);
+    expect(c.save!.credits).toBe(5120);
+    // the document written back is in the current format
+    const stored = await store.get<{ version: number; unlockedChapters: string[] }>('career', 'slot-1');
+    expect(stored!.version).toBe(CAREER_SAVE_VERSION);
+    expect(stored!.unlockedChapters).toEqual([CHAPTER_1_ID, CHAPTER_2_ID]);
+    expect((await c.setActiveCar('car-1-vw-gol-gts-1988')).ok).toBe(true);
+  });
+
   it('migrates an unfinished save without opening chapter 2', () => {
     const r = parseCareerSave(v1Doc(false));
     expect(r.ok && r.save.unlockedChapters).toEqual([CHAPTER_1_ID]);

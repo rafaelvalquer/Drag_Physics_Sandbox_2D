@@ -43,7 +43,14 @@ export class CareerRepository {
     return this.store.update<CareerSave>(CAREER_STORE, this.slotId, (cur) => {
       const currentRev = cur === undefined ? null : cur.revision;
       if (currentRev !== expectedRevision) throw new CareerConflictError();
-      const base = cur === undefined ? null : (structuredClone(cur) as CareerSave);
+      // the stored document may still be in an older format (e.g. a v1 save written before chapter
+      // 2): migrate and validate it exactly as load() does, so `fn` always gets the current shape
+      let base: CareerSave | null = null;
+      if (cur !== undefined) {
+        const parsed = parseCareerSave(structuredClone(cur));
+        if (!parsed.ok) throw new Error(`save da campanha inválido: ${parsed.errors.join('; ')}`);
+        base = parsed.save;
+      }
       const next = fn(base);
       next.slotId = this.slotId;
       next.revision = (currentRev ?? -1) + 1;
