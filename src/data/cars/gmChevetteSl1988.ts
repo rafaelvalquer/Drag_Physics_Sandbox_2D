@@ -64,7 +64,7 @@ export const CAR_GM_CHEVETTE_SL_1988: CarConfig = {
     tempSensitivityPerC: 0.0018,
   },
   exhaust: periodStockExhaust(0.42, 34, { tailpipeDiameterMm: 45, collectorLengthM: 2.1, outputGain: 0.8 }),
-  acoustic: periodAcoustic({ intakeGain: 0.78, blockGain: 0.64, mechanicalNoise: 0.7, transmissionGain: 0.6, gearTeeth: 16 }),
+  acoustic: periodAcoustic({ exhaustGain: 1.12, intakeGain: 0.78, blockGain: 0.64, mechanicalNoise: 0.7, transmissionGain: 0.6, gearTeeth: 16 }),
   visual: {
     bodyStyle: 'chevetteSl88',
     color: '#d8c79a',

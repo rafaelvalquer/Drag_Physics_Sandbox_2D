@@ -5,7 +5,7 @@ import { carToAcousticConfig } from '../audio/dsp/AcousticConfig';
 import { AF } from '../core/contracts';
 import { MonotoneCubic } from '../core/math';
 import { celsiusToKelvin, rpmToRadS } from '../core/units';
-import { LAB_CARS, cloneCar } from '../data/cars/index';
+import { CAR_GROUPS, LAB_CARS, cloneCar } from '../data/cars/index';
 import { exhaustPreset, type ExhaustPresetId } from '../data/exhaustPresets';
 import type { CarConfig, TrackConfig } from '../data/schema';
 import { findTrack } from '../data/tracks/index';
@@ -144,7 +144,7 @@ export class DynoMode implements Mode {
             'data-testid': 'dyno-car',
             onchange: (ev: Event) => void this.selectCar((ev.target as HTMLSelectElement).value),
           },
-          LAB_CARS.map((c) => h('option', { value: c.id, selected: c.id === this.car.id }, `${c.name} – ${c.engine.name}`)),
+          CAR_GROUPS.map((group) => h('optgroup', { label: group.label }, group.cars.map((c) => h('option', { value: c.id, selected: c.id === this.car.id }, `${c.name} – ${c.engine.name}`)))),
         ),
       ),
       h('h3', {}, 'Varredura em plena carga'),

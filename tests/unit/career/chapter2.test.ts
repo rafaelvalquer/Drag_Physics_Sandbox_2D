@@ -78,7 +78,7 @@ describe('build resolver v2', () => {
       } else if (!v1.ok && !v2.ok) expect(v2.errors).toEqual(v1.errors);
     }
     expect(compared).toBeGreaterThan(60);
-  });
+  }, 600_000); // every chapter 1 car × every part of the slot catalogue (~600 builds, twice)
 
   it('keeps old build keys and marks version 2 keys', () => {
     const base = findCampaignCar('vw-gol-gts-1988')!;
@@ -323,7 +323,7 @@ describe('chapter 2 progression and economy', () => {
     const car = c.activeCar!;
     expect(buildVersionFor(car, car.installedParts)).toBe(1);
     expect(car.buildVersion).toBe(1);
-    expect(buildVersionFor(car, ['flywheel-light'])).toBe(2);
+    expect(buildVersionFor(car, ['flywheel-light-modern'])).toBe(2);
   });
 
   it('chapter 2 parts show their stage when locked', async () => {

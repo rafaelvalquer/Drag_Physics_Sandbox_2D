@@ -16,7 +16,7 @@ export default defineConfig({
   reporter: [['list']],
   use: {
     baseURL: `http://localhost:${PORT}`,
-    channel: 'msedge',
+    channel: process.env.CI ? undefined : 'msedge',
     viewport: { width: 1400, height: 860 },
     acceptDownloads: true,
     launchOptions: { args: ['--autoplay-policy=no-user-gesture-required'] },

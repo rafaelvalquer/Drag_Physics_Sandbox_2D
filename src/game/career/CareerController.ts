@@ -255,7 +255,8 @@ export class CareerController {
     if (!s || !car) return fail('nenhum carro ativo');
     const programmable = car.installedParts.includes('ecu-programmable');
     if (!programmable && !canTuneBoost(s)) return fail('os preparadores de motor ainda não trabalham para você');
-    if (!programmable && !car.installedParts.includes('turbo-basic')) return fail('sem turbo (ou sem ECU programável) não há pressão para ajustar');
+    if (!programmable && !car.installedParts.some((id) => findPart(id)?.category === 'turbo'))
+      return fail('sem turbo (ou sem ECU programável) não há pressão para ajustar');
     const tune = boostBar === undefined ? {} : { boostBar: Math.round(boostBar * 100) / 100 };
     const chk = this.checkBuild(car, car.installedParts, tune);
     if (!chk.ok) return fail(chk.error);
@@ -466,7 +467,7 @@ export class CareerController {
 
 /** The boost setting survives only while something can hold it: the kit turbo or a programmable ECU. */
 function tuneFor(car: OwnedCar, parts: string[]): OwnedCar['tune'] {
-  return parts.includes('turbo-basic') || parts.includes('ecu-programmable') ? (car.tune ?? {}) : {};
+  return parts.includes('ecu-programmable') || parts.some((id) => findPart(id)?.category === 'turbo') ? (car.tune ?? {}) : {};
 }
 
 export { EVENTS, CHAPTER_2_ID };

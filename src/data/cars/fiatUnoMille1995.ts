@@ -72,7 +72,7 @@ export const CAR_FIAT_UNO_MILLE_1995: CarConfig = {
     tempSensitivityPerC: 0.0018,
   },
   exhaust: periodStockExhaust(0.28, 30, { tailpipeDiameterMm: 42, outputGain: 0.85 }),
-  acoustic: periodAcoustic({ intakeGain: 0.8, blockGain: 0.66, mechanicalNoise: 0.8, gearTeeth: 15 }),
+  acoustic: periodAcoustic({ exhaustGain: 1.06, intakeGain: 0.8, blockGain: 0.66, mechanicalNoise: 0.8, gearTeeth: 15 }),
   visual: {
     bodyStyle: 'unoMille95',
     color: '#c8ccd0',

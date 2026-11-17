@@ -47,9 +47,12 @@ export function transmissionKindOf(car: CarConfig): TransmissionKind {
 
 /** Why a part does not fit a car (pt-BR), or null when it fits. */
 export function incompatibility(base: CarConfig, p: PartDef): string | null {
+  const fam = familyOf(base);
+  // two catalogues: the slot catalogue (v1, classic engines) and the family parts (v2, modern engines)
+  if ('mod' in p && fam !== LEGACY_FAMILY) return `${p.name} é do catálogo dos motores clássicos`;
+  if ((p.since ?? 1) === 2 && fam === LEGACY_FAMILY) return `${p.name} é para motores modernos`;
   const c = p.compat;
   if (!c) return null;
-  const fam = familyOf(base);
   if (c.families && !c.families.includes(fam)) {
     const label = ENGINE_FAMILIES[fam]?.label ?? 'este motor';
     return `${p.name} não é feita para ${label}`;

@@ -9,16 +9,22 @@ import { CHAPTER2_PARTS } from './chapter2Parts';
  * One slot per category: installing a part of an occupied category replaces the previous one
  * (e.g. semi-slick tyres replace sport tyres; nothing stacks).
  */
+import { EXPANDED_PARTS } from './expandedParts';
+
 export type PartCategory =
-  | 'intake-filter'
-  | 'intake-manifold'
-  | 'camshaft'
-  | 'exhaust'
-  | 'turbo'
-  | 'clutch'
-  | 'differential'
-  | 'tires'
-  // Chapter 2 (BuildResolver v2)
+  | 'intake-filter' | 'intake-manifold' | 'intake-throttle' | 'intake-airbox'
+  | 'camshaft' | 'engine-head' | 'engine-compression' | 'engine-internals' | 'engine-flywheel'
+  | 'exhaust' | 'exhaust-header' | 'exhaust-pipe' | 'exhaust-muffler'
+  | 'clutch' | 'differential' | 'transmission-gearbox'
+  | 'tires' | 'tires-width' | 'tires-pressure'
+  | 'turbo' | 'turbo-turbine' | 'turbo-intercooler' | 'turbo-wastegate' | 'turbo-boost'
+  | 'electronics-ecu' | 'electronics-fuel' | 'electronics-ignition'
+  | 'cooling-radiator' | 'cooling-oil' | 'cooling-fan'
+  | 'chassis-weight' | 'chassis-suspension'
+  | V2Category;
+
+/** Slots of the Chapter 2 parts (BuildResolver v2, modern engine families only). */
+export type V2Category =
   | 'ecu'
   | 'intercooler'
   | 'boost-control'
@@ -29,43 +35,54 @@ export type PartCategory =
   | 'awd'
   | 'suspension';
 
-/** Workshop tabs (the brief's six categories) and the slots they show. */
-export const WORKSHOP_TABS: { id: string; label: string; categories: PartCategory[] }[] = [
-  { id: 'engine', label: 'Motor', categories: ['camshaft', 'cylinder-head', 'pistons', 'flywheel'] },
-  { id: 'intake', label: 'Admissão', categories: ['intake-filter', 'intake-manifold'] },
-  { id: 'exhaust', label: 'Escape', categories: ['exhaust'] },
-  { id: 'electronics', label: 'Eletrônica', categories: ['ecu', 'boost-control'] },
-  { id: 'transmission', label: 'Transmissão', categories: ['clutch', 'gearbox', 'differential', 'awd'] },
-  { id: 'tires', label: 'Pneus e suspensão', categories: ['tires', 'suspension'] },
-  { id: 'turbo', label: 'Turbo', categories: ['turbo', 'intercooler'] },
-];
+export const V2_CATEGORIES: readonly V2Category[] = ['cylinder-head', 'pistons', 'flywheel', 'ecu', 'intercooler', 'boost-control', 'gearbox', 'awd', 'suspension'];
 
-/** Order in which the resolver applies the categories (independent of the install order). */
-export const CATEGORY_ORDER: readonly PartCategory[] = ['intake-filter', 'intake-manifold', 'camshaft', 'exhaust', 'turbo', 'clutch', 'differential', 'tires'];
-
-/** Order of the v2 resolver: the v1 categories first, then the Chapter 2 ones. */
-export const CATEGORY_ORDER_V2: readonly PartCategory[] = [
-  ...CATEGORY_ORDER,
-  'cylinder-head',
-  'pistons',
-  'flywheel',
-  'ecu',
-  'intercooler',
-  'boost-control',
-  'gearbox',
-  'awd',
-  'suspension',
+export interface WorkshopTab {
+  id: string;
+  label: string;
+  icon: string;
+  description: string;
+  categories: PartCategory[];
+}
+/**
+ * Workshop tabs. The Chapter 2 slots sit in the same tabs; a car only shows the slots of its own
+ * catalogue (classic engines: the slot catalogue; modern families: the Chapter 2 parts).
+ */
+export const WORKSHOP_TABS: readonly WorkshopTab[] = [
+  { id: 'engine', label: 'Motor', icon: '⚙', description: 'Comando, cabeçote, taxa e internos', categories: ['camshaft', 'engine-head', 'engine-compression', 'engine-internals', 'engine-flywheel', 'cylinder-head', 'pistons', 'flywheel'] },
+  { id: 'intake', label: 'Admissão', icon: '◉', description: 'Ar limpo, dutos e resposta', categories: ['intake-filter', 'intake-manifold', 'intake-throttle', 'intake-airbox'] },
+  { id: 'exhaust', label: 'Escape', icon: '≋', description: 'Contrapressão e acústica', categories: ['exhaust', 'exhaust-header', 'exhaust-pipe', 'exhaust-muffler'] },
+  { id: 'transmission', label: 'Transmissão', icon: '⌁', description: 'Relações e embreagem', categories: ['clutch', 'transmission-gearbox', 'differential', 'gearbox', 'awd'] },
+  { id: 'tires', label: 'Pneus', icon: '◎', description: 'Composto, largura e pressão', categories: ['tires', 'tires-width', 'tires-pressure'] },
+  { id: 'turbo', label: 'Turbo', icon: '◌', description: 'Pressão, spool e temperatura', categories: ['turbo', 'turbo-turbine', 'turbo-intercooler', 'turbo-wastegate', 'turbo-boost', 'intercooler'] },
+  { id: 'electronics', label: 'Eletrônica', icon: '⌘', description: 'ECU, combustível e ignição', categories: ['electronics-ecu', 'electronics-fuel', 'electronics-ignition', 'ecu', 'boost-control'] },
+  { id: 'cooling', label: 'Arrefecimento', icon: '❄', description: 'Gerenciamento térmico', categories: ['cooling-radiator', 'cooling-oil', 'cooling-fan', 'turbo-intercooler'] },
+  { id: 'chassis', label: 'Estrutura', icon: '◇', description: 'Massa e geometria', categories: ['chassis-weight', 'chassis-suspension', 'suspension'] },
 ];
+/** One mechanical slot can appear in more than one navigation tab (intercooler: turbo + cooling).
+ * Deduplicate the resolver order so the same physical component is never installed twice. */
+export const CATEGORY_ORDER: readonly PartCategory[] = [...new Set(WORKSHOP_TABS.flatMap((t) => t.categories))];
+
+/** Order of the v1 resolver: every slot except the Chapter 2 ones. */
+export const CATEGORY_ORDER_V1: readonly PartCategory[] = CATEGORY_ORDER.filter((c) => !(V2_CATEGORIES as readonly string[]).includes(c));
+
+/** Order of the v2 resolver: the v1 slots first, then the Chapter 2 ones. */
+export const CATEGORY_ORDER_V2: readonly PartCategory[] = [...CATEGORY_ORDER_V1, ...V2_CATEGORIES];
 
 export const CATEGORY_LABEL: Record<PartCategory, string> = {
-  'intake-filter': 'Filtro de ar',
-  'intake-manifold': 'Coletor de admissão',
-  camshaft: 'Comando de válvulas',
-  exhaust: 'Escapamento',
-  turbo: 'Sobrealimentação',
-  clutch: 'Embreagem',
-  differential: 'Diferencial',
-  tires: 'Pneus',
+  'intake-filter': 'Filtro de ar', 'intake-manifold': 'Coletor de admissão',
+  'intake-throttle': 'Corpo de borboleta', 'intake-airbox': 'Caixa de ar',
+  camshaft: 'Comando de válvulas', 'engine-head': 'Cabeçote', 'engine-compression': 'Taxa de compressão',
+  'engine-internals': 'Internos do motor', 'engine-flywheel': 'Volante do motor',
+  exhaust: 'Escape completo', 'exhaust-header': 'Coletor de escape',
+  'exhaust-pipe': 'Tubulação de escape', 'exhaust-muffler': 'Abafador',
+  clutch: 'Embreagem', differential: 'Relação final', 'transmission-gearbox': 'Câmbio',
+  tires: 'Composto', 'tires-width': 'Largura', 'tires-pressure': 'Pressão e setup',
+  turbo: 'Kit turbo', 'turbo-turbine': 'Turbina', 'turbo-intercooler': 'Intercooler',
+  'turbo-wastegate': 'Wastegate', 'turbo-boost': 'Pressão de turbo',
+  'electronics-ecu': 'ECU', 'electronics-fuel': 'Combustível', 'electronics-ignition': 'Ignição',
+  'cooling-radiator': 'Radiador', 'cooling-oil': 'Óleo', 'cooling-fan': 'Ventoinha',
+  'chassis-weight': 'Alívio de peso', 'chassis-suspension': 'Suspensão',
   ecu: 'Central eletrônica (ECU)',
   intercooler: 'Intercooler',
   'boost-control': 'Controle de pressão',
@@ -74,8 +91,59 @@ export const CATEGORY_LABEL: Record<PartCategory, string> = {
   flywheel: 'Volante do motor',
   gearbox: 'Câmbio automático / dupla embreagem',
   awd: 'Tração integral',
-  suspension: 'Suspensão',
+  suspension: 'Suspensão de arrancada',
 };
+export const CATEGORY_DESCRIPTION: Record<PartCategory, string> = {
+  'intake-filter': 'Restrição do filtro de ar em alta vazão.', 'intake-manifold': 'Comprimento e área dos dutos de admissão.',
+  'intake-throttle': 'Diâmetro e tempo de abertura da borboleta.', 'intake-airbox': 'Volume e perda de carga da caixa de ar.',
+  camshaft: 'Abertura, levantamento e cruzamento de válvulas.', 'engine-head': 'Fluxo nos dutos e sedes.',
+  'engine-compression': 'Rendimento e limite para sobrealimentação.', 'engine-internals': 'Resistência mecânica do conjunto.',
+  'engine-flywheel': 'Inércia rotacional e resposta do motor.',
+  exhaust: 'Geometria global e contrapressão.', 'exhaust-header': 'Primários e coleta dos gases.',
+  'exhaust-pipe': 'Diâmetro e restrição da linha.', 'exhaust-muffler': 'Silenciamento versus fluxo.',
+  clutch: 'Capacidade de torque e engate.', differential: 'Multiplicação final da transmissão.',
+  'transmission-gearbox': 'Escalonamento e recuperação de giro.',
+  tires: 'Aderência e janela térmica.', 'tires-width': 'Área de contato e inércia.', 'tires-pressure': 'Rigidez e sensibilidade térmica.',
+  turbo: 'Conjunto de sobrealimentação.', 'turbo-turbine': 'Compromisso entre spool e vazão.',
+  'turbo-intercooler': 'Temperatura da carga comprimida.', 'turbo-wastegate': 'Limites de controle de pressão.',
+  'turbo-boost': 'Pressão-alvo da wastegate.',
+  'electronics-ecu': 'Estratégia de combustão e proteção.', 'electronics-fuel': 'Capacidade de alimentação sob boost.',
+  'electronics-ignition': 'Estabilidade e atraso de centelha.',
+  'cooling-radiator': 'Troca térmica do circuito.', 'cooling-oil': 'Atrito e temperatura do óleo.',
+  'cooling-fan': 'Demanda parasita de refrigeração.',
+  'chassis-weight': 'Massa total e inércia longitudinal.', 'chassis-suspension': 'Centro de gravidade e transferência de carga.',
+  ecu: 'Alvo de pressão, limitador de torque, ignição e corte do motor moderno.', intercooler: 'Temperatura da carga do turbo de fábrica.',
+  'boost-control': 'Atuador da wastegate e solenoide de controle.', 'cylinder-head': 'Vazão do cabeçote onde as válvulas estrangulam.',
+  pistons: 'Taxa de compressão e limite mecânico de torque.', flywheel: 'Inércia rotacional do motor.',
+  gearbox: 'Embreagens e central do câmbio automático ou de dupla embreagem.', awd: 'Acoplamento central da tração integral.',
+  suspension: 'Altura efetiva do centro de gravidade na transferência de carga.',
+};
+
+/** Numeric mechanical changes use SI units or the documented suffix (Bar, KPa, Mm, Rpm).
+ * Values are applied to hardware / operating conditions, never to advertised horsepower. */
+export interface MechanicalMods {
+  [key: string]: number | undefined;
+  filterDropKPa?: number; filterDropReductionKPa?: number; airboxVolumeScale?: number;
+  runnerLengthScale?: number; runnerDiameterAddMm?: number; plenumScale?: number;
+  throttleDiameterAddMm?: number; throttleResponseScale?: number;
+  camIvoDeltaDeg?: number; camIvcDeltaDeg?: number; camEvoDeltaDeg?: number;
+  camEvcDeltaDeg?: number; camLiftAddMm?: number; revLimitAddRpm?: number;
+  headFlowScale?: number; compressionRatioDelta?: number;
+  internalTorqueLimitNm?: number; flywheelInertiaScale?: number;
+  backPressureKPa?: number; backPressureReductionKPa?: number;
+  headerDiameterScale?: number; exhaustDiameterScale?: number; exhaustAbsorptionScale?: number;
+  clutchCapacityScale?: number; clutchEngageRateScale?: number; clutchLaunchAddRpm?: number;
+  finalDriveScale?: number; gearSpreadScale?: number;
+  tireMuScale?: number; tireInertiaAddKgM2?: number; tireOptimalTempC?: number;
+  tireTempSensitivity?: number; tireStiffnessScale?: number; tireTempSensitivityScale?: number;
+  turboBoostBar?: number; turboSpoolScale?: number; turboFlowScale?: number;
+  turboMassAddKg?: number; intercoolerEffectiveness?: number;
+  intercoolerEffectivenessAdd?: number; intercoolerMassAddKg?: number;
+  wastegateRangeAddBar?: number; boostTargetBar?: number; fuelBoostLimitBar?: number;
+  knockRetardScale?: number; burnDurationScale?: number;
+  coolingFrictionScale?: number; coolingKnockScale?: number;
+  massRemoveKg?: number; cgHeightDeltaM?: number;
+}
 
 /** Pseudo-family of the engines that carry no `family` (Chapter 1 cars and the sandbox cars). */
 export const LEGACY_FAMILY = 'legacy';
@@ -282,6 +350,15 @@ export interface SuspensionPart extends PartBase {
   cgHeightDeltaM: number;
 }
 
+/** Slot-catalogue part (classic engines, BuildResolver v1): hardware changes in `mod`. */
+export interface ExpandedPart extends PartBase {
+  category: Exclude<PartCategory, V2Category>;
+  chapter: 1 | 2 | 3;
+  mod: MechanicalMods;
+  /** This part is only meaningful with a turbo kit already installed. */
+  requiresTurbo?: boolean;
+}
+
 export type PartDef =
   | FilterPart
   | ExhaustPart
@@ -291,6 +368,7 @@ export type PartDef =
   | ClutchPart
   | DifferentialPart
   | TirePart
+  | ExpandedPart
   | EcuPart
   | TurboUpgradePart
   | IntercoolerPart
@@ -361,7 +439,7 @@ export const UNLOCK_LABEL: Record<UnlockId, string> = {
   'c2-dealer-335i': 'BMW 335i à venda',
 };
 
-export const PARTS: readonly PartDef[] = [
+const BASE_PARTS: readonly PartDef[] = [
   {
     id: 'filter-sport',
     category: 'intake-filter',
@@ -500,6 +578,8 @@ export const PARTS: readonly PartDef[] = [
     intercoolerEffectiveness: 0.6,
   },
 ];
+
+export const PARTS: readonly PartDef[] = [...BASE_PARTS, ...EXPANDED_PARTS];
 
 /** Every part of every resolver version (ids are unique across versions). */
 export const ALL_PARTS: readonly PartDef[] = [...PARTS, ...CHAPTER2_PARTS];

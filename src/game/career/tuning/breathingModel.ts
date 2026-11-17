@@ -2,7 +2,7 @@ import type { EngineConfig } from '../../../data/schema';
 import { ATMOSPHERIC_PRESSURE, R_AIR, STANDARD_TEMPERATURE_K } from '../../../core/units';
 import { EngineModel, WILLANS_OFFSET } from '../../../physics/engine/EngineModel';
 import { engineGeometry } from '../../../physics/engine/EngineGeometry';
-import type { CamPart, ExhaustPart, FilterPart, ManifoldPart, TurboPart } from './parts';
+import type { CamPart, ExhaustPart, FilterPart, ManifoldPart, TurboPart, MechanicalMods } from './parts';
 
 /**
  * Physical model of the career engine parts. The engine's torque curve is the steady WOT brake
@@ -61,6 +61,8 @@ export interface EngineParts {
   ignitionGain?: number;
   /** Rev limit raise of the ECU (valve train permitting). */
   revLimitAddRpm?: number;
+  /** Additional hardware effects resolved from independent workshop slots. */
+  mod?: MechanicalMods;
 }
 
 /** Otto cycle efficiency 1 − r^(1−γ) (γ = 1.3 for the real charge). */
@@ -152,37 +154,48 @@ export interface BreathingResult {
  */
 export function applyEngineParts(stock: EngineConfig, parts: EngineParts): BreathingResult {
   const b0 = stock.breathing!;
+  const mod = parts.mod ?? {};
+  const compressionRatio = Math.max(6, stock.compressionRatio + (mod.compressionRatioDelta ?? 0));
+  const otto = (r: number): number => 1 - 1 / Math.pow(r, 0.33);
+  const thermalRatio = otto(compressionRatio) / otto(stock.compressionRatio);
+  const burnRatio = 1 / Math.pow(mod.burnDurationScale ?? 1, 0.15);
   const g = engineGeometry(stock);
   const vdOver4pi = g.displacement / (4 * Math.PI);
   const ratedRpm = powerPeakRpm(stock.torqueCurve, stock.revLimitRpm);
   const torqueRpm = torquePeakRpm(stock.torqueCurve);
 
   // ---- hardware changes stored in the configuration ----
-  const revAdd = (parts.cam?.revLimitAddRpm ?? 0) + (parts.revLimitAddRpm ?? 0);
-  const compression = stock.compressionRatio + (parts.compressionAdd ?? 0);
+  const revAdd = (parts.cam?.revLimitAddRpm ?? mod.revLimitAddRpm ?? 0) + (parts.revLimitAddRpm ?? 0);
+  const compression = compressionRatio + (parts.compressionAdd ?? 0);
   // v2 only: compression (Otto) and ignition advance act on the indicated work; 1 in every v1 build
   const indicatedScale =
-    parts.compressionAdd || parts.ignitionGain ? (ottoEfficiency(compression) / ottoEfficiency(stock.compressionRatio)) * (1 + (parts.ignitionGain ?? 0)) : 1;
+    parts.compressionAdd || parts.ignitionGain ? (ottoEfficiency(compression) / ottoEfficiency(compressionRatio)) * (1 + (parts.ignitionGain ?? 0)) : 1;
   const headGain = parts.head?.flowGain ?? 0;
   const revLimit = stock.revLimitRpm + revAdd;
   const curveTop = Math.max(stock.torqueCurve.rpm[stock.torqueCurve.rpm.length - 1]!, revLimit + 300);
-  const filterDrop = parts.filter?.airFilterDropKPa ?? b0.airFilterDropKPa;
-  const backRef = parts.exhaust?.backPressureKPa ?? b0.exhaustBackPressureKPa;
+  const filterDrop = Math.max(0.15, (mod.filterDropKPa ?? parts.filter?.airFilterDropKPa ?? b0.airFilterDropKPa) - (mod.filterDropReductionKPa ?? 0));
+  const backRef = Math.max(0.5, (mod.backPressureKPa ?? parts.exhaust?.backPressureKPa ?? b0.exhaustBackPressureKPa) - (mod.backPressureReductionKPa ?? 0));
   const m = parts.manifold;
-  const runnerL = stock.intake.runnerLengthM * (m?.runnerLengthScale ?? 1);
-  const runnerD = stock.intake.runnerDiameterMm + (m?.runnerDiameterAddMm ?? 0);
+  const runnerL = stock.intake.runnerLengthM * (m?.runnerLengthScale ?? mod.runnerLengthScale ?? 1);
+  const runnerD = stock.intake.runnerDiameterMm + (m?.runnerDiameterAddMm ?? mod.runnerDiameterAddMm ?? 0);
   const c = parts.cam;
-  const cam = c
-    ? {
-        evoDeg: stock.cam.evoDeg + c.evoDeltaDeg,
-        evcDeg: stock.cam.evcDeg + c.evcDeltaDeg,
-        ivoDeg: stock.cam.ivoDeg + c.ivoDeltaDeg,
-        ivcDeg: stock.cam.ivcDeg + c.ivcDeltaDeg,
-        intakeLiftMm: stock.cam.intakeLiftMm + c.liftAddMm,
-        exhaustLiftMm: stock.cam.exhaustLiftMm + c.liftAddMm,
-      }
-    : stock.cam;
-  const overlapAdd = c ? c.evcDeltaDeg - c.ivoDeltaDeg : 0;
+  const camDelta = {
+    evo: c?.evoDeltaDeg ?? mod.camEvoDeltaDeg ?? 0,
+    evc: c?.evcDeltaDeg ?? mod.camEvcDeltaDeg ?? 0,
+    ivo: c?.ivoDeltaDeg ?? mod.camIvoDeltaDeg ?? 0,
+    ivc: c?.ivcDeltaDeg ?? mod.camIvcDeltaDeg ?? 0,
+    lift: c?.liftAddMm ?? mod.camLiftAddMm ?? 0,
+  };
+  const hasCam = !!c || !!mod.camLiftAddMm || !!mod.camIvcDeltaDeg;
+  const cam = hasCam ? {
+    evoDeg: stock.cam.evoDeg + camDelta.evo,
+    evcDeg: stock.cam.evcDeg + camDelta.evc,
+    ivoDeg: stock.cam.ivoDeg + camDelta.ivo,
+    ivcDeg: stock.cam.ivcDeg + camDelta.ivc,
+    intakeLiftMm: stock.cam.intakeLiftMm + camDelta.lift,
+    exhaustLiftMm: stock.cam.exhaustLiftMm + camDelta.lift,
+  } : stock.cam;
+  const overlapAdd = camDelta.evc - camDelta.ivo;
 
   // ---- stock operating points (same EngineModel the race uses) ----
   const stockExt = extendCurve(stock, curveTop);
@@ -210,18 +223,25 @@ export function applyEngineParts(stock: EngineConfig, parts: EngineParts): Breat
     const residual = (p: number, pm: number): number => Math.pow(p / pm, 1 / GAMMA_EXHAUST) / stock.compressionRatio;
     const residualRatio = (1 - residual(back, map)) / (1 - residual(op.back, op.map));
     const x = rpm / ratedRpm;
-    const camRatio = c
-      ? (1 + IVC_SENSITIVITY_PER_DEG * c.ivcDeltaDeg * (x - IVC_PIVOT)) *
-        (1 + LIFT_GAIN_PER_MM * c.liftAddMm * smoothstep(0.55, 1.15, x)) *
+    const camRatio = hasCam
+      ? (1 + IVC_SENSITIVITY_PER_DEG * camDelta.ivc * (x - IVC_PIVOT)) *
+        (1 + LIFT_GAIN_PER_MM * camDelta.lift * smoothstep(0.55, 1.15, x)) *
         (1 - OVERLAP_LOSS_PER_DEG * overlapAdd * Math.max(0, 0.6 - x) / 0.6)
       : 1;
+    // Port flow, throttle cross-section and Otto efficiency alter trapped mass / indicated work,
+    // not an arbitrary power multiplier; strongest flow effect near peak rated air demand.
+    const portFlowRatio = 1 + ((mod.headFlowScale ?? 1) - 1) * smoothstep(0.48, 1.2, x);
+    const throttleDiam = stock.throttle.bodyDiameterMm;
+    const newThrottle = throttleDiam + (mod.throttleDiameterAddMm ?? 0);
+    const throttleFlowRatio = 1 + Math.min(0.012, (newThrottle * newThrottle / (throttleDiam * throttleDiam) - 1) * 0.055) * smoothstep(0.55, 1.1, x);
     const ramRatio = (ram(rpm, tunedNew) / ram(rpm, tunedStock)) * (headGain ? 1 + headGain * smoothstep(0.5, 1.1, x) : 1);
     const willans = (p: number): number => p - WILLANS_OFFSET * ATMOSPHERIC_PRESSURE;
     // Willans line: indicated work ∝ (charge − offset); the charge follows MAP × trapped-mass ratios
-    const chargeRatio = residualRatio * camRatio * ramRatio;
-    const indicated = ((op.indicatedNm * willans(map * chargeRatio)) / willans(op.map)) * indicatedScale;
+    const chargeRatio = residualRatio * camRatio * ramRatio * portFlowRatio * throttleFlowRatio;
+    const indicated = ((op.indicatedNm * willans(map * chargeRatio) * thermalRatio * burnRatio) / willans(op.map)) * indicatedScale;
     const pumping = (back - map) * vdOver4pi;
-    na.push(indicated - op.frictionNm - pumping);
+    const friction = op.frictionNm * (mod.coolingFrictionScale ?? 1);
+    na.push(indicated - friction - pumping);
     naIndicated.push(indicated);
     naMap.push(map);
   }
@@ -230,14 +250,27 @@ export function applyEngineParts(stock: EngineConfig, parts: EngineParts): Breat
     ...stock,
     revLimitRpm: revLimit,
     redlineRpm: stock.redlineRpm + revAdd,
-    compressionRatio: compression,
     maxSafeRpm: Math.max(stock.maxSafeRpm, revLimit + (stock.maxSafeRpm - stock.revLimitRpm)),
     cam,
+    compressionRatio: compression,
+    inertiaKgM2: stock.inertiaKgM2 * (mod.flywheelInertiaScale ?? 1),
+    throttle: {
+      ...stock.throttle,
+      bodyDiameterMm: stock.throttle.bodyDiameterMm + (mod.throttleDiameterAddMm ?? 0),
+      responseTimeS: stock.throttle.responseTimeS * (mod.throttleResponseScale ?? 1),
+    },
+    friction: {
+      coulombNm: stock.friction.coulombNm * (mod.coolingFrictionScale ?? 1),
+      viscousNmPerRadS: stock.friction.viscousNmPerRadS * (mod.coolingFrictionScale ?? 1),
+      quadraticNmPerRadS2: stock.friction.quadraticNmPerRadS2 * (mod.coolingFrictionScale ?? 1),
+    },
+    combustion: { ...stock.combustion, burnDurationDeg: stock.combustion.burnDurationDeg * (mod.burnDurationScale ?? 1) },
     intake: {
       ...stock.intake,
       runnerLengthM: runnerL,
       runnerDiameterMm: runnerD,
-      manifoldVolumeL: stock.intake.manifoldVolumeL * (m?.plenumScale ?? 1) + (parts.turbo?.chargePipeVolumeL ?? 0),
+      manifoldVolumeL: stock.intake.manifoldVolumeL * (m?.plenumScale ?? mod.plenumScale ?? 1) + (parts.turbo?.chargePipeVolumeL ?? 0),
+      airboxVolumeL: stock.intake.airboxVolumeL * (mod.airboxVolumeScale ?? 1),
     },
     breathing: { ...b0, airFilterDropKPa: filterDrop, exhaustBackPressureKPa: backRef },
     torqueCurve: { rpm: grid, torqueNm: na.map((t) => round1(Math.max(t, 1))) },
@@ -245,13 +278,19 @@ export function applyEngineParts(stock: EngineConfig, parts: EngineParts): Breat
 
   const turbo = parts.turbo;
   if (!turbo) return { engine: base, steadyBoostBar: [], knockLoss: 0 };
-  const turboCfg = { ...turbo.turbo, maxBoostBar: parts.boostBar ?? turbo.turbo.maxBoostBar };
+  const turboCfg = {
+    ...turbo.turbo,
+    maxBoostBar: parts.boostBar ?? mod.boostTargetBar ?? turbo.turbo.maxBoostBar,
+    spoolTimeS: turbo.turbo.spoolTimeS * (mod.turboSpoolScale ?? 1),
+    fullBoostFlowFraction: turbo.turbo.fullBoostFlowFraction * (mod.turboFlowScale ?? 1),
+  };
+  const intercooler = Math.min(0.92, (mod.intercoolerEffectiveness ?? turbo.intercoolerEffectiveness) + (mod.intercoolerEffectivenessAdd ?? 0));
   let knockLoss = 0;
 
   // ---- turbo: fixed point between the curve and the steady boost it produces ----
   const fuel = engineFuel(stock);
   const knockPerBar = fuel === 'ethanol' ? turbo.knockLossPerBarEthanol : turbo.knockLossPerBarPetrol;
-  const crExcess = Math.max(1, stock.compressionRatio - 7);
+  const crExcess = Math.max(1, compressionRatio - 7);
   let curve = base.torqueCurve.torqueNm.slice();
   let boosts: number[] = grid.map(() => 0);
   for (let pass = 0; pass < 5; pass++) {
@@ -263,17 +302,17 @@ export function applyEngineParts(stock: EngineConfig, parts: EngineParts): Breat
       const op = model.wotOperatingPoint(grid[i]!);
       const pr = (ATMOSPHERIC_PRESSURE + op.boost) / ATMOSPHERIC_PRESSURE;
       const t2 = STANDARD_TEMPERATURE_K * (1 + (Math.pow(pr, 0.2857) - 1) / COMPRESSOR_EFFICIENCY);
-      const tCharge = t2 - turbo.intercoolerEffectiveness * (t2 - STANDARD_TEMPERATURE_K);
+      const tCharge = t2 - intercooler * (t2 - STANDARD_TEMPERATURE_K);
       // boosted MAP scaled from the NA point (same restriction ratio, higher upstream pressure)
       const mapT = naMap[i]! * pr;
       const willans = (p: number): number => p - WILLANS_OFFSET * ATMOSPHERIC_PRESSURE;
       const density = (mapT * STANDARD_TEMPERATURE_K) / tCharge;
-      const knock = 1 - knockPerBar * (op.boost / 1e5) * crExcess;
+      const knock = 1 - knockPerBar * (mod.knockRetardScale ?? 1) * (mod.coolingKnockScale ?? 1) * (op.boost / 1e5) * crExcess;
       knockLoss = Math.max(knockLoss, 1 - knock);
       const indicated = (naIndicated[i]! * willans(density) * knock) / willans(naMap[i]!);
       const back = op.back;
       const pumping = (back - mapT) * vdOver4pi;
-      next.push(round1(Math.max(indicated - op.frictionNm - pumping, 1)));
+      next.push(round1(Math.max(indicated - op.frictionNm * (mod.coolingFrictionScale ?? 1) - pumping, 1)));
       boosts.push(op.boost / 1e5);
     }
     const change = Math.max(...next.map((t, i) => Math.abs(t - curve[i]!)));

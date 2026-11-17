@@ -11,6 +11,7 @@ import {
 import { exhaustPreset } from '../exhaustPresets';
 import { CAR_VW_GOL_GTS_1988 } from './vwGolGts1988';
 import { CHAPTER2_CARS } from './chapter2/index';
+import { CAMPAIGN_CARS } from './campaign';
 
 export { CAR_VW_GOL_GTS_1988 } from './vwGolGts1988';
 
@@ -358,11 +359,25 @@ export const CARS: readonly CarConfig[] = [
   CAR_VW_GOL_GTS_1988,
 ];
 
-/**
- * Every car the Sandbox, Race and Dyno modes list. The ten Chapter 2 cars are the same objects
- * the career uses (one catalogue, no duplicate entry); Chapter 1 campaign cars stay career-only.
- */
-export const LAB_CARS: readonly CarConfig[] = [...CARS, CAR_AURORA_V12_LAB, ...CHAPTER2_CARS];
+/** Deduplicate by canonical factory ID; the Gol is intentionally the same CarConfig object. */
+export function uniqueCars(cars: readonly CarConfig[]): CarConfig[] {
+  const seen = new Set<string>();
+  return cars.filter((car) => !seen.has(car.id) && !!seen.add(car.id));
+}
+
+/** Free modes never depend on career ownership, progression or inventory. */
+/** The ten Chapter 2 cars are the same objects the career uses (one catalogue, no duplicate entry). */
+export const SANDBOX_CARS: readonly CarConfig[] = uniqueCars([...CARS, ...CAMPAIGN_CARS, ...CHAPTER2_CARS]);
+export const LAB_CARS: readonly CarConfig[] = uniqueCars([...SANDBOX_CARS, CAR_AURORA_V12_LAB]);
+export const CALIBRATION_CARS: readonly CarConfig[] = LAB_CARS;
+
+/** Display-only grouping; no copies of original vehicles are created. */
+export const CAR_GROUPS: readonly { label: string; cars: readonly CarConfig[] }[] = [
+  { label: 'Brasileiros clássicos', cars: CAMPAIGN_CARS },
+  { label: 'Liga da Madrugada (Capítulo 2)', cars: CHAPTER2_CARS },
+  { label: 'Veículos fictícios', cars: CARS.filter((c) => !CAMPAIGN_CARS.some((b) => b.id === c.id)) },
+  { label: 'Experimentais', cars: [CAR_AURORA_V12_LAB] },
+];
 
 export function findCar(id: string): CarConfig | undefined {
   return LAB_CARS.find((c) => c.id === id);

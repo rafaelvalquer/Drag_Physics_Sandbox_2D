@@ -233,7 +233,7 @@ export const CHAPTER2_PARTS: readonly PartDef[] = [
     revLimitAddRpm: 0,
   },
   {
-    id: 'pistons-forged',
+    id: 'pistons-forged-modern',
     since: 2,
     category: 'pistons',
     name: 'Pistões e bielas forjados',
@@ -247,7 +247,7 @@ export const CHAPTER2_PARTS: readonly PartDef[] = [
     revLimitAddRpm: 0,
   },
   {
-    id: 'flywheel-light',
+    id: 'flywheel-light-modern',
     since: 2,
     category: 'flywheel',
     name: 'Volante leve',

@@ -29,8 +29,8 @@ import { SPEAKER_NAME, pendingScenes, type StoryScene, type StoryTrigger } from 
 import type { RaceRecord } from '../game/career/CareerController';
 import { TelemetryProbe, runHeadlessRace } from '../game/career/headlessRace';
 import { ownedCarBuild, ownedCarConfig, rivalBuild, rivalCar } from '../game/career/RivalBuildFactory';
-import { BUILD_RESOLVER_VERSION, resolveBuild, type BuildResult } from '../game/career/tuning/BuildResolver';
-import { ALL_PARTS, CATEGORY_LABEL, CATEGORY_ORDER, UNLOCK_LABEL, WORKSHOP_TABS, findPart, type PartCategory, type PartDef } from '../game/career/tuning/parts';
+import { BUILD_RESOLVER_VERSION, boostRangeForParts, resolveBuild, type BuildResult } from '../game/career/tuning/BuildResolver';
+import { ALL_PARTS, CATEGORY_DESCRIPTION, CATEGORY_LABEL, CATEGORY_ORDER_V1, UNLOCK_LABEL, WORKSHOP_TABS, findPart, type PartCategory, type PartDef } from '../game/career/tuning/parts';
 import { RACE_DISTANCES, RaceController, type LaneResult, type RaceLane } from '../game/race/RaceController';
 import { runAccelerationTest } from '../game/race/accelerationTest';
 import type { CameraMode, RenderVehicle, TrackMarker, TreeLights } from '../game/scenes/RaceScene';
@@ -73,7 +73,7 @@ export function gearboxLabel(c: CarConfig): string {
 
 /** Tune that survives a part change: only the kit turbo or a programmable ECU holds a boost setting. */
 function keptTune(car: OwnedCar, parts: readonly string[]): { boostBar?: number } {
-  return parts.includes('turbo-basic') || parts.includes('ecu-programmable') ? (car.tune ?? {}) : {};
+  return parts.includes('ecu-programmable') || parts.some((id) => findPart(id)?.category === 'turbo') ? (car.tune ?? {}) : {};
 }
 
 /** Resolves a hypothetical part list of an owned car with the resolver version it would use. */
@@ -749,6 +749,10 @@ export class CareerMode implements Mode {
     return e;
   }
 
+  /**
+   * Workshop layout: build identity / category rail / grouped subcategory cards / inspector.
+   * All state comes from CareerSave; stock items represent an empty physical slot.
+   */
   private workshopScreen(): HTMLElement {
     const s = this.controller.save!;
     const car = this.controller.activeCar!;
@@ -756,74 +760,114 @@ export class CareerMode implements Mode {
     // a category is shown when it has parts for this car; a car of resolver version 1 keeps every
     // chapter 1 slot (its factory part), exactly as the chapter 1 workshop showed it
     const legacy = buildVersionFor(car, car.installedParts) === 1;
-    const catVisible = (c: PartCategory): boolean => visible.some((p) => p.category === c) || (legacy && CATEGORY_ORDER.includes(c));
+    const catVisible = (c: PartCategory): boolean => visible.some((p) => p.category === c) || (legacy && CATEGORY_ORDER_V1.includes(c));
     const tabs = WORKSHOP_TABS.map((t) => ({ ...t, categories: t.categories.filter(catVisible) })).filter((t) => t.categories.length);
     const tab = tabs.find((t) => t.id === this.workshopTab) ?? tabs[0]!;
     const before = ownedCarBuild(car);
-    const parts = visible.filter((p) => tab.categories.includes(p.category));
-    const stockSel = this.selectedPart?.startsWith('stock:') ? (this.selectedPart.slice(6) as PartCategory) : null;
-    const sel = stockSel ? undefined : this.selectedPart ? findPart(this.selectedPart) : parts[0];
-    const left = h(
-      'div',
-      { class: 'ws-left' },
-      this.preview(ownedCarConfig(car), 420, 200),
-      h('h3', {}, car.nickname),
-      this.carStats(before),
-      h('div', { class: 'hint' }, `Instaladas: ${car.installedParts.map((id) => findPart(id)?.name ?? id).join(', ') || 'nenhuma'}`),
-      s.inventoryPartIds.length
-        ? h('div', { class: 'hint' }, `Estoque: ${s.inventoryPartIds.map((e) => `${findPart(parseInventoryEntry(e).partId)?.name ?? e}${parseInventoryEntry(e).baseCarId !== car.baseCarId ? ' (outro carro)' : ''}`).join(', ')}`)
-        : null,
+    const allInTab = visible.filter((p) => tab.categories.includes(p.category));
+    const stockSel = this.selectedPart?.startsWith('stock:') ? this.selectedPart.slice(6) as PartCategory : null;
+    const sel = stockSel ? undefined : (this.selectedPart ? findPart(this.selectedPart) : allInTab[0]);
+    const equipped = car.installedParts.map((id) => findPart(id)).filter((p): p is PartDef => !!p);
+    const kit = equipped.find((p) => p.category === 'turbo');
+    const highestTier = equipped.reduce((top, p) => Math.max(top, 'chapter' in p ? p.chapter : 1), 1);
+    const stage = kit ? (highestTier >= 3 ? 'Stage 6 • Turbo preparado' : highestTier === 2 ? 'Stage 5 • Turbo street' : 'Stage 4 • Turbo básico')
+      : equipped.length >= 5 ? 'Stage 3 • Aspirado forte' : equipped.length >= 2 ? 'Stage 2 • Aspirado street' : equipped.length ? 'Stage 1 • Rua leve' : 'Original';
+    const metric = (label: string, value: string): HTMLElement => h('div', { class: 'ws-metric' }, h('small', {}, label), h('b', {}, value));
+    const overview = h(
+      'div', { class: 'ws-overview', 'data-testid': 'ws-overview' },
+      h('div', { class: 'ws-overview-identity' },
+        h('span', { class: 'ws-kicker' }, 'GARAGEM / PREPARAÇÃO'),
+        h('h2', {}, car.nickname),
+        h('div', { class: 'ws-stage' }, stage)),
+      h('div', { class: 'ws-metrics' },
+        metric('POTÊNCIA', before.ok ? `${f1(before.peakPowerCv)} cv` : '—'),
+        metric('TORQUE', before.ok ? `${f1(before.peakTorqueNm)} N·m` : '—'),
+        metric('ASPIRAÇÃO', before.ok && before.car.engine.induction === 'turbo' ? 'Turbo' : 'Aspirado'),
+        metric('SALDO', cr(s.credits)),
+        metric('REPUTAÇÃO', String(s.reputation)),
+        metric('CAPÍTULO', `${String(chapterOf(this.chapter).number).padStart(2, '0')} / ${String(CHAPTERS.length).padStart(2, '0')}`),
+      ),
     );
-    const center = h(
-      'div',
-      { class: 'ws-center' },
+    const rail = h(
+      'aside', { class: 'ws-left' },
+      h('div', { class: 'ws-preview' }, this.preview(ownedCarConfig(car), 320, 168)),
+      h('span', { class: 'ws-sidebar-title' }, 'SISTEMAS DO VEÍCULO'),
       h(
-        'div',
-        { class: 'ws-tabs' },
-        tabs.map((t) =>
-          h(
-            'button',
-            {
-              class: t.id === tab.id ? 'tab active' : 'tab',
-              'data-testid': `ws-tab-${t.id}`,
-              onclick: () => {
-                this.workshopTab = t.id;
-                this.selectedPart = null;
-                this.show('workshop');
-              },
-            },
-            t.label,
-          ),
+        'nav', { class: 'ws-tabs', 'aria-label': 'Sistemas da oficina' },
+        tabs.map((t) => h('button', {
+          class: t.id === tab.id ? 'tab active' : 'tab',
+          'data-testid': `ws-tab-${t.id}`,
+          'aria-pressed': String(t.id === tab.id),
+          onclick: () => {
+            this.workshopTab = t.id;
+            this.selectedPart = null;
+            this.show('workshop');
+          },
+        },
+          h('span', { class: 'ws-tab-icon', 'aria-hidden': 'true' }, t.icon),
+          h('span', { class: 'ws-tab-copy' }, h('b', {}, t.label), h('small', {}, t.description)),
+          h('span', { class: 'ws-tab-count' }, String(car.installedParts.filter((id) => t.categories.includes(findPart(id)?.category as PartCategory)).length)),
+        )),
+      ),
+      h('div', { class: 'ws-rail-footer' }, `${equipped.length} modificações instaladas · ${s.inventoryPartIds.filter((e) => parseInventoryEntry(e).baseCarId === car.baseCarId).length} no estoque`),
+    );
+    const groups = tab.categories.map((cat, index) => {
+      const inSlot = equipped.find((p) => p.category === cat);
+      const categoryParts = allInTab.filter((p) => p.category === cat);
+      const entries = categoryParts.map((p) => {
+        const st = partStatus(s, car, p);
+        return h('li', {
+          class: `ws-part-card ${sel?.id === p.id ? 'sel' : ''} ${st.state}`,
+          'data-testid': `ws-part-${p.id}`,
+          'data-state': st.state,
+          title: st.detail,
+          tabindex: '0', role: 'button',
+          onclick: () => { this.selectedPart = p.id; this.show('workshop'); },
+          onkeydown: (e: Event) => {
+            if (e instanceof KeyboardEvent && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); this.selectedPart = p.id; this.show('workshop'); }
+          },
+        },
+          h('div', { class: 'ws-part-head' },
+            h('span', { class: 'ws-part-name' }, p.name),
+            h('span', { class: `pill ${st.state}`, 'data-testid': `ws-pill-${p.id}` }, st.label)),
+          h('small', { class: 'ws-part-meta' },
+            'chapter' in p ? `CAP. ${p.chapter} · ` : 'CAP. 1 · ',
+            st.state === 'locked' ? st.detail : p.physics),
+          ('chapter' in p && p.chapter === 1) ? h('span', { class: 'ws-new-tag' }, 'NOVO') : null,
+        );
+      });
+      return h(
+        'section', { class: 'ws-group', 'data-testid': `ws-group-${cat}`, 'aria-label': CATEGORY_LABEL[cat] },
+        h('div', { class: 'ws-group-header' },
+          h('span', { class: 'ws-group-index' }, String(index + 1).padStart(2, '0')),
+          h('div', {}, h('h3', {}, CATEGORY_LABEL[cat]), h('p', {}, CATEGORY_DESCRIPTION[cat])),
+          h('span', { class: 'ws-installed-slot' }, inSlot ? 'EQUIPADO' : 'ORIGINAL')),
+        h('ul', { class: 'ws-parts' },
+          this.stockItem(car, cat, stockSel === cat),
+          ...entries,
         ),
-      ),
-      h(
-        'ul',
-        { class: 'ws-parts' },
-        tab.categories.flatMap((cat) => [this.stockItem(car, cat, stockSel === cat), ...parts.filter((x) => x.category === cat).map((p) => {
-          const st = partStatus(s, car, p);
-          return h(
-            'li',
-            {
-              class: `${sel?.id === p.id ? 'sel' : ''} ${st.state === 'locked' ? 'locked' : ''} ${st.state}`,
-              'data-testid': `ws-part-${p.id}`,
-              'data-state': st.state,
-              title: st.detail,
-              onclick: () => {
-                this.selectedPart = p.id;
-                this.show('workshop');
-              },
-            },
-            h('div', { class: 'ws-part-head' }, h('span', {}, p.name), h('span', { class: `pill ${st.state}`, 'data-testid': `ws-pill-${p.id}` }, st.label)),
-            h('small', {}, st.state === 'locked' ? `${CATEGORY_LABEL[p.category]} · ${st.detail}` : CATEGORY_LABEL[p.category]),
-          );
-        })]),
-      ),
+      );
+    });
+    const catalog = h(
+      'main', { class: 'ws-center' },
+      h('div', { class: 'ws-section-title' },
+        h('div', {}, h('span', { class: 'ws-kicker' }, 'CATÁLOGO DE COMPONENTES'),
+          h('h2', {}, tab.label), h('p', {}, tab.description)),
+        h('span', { class: 'ws-count' }, `${tab.categories.length} grupos · ${allInTab.length} upgrades`)),
+      ...groups,
     );
-    const right = h('div', { class: 'ws-right' }, stockSel ? this.stockDetail(stockSel, car, before) : sel ? this.partDetail(sel, car, before) : h('div', { class: 'hint' }, 'Escolha uma peça.'));
-    return this.frame(
-      'Oficina',
-      'career-workshop',
-      h('div', { class: 'ws' }, left, center, right),
+    const detail = h(
+      'aside', { class: 'ws-right' },
+      h('div', { class: 'ws-inspector-head' },
+        h('span', { class: 'ws-kicker' }, 'INSPEÇÃO DE HARDWARE'),
+        h('span', { class: 'ws-inspector-indicator' }, '● SISTEMA ATIVO')),
+      stockSel ? this.stockDetail(stockSel, car, before) :
+      sel ? this.partDetail(sel, car, before) :
+      h('div', { class: 'hint' }, 'Escolha uma peça para comparar e instalar.'),
+    );
+    return this.frame('Oficina', 'career-workshop',
+      overview,
+      h('div', { class: 'ws' }, rail, catalog, detail),
       this.nav(
         ['Dinamômetro', 'ws-dyno', () => this.show('dyno')],
         ...((car.installedParts.length ? [['Restaurar tudo ao original', 'ws-restore-all', () => void this.restoreAll(car.installedParts.length)]] : []) as [string, string, () => void][]),
@@ -1015,11 +1059,15 @@ export class CareerMode implements Mode {
     const info = h('div', { class: 'hint', 'data-testid': 'career-dyno-info' }, 'Medindo no dinamômetro…');
     const programmable = car.installedParts.includes('ecu-programmable');
     const factoryBoost = findCampaignCar(car.baseCarId)!.engine.turbo?.maxBoostBar;
-    // programmable ECU (Caio): factory boost + 0.1 … + 0.8 bar; kit turbo (tuners): 0.4 … 1.0 bar
+    // programmable ECU (Caio, modern engines): factory boost + 0.1 … + 0.8 bar;
+    // turbo kit of a classic engine (tuners): the range of the installed kit and wastegate
+    const boostRange = programmable ? null : boostRangeForParts(car.installedParts.filter((id) => (findPart(id)?.since ?? 1) === 1));
     const [bMin, bMax, bDef] =
-      programmable && factoryBoost !== undefined ? [factoryBoost + 0.1, factoryBoost + 0.8, b.ok ? Math.max(...b.steadyBoostBar.map((x) => x.bar), factoryBoost) : factoryBoost] : [0.4, 1.0, 0.6];
+      programmable && factoryBoost !== undefined
+        ? [factoryBoost + 0.1, factoryBoost + 0.8, b.ok ? Math.max(...b.steadyBoostBar.map((x) => x.bar), factoryBoost) : factoryBoost]
+        : [boostRange?.[0] ?? 0.4, boostRange?.[1] ?? 1.0, b.ok ? (b.car.engine.turbo?.maxBoostBar ?? 0.6) : 0.6];
     const tuneRow =
-      (canTuneBoost(s) && car.installedParts.includes('turbo-basic')) || (programmable && factoryBoost !== undefined)
+      (canTuneBoost(s) && boostRange !== null) || (programmable && factoryBoost !== undefined)
         ? h(
             'div',
             { class: 'row' },
@@ -1039,7 +1087,7 @@ export class CareerMode implements Mode {
                   this.show('dyno');
                 })(),
             }),
-            h('span', {}, car.tune?.boostBar !== undefined ? `${f2(car.tune.boostBar)} bar` : programmable ? 'mapa padrão' : `${f2(0.6)} bar`),
+            h('span', {}, car.tune?.boostBar !== undefined ? `${f2(car.tune.boostBar)} bar` : programmable ? 'mapa padrão' : `${f2(bDef)} bar`),
           )
         : null;
     setTimeout(() => this.runDyno(b, canvas, info), 20);
@@ -1641,5 +1689,7 @@ function stockSpec(car: CarConfig, cat: PartCategory): string {
       return car.awd ? `Diferencial central original: ${car.awd.centerCouplingNm} N·m de acoplamento.` : 'Sem tração integral.';
     case 'suspension':
       return 'Suspensão original de rua.';
+    default:
+      return `${CATEGORY_LABEL[cat]} original de fábrica: sem alteração de componentes.`;
   }
 }
