@@ -24,11 +24,50 @@ export interface LabMeasurement {
   t100: number | null;
   t201: number | null;
   t402: number | null;
-  /** Speed the car settles at in the test (top speed reached, km/h). */
+  /** Highest speed reached in the test run (km/h; the run is time-limited, not a settled top speed). */
   vmaxKmh: number;
   /** Time the driven tyres spent above 15 % slip (s). */
   wheelspinS: number;
   revLimitRpm: number;
+  /**
+   * Recommended upshift speed per gear (index 0 = 1st → 2nd), from the measured torque curve and the
+   * gear ratios: the speed where the next gear gives at least the same wheel torque.
+   */
+  shiftRpms: number[];
+}
+
+/**
+ * Best upshift speed of each gear: wheel torque ∝ T(rpm)·ratio. Shifting at rpm lands the engine at
+ * rpm·next/ratio; the best point is the lowest speed where the next gear pulls at least as hard
+ * (it then pulls harder from there on). When the current gear always pulls harder, it is the cut.
+ * Final drive multiplies both sides (it does not move the point).
+ */
+export function recommendedShiftRpms(points: readonly LabPoint[], ratios: readonly number[], cutRpm: number): number[] {
+  const tq = (rpm: number): number => {
+    if (rpm <= points[0]!.rpm) return points[0]!.torqueNm;
+    for (let i = 1; i < points.length; i++) {
+      const p = points[i]!;
+      if (rpm <= p.rpm) {
+        const q = points[i - 1]!;
+        return q.torqueNm + ((p.torqueNm - q.torqueNm) * (rpm - q.rpm)) / (p.rpm - q.rpm);
+      }
+    }
+    return points[points.length - 1]!.torqueNm;
+  };
+  const out: number[] = [];
+  for (let g = 0; g + 1 < ratios.length; g++) {
+    const r0 = ratios[g]!;
+    const r1 = ratios[g + 1]!;
+    let best = cutRpm;
+    for (let rpm = 2500; rpm <= cutRpm; rpm += 25) {
+      if (tq(rpm) * r0 <= tq((rpm * r1) / r0) * r1) {
+        best = rpm;
+        break;
+      }
+    }
+    out.push(Math.round(best / 25) * 25);
+  }
+  return out;
 }
 
 export const LAB_EIGHTH_M = 201.168;
@@ -85,5 +124,6 @@ export async function measureLab(
     vmaxKmh: acc.topSpeedKmh,
     wheelspinS: acc.wheelspinS,
     revLimitRpm: e.revLimitRpm,
+    shiftRpms: recommendedShiftRpms(points, car.transmission.gearRatios, e.revLimitRpm),
   };
 }

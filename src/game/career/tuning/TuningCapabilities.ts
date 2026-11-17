@@ -364,7 +364,15 @@ export function failureSpecFor(base: CarConfig, partIds: readonly string[], vers
   return hw.ok ? overrevSpecOf(reliabilityLimits(hw.car, partIds)) : null;
 }
 
-/** Spec of a finished car config without part information (sandbox option "Falhas mecânicas"). */
-export function failureSpecForCar(car: CarConfig): OverrevSpec {
-  return overrevSpecOf(reliabilityLimits(car, []));
+/**
+ * Spec of a finished car config without part information (sandbox option "Falhas mecânicas").
+ * `reference` is the unedited catalogue car: the safe speed comes from ITS cut, so raising the cut
+ * in the editor never raises the safe speed. The mechanical limit (maxSafeRpm) is the edited one:
+ * that is the hardware's capacity. A different engine than the reference uses its own data.
+ */
+export function failureSpecForCar(car: CarConfig, reference: CarConfig = car): OverrevSpec {
+  const sameEngine = reference.engine.id === car.engine.id;
+  const hwCut = sameEngine ? Math.min(car.engine.revLimitRpm, reference.engine.revLimitRpm) : car.engine.revLimitRpm;
+  const hw: CarConfig = { ...car, engine: { ...car.engine, revLimitRpm: hwCut } };
+  return overrevSpecOf(reliabilityLimits(hw, []));
 }

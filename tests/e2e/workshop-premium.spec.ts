@@ -34,7 +34,7 @@ test('oficina premium: nove sistemas, grupos distintos, estados e adaptação pa
   await expect(page.getByTestId('ws-compare')).toContainText('Torque');
 
   await page.getByTestId('ws-tab-electronics').click();
-  await expect(page.locator('.ws-center .ws-group')).toHaveCount(3);
+  await expect(page.locator('.ws-center .ws-group')).toHaveCount(4); // ECU, ignition, data logger + launch control (Dyno Lab 3.0)
   await page.getByTestId('ws-tab-cooling').click();
   await expect(page.locator('.ws-center .ws-group')).toHaveCount(4);
   await expect(page.getByTestId('ws-group-turbo-intercooler')).toBeVisible();

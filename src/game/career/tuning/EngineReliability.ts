@@ -1,5 +1,5 @@
 import type { CarConfig } from '../../../data/schema';
-import type { OverrevSpec } from '../../../physics/engine/EngineOverrevFailure';
+import { LIMITER_SAG_RPM, type OverrevSpec } from '../../../physics/engine/EngineOverrevFailure';
 import { findPart } from './parts';
 
 /**
@@ -27,29 +27,33 @@ export interface EngineFamilyReliability {
   estimated: boolean;
 }
 
-/** Margin over the factory cut for the limiter overshoot (the cut acts after the speed is passed). */
-export const LIMITER_MARGIN_RPM = 200;
-/** Exposure recovered per second below the recommended speed. */
-export const RECOVERY_PER_S = 0.04;
+/**
+ * Margin of the safe speed over the factory cut. The failure model reads the filtered speed
+ * (EngineOverrevFailure, τ 250 ms), which on the factory limiter sits 12–130 rpm under the cut
+ * (measured on seven engines), so the factory cut stays safe with this margin.
+ */
+export const LIMITER_MARGIN_RPM = 50;
+/** Exposure recovered per second once the engine rested 0.5 s under the safe speed. */
+export const RECOVERY_PER_S = 0.05;
 
 const EST = 'Estimativa: velocidade média do pistão no corte de fábrica e fama do projeto.';
 
 /** Keys: engine family (modern engines) or the engine id prefix (Chapter 1 / sandbox engines). */
 export const ENGINE_RELIABILITY: Record<string, EngineFamilyReliability> = {
-  'vw-ap': { label: 'VW AP 1.8 (curso longo 86,4 mm)', enduranceS: 3.5, source: `${EST} 18,7 m/s a 6.500 rpm; bielas longas de ferro fundido.`, estimated: true },
-  'fiat-fiasa': { label: 'Fiat Fiasa 1.0 (curso curto 54,8 mm)', enduranceS: 6, source: `${EST} 12,2 m/s a 6.700 rpm: curso curto tolera giro.`, estimated: true },
-  'gm-chevette': { label: 'GM Chevette 1.6', enduranceS: 4, source: `${EST} 15,9 m/s a 6.300 rpm; comando no cabeçote com correia.`, estimated: true },
-  'gm-familia1': { label: 'GM Família I', enduranceS: 4.5, source: `${EST} 14–15 m/s no corte; 8V de comando simples.`, estimated: true },
-  'gm-familia2': { label: 'GM Família II', enduranceS: 4.5, source: `${EST} 17–18 m/s no corte; bloco de ferro robusto, 8V.`, estimated: true },
-  'honda-k20': { label: 'Honda K20 i-VTEC', enduranceS: 7, source: `${EST} 23,8 m/s a 8.300 rpm com virabrequim forjado de fábrica.`, estimated: true },
-  'psa-prince-thp': { label: 'PSA/BMW Prince 1.6 THP', enduranceS: 3.5, source: `${EST} corrente de comando e pistões sensíveis a giro alto com pressão.`, estimated: true },
-  'vw-ea113': { label: 'VW EA113 1.8T 20V', enduranceS: 5, source: `${EST} bielas forjadas de fábrica; curso de 86,4 mm.`, estimated: true },
-  'mb-m274': { label: 'Mercedes M274 2.0', enduranceS: 4.5, source: `${EST} curso longo de 92 mm.`, estimated: true },
-  'bmw-n20': { label: 'BMW N20 2.0', enduranceS: 4.5, source: `${EST} curso de 90,1 mm; corrente de comando traseira.`, estimated: true },
-  'vw-ea888': { label: 'VW EA888 2.0 TSI', enduranceS: 4.5, source: `${EST} curso longo de 92,8 mm.`, estimated: true },
-  'mitsubishi-4b11': { label: 'Mitsubishi 4B11T', enduranceS: 6, source: `${EST} bloco de alumínio com internos de competição de fábrica (Evo).`, estimated: true },
-  'bmw-n55': { label: 'BMW N55 3.0', enduranceS: 5.5, source: `${EST} seis em linha balanceado; curso de 89,6 mm.`, estimated: true },
-  default: { label: 'Motor genérico', enduranceS: 4.5, source: `${EST} valor médio para motores sem dados próprios (Sandbox).`, estimated: true },
+  'vw-ap': { label: 'VW AP 1.8 (curso longo 86,4 mm)', enduranceS: 2.2, source: `${EST} 18,7 m/s a 6.500 rpm; bielas longas de ferro fundido.`, estimated: true },
+  'fiat-fiasa': { label: 'Fiat Fiasa 1.0 (curso curto 54,8 mm)', enduranceS: 2.8, source: `${EST} 12,2 m/s a 6.700 rpm: curso curto tolera giro.`, estimated: true },
+  'gm-chevette': { label: 'GM Chevette 1.6', enduranceS: 2.4, source: `${EST} 15,9 m/s a 6.300 rpm; comando no cabeçote com correia.`, estimated: true },
+  'gm-familia1': { label: 'GM Família I', enduranceS: 2.8, source: `${EST} 14–15 m/s no corte; 8V de comando simples.`, estimated: true },
+  'gm-familia2': { label: 'GM Família II', enduranceS: 2.4, source: `${EST} 17–18 m/s no corte; bloco de ferro robusto, 8V.`, estimated: true },
+  'honda-k20': { label: 'Honda K20 i-VTEC', enduranceS: 1.8, source: `${EST} 23,8 m/s a 8.300 rpm com virabrequim forjado de fábrica.`, estimated: true },
+  'psa-prince-thp': { label: 'PSA/BMW Prince 1.6 THP', enduranceS: 2.5, source: `${EST} corrente de comando e pistões sensíveis a giro alto com pressão.`, estimated: true },
+  'vw-ea113': { label: 'VW EA113 1.8T 20V', enduranceS: 3.1, source: `${EST} bielas forjadas de fábrica; curso de 86,4 mm.`, estimated: true },
+  'mb-m274': { label: 'Mercedes M274 2.0', enduranceS: 2.9, source: `${EST} curso longo de 92 mm.`, estimated: true },
+  'bmw-n20': { label: 'BMW N20 2.0', enduranceS: 2.9, source: `${EST} curso de 90,1 mm; corrente de comando traseira.`, estimated: true },
+  'vw-ea888': { label: 'VW EA888 2.0 TSI', enduranceS: 2.9, source: `${EST} curso longo de 92,8 mm.`, estimated: true },
+  'mitsubishi-4b11': { label: 'Mitsubishi 4B11T', enduranceS: 3.4, source: `${EST} bloco de alumínio com internos de competição de fábrica (Evo).`, estimated: true },
+  'bmw-n55': { label: 'BMW N55 3.0', enduranceS: 3.3, source: `${EST} seis em linha balanceado; curso de 89,6 mm.`, estimated: true },
+  default: { label: 'Motor genérico', enduranceS: 3, source: `${EST} valor médio para motores sem dados próprios (Sandbox).`, estimated: true },
 };
 
 const ID_PREFIXES: [RegExp, string][] = [
@@ -104,7 +108,7 @@ export function reliabilityLimits(hw: CarConfig, partIds: readonly string[]): Re
   }
   const cut = hw.engine.revLimitRpm;
   const recommended = cut + LIMITER_MARGIN_RPM + add;
-  const maxSafe = Math.max(hw.engine.maxSafeRpm + add, recommended + 100);
+  const maxSafe = Math.max(hw.engine.maxSafeRpm + add, recommended + LIMITER_SAG_RPM + 150);
   return {
     key,
     label: fam.label,
@@ -128,9 +132,9 @@ export const RELIABILITY_LABEL: Record<ReliabilityLevel, string> = { safe: 'Segu
 
 /** Band of a cut setting: under the recommended speed (safe) up to the mechanical limit (critical). */
 export function reliabilityLevel(l: Pick<OverrevSpec, 'recommendedSafeRpm' | 'maxSafeRpm'>, revLimitRpm: number, boostOverDefaultBar = 0): ReliabilityLevel {
-  // the cut acts after the speed is passed: the speed reached is the cut plus the overshoot margin
-  const reach = revLimitRpm + LIMITER_MARGIN_RPM;
-  const x = (reach - l.recommendedSafeRpm) / Math.max(50, l.maxSafeRpm - l.recommendedSafeRpm);
+  // the engine held on the cut runs (filtered) LIMITER_SAG_RPM under it; x = 1 on a cut at the mechanical limit
+  const reach = revLimitRpm - LIMITER_SAG_RPM;
+  const x = (reach - l.recommendedSafeRpm) / Math.max(100, l.maxSafeRpm - LIMITER_SAG_RPM - l.recommendedSafeRpm);
   let lvl: ReliabilityLevel = x <= 0 ? 'safe' : x <= 0.35 ? 'sport' : x <= 0.75 ? 'aggressive' : 'critical';
   // more boost loads the parts that over-rev harder (see EngineOverrevFailure): one band up
   if (boostOverDefaultBar > 0.15 && x > 0) lvl = lvl === 'sport' ? 'aggressive' : lvl === 'aggressive' ? 'critical' : lvl;

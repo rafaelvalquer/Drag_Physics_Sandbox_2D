@@ -37,6 +37,8 @@ export const SPLITS: SplitDef[] = [
 ];
 
 export type TreeType = 'pro' | 'sportsman';
+/** A blown engine coasts this long (s) before the safety braking, when the car is moving. */
+export const BLOWN_COAST_S = 1.25;
 export type DnfReason = 'timeout' | 'engine-blown';
 export type RacePhase = 'staging' | 'tree' | 'racing' | 'finished';
 
@@ -54,6 +56,8 @@ export interface LaneResult {
   dnf: boolean;
   /** Why the lane did not finish: timeout (45 s after the green) or a blown engine. */
   dnfReason?: DnfReason;
+  /** Engine speed at the failure (rpm), from the failure model (blown engine only). */
+  blownAtRpm?: number;
   maxSpeedMs: number;
   /** Total time = RT + ET = finish − green (s); null until the finish line is crossed. */
   total?: number | null;
@@ -220,7 +224,10 @@ export class RaceController {
       // moving, whatever the grade or wind) and, in gear, until the driver applies throttle.
       // Gear + throttle releases it – leaving before the green is a red light, never blocked.
       c.holdBrake = st.leftAt === null && (sim.gear === 0 || c.pedal < 0.02) && !finished;
-      c.autoBrake = finished;
+      // a blown engine coasts first (no drive, drag and rolling resistance only): the driver sees
+      // the engine go, not the brakes; then the safety braking stops the car
+      const coasting = st.result.dnfReason === 'engine-blown' && st.endT !== null && t - st.endT < BLOWN_COAST_S && sim.speed > 0.5;
+      c.autoBrake = finished && !coasting;
     });
   }
 
@@ -238,6 +245,7 @@ export class RaceController {
         res.dnf = true;
         res.dnfReason = 'engine-blown';
         res.maxRpm = sim.maxRpm;
+        res.blownAtRpm = sim.failure?.brokenRpm ?? sim.engine.rpm;
         st.endT = t;
         st.ready = false;
         this.status = `Motor quebrado: ${lane.name}`;

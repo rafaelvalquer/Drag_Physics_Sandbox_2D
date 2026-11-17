@@ -67,12 +67,15 @@ npm run test:e2e:build
 | pista, botões, HUD, configurações | condição inválida recusada e válida aplicada ao vivo; condução só pelos botões na tela; HUD de distância e tempo; configurações persistem após recarregar |
 | editor e Developer Lab | arquitetura mantém a configuração válida; restaurar padrão; aba Testes; contadores medidos; estimativa de áudio rotulada; `T` oculta o painel |
 
-| Dyno Lab 3.0 (`dyno-lab-3.spec.ts`) | controle travado com motivo; editar não reconstrói a tela; rascunho medido contra o salvo; descartar; aplicar grava |
-| motor quebrado (`blown-engine.spec.ts`) | esforço no HUD sobe; o motor quebra e não religa; tela MOTOR QUEBRADO/DNF; resultado salvo uma vez, sem custo; "Tentar novamente" volta com o motor inteiro |
+| Dyno Lab 3.0 (`dyno-lab-3.spec.ts`) | controle travado com motivo; editar não reconstrói a tela; rascunho medido contra o salvo; descartar; aplicar grava; cortes e troca recomendada visíveis |
+| motor quebrado (`blown-engine.spec.ts`) | (1) limites encurtados: risco sobe no HUD, quebra, DNF, salvo uma vez sem custo, "Tentar novamente"; (2) **real**: Golf GTI + ECU programável no corte máximo, limites normais, giro no limitador na linha → alerta "RPM EXCESSIVO", quebra, giro exato da falha no resultado, acerto mantido, motor zerado na revanche |
 
-Unitários do Dyno Lab e da falha: `engine-overrev-failure`, `tuning-capabilities`, `dyno-tuning`,
-`tuning-save-migration` e `blown-engine-dnf`. Calibração sem tela do motor quebrado (casos A–H em sete motores,
-ver [ENGINE_LIMITS.md](ENGINE_LIMITS.md)):
+Unitários do Dyno Lab e da falha: `engine-overrev-failure` (filtro, ciclo do limitador sem recuperação, atraso da
+recuperação, sobre-rotação extrema, determinismo, reinício, referência do Sandbox), `strain-display` (filtro
+visual a 30/60/144 FPS, histerese, alerta separado, bipe com cooldown, troca recomendada), `tuning-capabilities`,
+`dyno-tuning`, `tuning-save-migration` e `blown-engine-dnf` (DNF antes do verde; quebra durante 402 m com trocas
+atrasadas, desaceleração livre e depois frenagem, giro exato). Calibração sem tela do motor quebrado (cenários 1–9
+em todos os carros da campanha com corte programável, ver [ENGINE_LIMITS.md](ENGINE_LIMITS.md)):
 
 ```bash
 npx tsx scripts/overrev-calibration.ts

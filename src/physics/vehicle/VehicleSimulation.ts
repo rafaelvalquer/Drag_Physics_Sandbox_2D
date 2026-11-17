@@ -259,6 +259,7 @@ export class VehicleSimulation {
 
   reset(x = 0): void {
     this.engine.reset();
+    this.failure?.reset(); // a restart is a fresh engine (failures stay enabled)
     this.gearbox.reset();
     this.shift.reset();
     this.clutchCtl.reset();

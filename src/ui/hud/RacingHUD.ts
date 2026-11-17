@@ -4,15 +4,16 @@ import { GearIndicator } from './GearIndicator';
 import { ShiftLights, shiftLightState, shiftTargets } from './ShiftLights';
 import { TurboGauge, turboGaugeState } from './TurboGauge';
 import { Tachometer, tachScale, type TachScale } from './Tachometer';
-import { strainLevel, type StrainLevel } from '../../physics/engine/EngineOverrevFailure';
+import type { StrainLevel } from '../../physics/engine/EngineOverrevFailure';
+import { StrainDisplay } from './strainDisplay';
 
 /** Text and symbol of each strain band (colour is never the only cue). */
 export const STRAIN_TEXT: Record<StrainLevel | 'broken', { text: string; symbol: string }> = {
   normal: { text: 'Normal', symbol: '●' },
-  elevated: { text: 'Elevado', symbol: '▲' },
-  high: { text: 'Alto', symbol: '▲▲' },
+  elevated: { text: 'Atenção', symbol: '▲' },
+  high: { text: 'Alto risco', symbol: '▲▲' },
   critical: { text: 'Crítico', symbol: '⚠' },
-  broken: { text: 'Quebrado', symbol: '✖' },
+  broken: { text: 'Motor quebrado', symbol: '✖' },
 };
 
 /** Run information shown next to the gauges (computed by the mode). */
@@ -63,6 +64,12 @@ export class RacingHUD {
   private readonly strainRow: HTMLElement;
   private readonly strainBar: HTMLElement;
   private readonly strainText: HTMLElement;
+  private readonly strainAlert: HTMLElement;
+  private readonly risk = new StrainDisplay();
+  private riskLastMs: number | null = null;
+  private riskLastSimT = 0;
+  /** Called when the risk enters the critical band (warning beep; cooldown in StrainDisplay). */
+  onRiskCritical: (() => void) | null = null;
   /** Overrides the computed shift point (rpm) when set. */
   shiftRpm: number | null = null;
   private scale: TachScale = tachScale(7000, 7200);
@@ -99,15 +106,17 @@ export class RacingHUD {
         'data-testid': 'hud-strain',
         'data-level': 'normal',
         role: 'meter',
-        'aria-label': 'Esforço do motor',
+        'aria-label': 'Risco de quebra do motor',
         'aria-valuemin': '0',
         'aria-valuemax': '100',
-        title: 'Esforço do motor: acumula acima da rotação recomendada (mais rápido com carga e pressão) e alivia abaixo dela.',
+        title: 'Risco de quebra: acumula enquanto o giro fica acima do recomendado (mais rápido com carga e pressão) e alivia depois de meio segundo abaixo dele.',
       },
-      h('span', { class: 'k' }, 'ESFORÇO DO MOTOR'),
+      h('span', { class: 'k' }, 'RISCO DE QUEBRA'),
       h('div', { class: 'hbar' }, this.strainBar),
       this.strainText,
     );
+    this.strainAlert = h('div', { class: 'strain-alert-msg', 'data-testid': 'hud-overrev', role: 'status', 'aria-live': 'polite' }, '');
+    this.strainAlert.style.display = 'none';
     this.strainRow.style.display = 'none';
     this.el = h(
       'div',
@@ -129,6 +138,7 @@ export class RacingHUD {
         this.gapRow,
         h('div', { class: 'bar-row', title: 'Escorregamento longitudinal dos pneus de tração: (ωr − v) / v' }, h('span', { class: 'k' }, 'patinagem'), h('div', { class: 'hbar' }, this.slipBar), this.slipText),
         this.strainRow,
+        this.strainAlert,
         this.msg,
       ),
     );
@@ -190,20 +200,42 @@ export class RacingHUD {
   private updateStrain(sim: VehicleSimulation): void {
     const f = sim.failure;
     this.strainRow.style.display = f ? '' : 'none';
-    if (!f) return;
-    const strain = f.strain;
-    const level: StrainLevel | 'broken' = f.broken ? 'broken' : strainLevel(strain);
-    this.strainBar.style.width = `${Math.round(strain * 100)}%`;
-    const t = STRAIN_TEXT[level];
-    this.strainText.textContent = `${t.symbol} ${t.text}`;
-    if (this.strainRow.dataset.level !== level) this.strainRow.dataset.level = level;
-    this.strainRow.setAttribute('aria-valuenow', String(Math.round(strain * 100)));
-    this.el.classList.toggle('strain-alert', level === 'high' || level === 'critical');
+    if (!f) {
+      this.strainAlert.style.display = 'none';
+      this.el.classList.remove('strain-alert');
+      return;
+    }
+    // display filter on real (frame) time; a restart (sim clock going back) clears it
+    const now = performance.now();
+    const dt = this.riskLastMs === null ? 0 : (now - this.riskLastMs) / 1000;
+    this.riskLastMs = now;
+    if (sim.simTime < this.riskLastSimT || (f.exposure === 0 && !f.broken && sim.simTime === 0)) this.risk.reset();
+    this.riskLastSimT = sim.simTime;
+    const canUpshift = sim.gear >= 1 && sim.gear < sim.gearbox.gearCount;
+    const v = this.risk.update(dt, { exposure: f.exposure, broken: f.broken, overrev: f.overrev, canUpshift });
+    const pct = Math.round(v.shown * 100);
+    this.strainBar.style.width = `${pct}%`;
+    const t = STRAIN_TEXT[v.level];
+    const txt = `${t.symbol} ${t.text}`;
+    if (this.strainText.textContent !== txt) this.strainText.textContent = txt;
+    if (this.strainRow.dataset.level !== v.level) this.strainRow.dataset.level = v.level;
+    this.strainRow.setAttribute('aria-valuenow', String(Math.round((f.broken ? 1 : f.exposure) * 100)));
+    this.strainAlert.style.display = v.alert ? '' : 'none';
+    if (v.alert && this.strainAlert.textContent !== v.alert) this.strainAlert.textContent = v.alert;
+    this.strainAlert.dataset.kind = v.alert === 'RPM EXCESSIVO' ? 'overrev' : 'action';
+    this.el.classList.toggle('strain-alert', v.level === 'high' || v.level === 'critical');
+    if (v.beep) this.onRiskCritical?.();
   }
 
   /** Strain gauge state for the tests. */
-  get strainDebug(): { visible: boolean; level: string; text: string } {
-    return { visible: this.strainRow.style.display !== 'none', level: this.strainRow.dataset.level ?? '', text: this.strainText.textContent ?? '' };
+  get strainDebug(): { visible: boolean; level: string; text: string; shown: number; alert: string } {
+    return {
+      visible: this.strainRow.style.display !== 'none',
+      level: this.strainRow.dataset.level ?? '',
+      text: this.strainText.textContent ?? '',
+      shown: parseFloat(this.strainBar.style.width) / 100 || 0,
+      alert: this.strainAlert.style.display === 'none' ? '' : (this.strainAlert.textContent ?? ''),
+    };
   }
 
   /** Current scale and shift target (for the tests). */

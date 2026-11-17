@@ -53,4 +53,7 @@ test('Dyno Lab 3.0: rascunho, comparação A/B, descartar e aplicar', async ({ p
   await expect.poll(() => mode<unknown>(page, 'm.controller.activeCar.tune')).toEqual({ finalDrive: 'short' });
   await expect(page.getByTestId('dyno-dirty')).toContainText('Sem alterações');
   await expect(page.getByTestId('dyno-reliability')).toHaveAttribute('data-level', 'safe');
+  await expect(page.getByTestId('dyno-rel-warning')).toHaveCount(0);
+  await expect(page.getByTestId('dyno-shift-points')).toContainText('Troca recomendada');
+  await expect(page.getByTestId('dyno-orig-rpm')).toBeVisible();
 });

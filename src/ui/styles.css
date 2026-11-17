@@ -885,8 +885,30 @@ details.fold[open] > summary {
   0%, 100% { box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45); }
   50% { box-shadow: 0 0 0 2px rgba(255, 110, 60, 0.35), 0 6px 24px rgba(0, 0, 0, 0.45); }
 }
+.rhud .strain-row .fill { transition: none; }
+.rhud .strain-alert-msg {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #ffb066;
+  background: rgba(255, 138, 61, 0.12);
+  border: 1px solid rgba(255, 138, 61, 0.35);
+}
+.rhud .strain-alert-msg[data-kind='action'] {
+  color: #fff;
+  background: rgba(255, 77, 77, 0.22);
+  border-color: rgba(255, 77, 77, 0.6);
+  animation: strain-msg-pulse 1.4s ease-in-out infinite;
+}
+@keyframes strain-msg-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.72; }
+}
 @media (prefers-reduced-motion: reduce) {
   .rhud.strain-alert { animation: none; }
+  .rhud .strain-alert-msg[data-kind='action'] { animation: none; }
 }
 .rhud .info {
   display: flex;

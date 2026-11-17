@@ -161,15 +161,26 @@ física não produziu.
   (giro de largada em manual/DCT). Os forjados existentes também elevam o limite.
 - **Tela**: abas Motor/Arrancada/Transmissão. Editar não reconstrói a tela nem grava o save: o rascunho (B) é medido
   após uma pausa curta (cache limitado, medições antigas descartadas) e comparado ao build salvo (A) na curva e em
-  0–100 km/h, 201 m, 402 m, velocidade máxima e patinagem, todos medidos na física real. **Aplicar** grava;
-  **Descartar** volta ao salvo.
-- **Confiabilidade**: painel "CONFIABILIDADE DA PREPARAÇÃO" (Seguro/Esportivo/Agressivo/Crítico) com giro
-  recomendado, corte e limite mecânico. Limites por família de motor: [ENGINE_LIMITS.md](ENGINE_LIMITS.md).
-- **Falha**: acima do giro recomendado o motor acumula desgaste (determinístico). Ao chegar a 100 % ele quebra: sem
-  combustão, sem religar, som de quebra e fumaça leve no capô. A corrida vira DNF `engine-blown` (também antes do
-  verde), o rival termina, o resultado é salvo uma vez, sem custo de reparo, e a próxima tentativa começa com o motor
-  inteiro. O HUD mostra "ESFORÇO DO MOTOR" (cor + texto/símbolo, sem °C; respeita movimento reduzido).
-- **Sandbox**: "Falhas mecânicas" vem desligado; na campanha está sempre ligado (só no carro do jogador).
+  0–100 km/h, 201 m, 402 m, maior velocidade no teste (o ensaio tem duração limitada: não é a velocidade máxima
+  estabilizada) e patinagem, todos medidos na física real. **Aplicar** grava; **Descartar** volta ao salvo.
+- **Confiabilidade**: painel "CONFIABILIDADE DA PREPARAÇÃO" (Seguro/Esportivo/Agressivo/Crítico) com corte original,
+  corte configurado, giro recomendado e limite mecânico; acima da faixa recomendada aparece o aviso de risco. O
+  painel mostra a troca recomendada por marcha (curva de torque medida × relações: o giro em que a marcha seguinte
+  puxa pelo menos o mesmo), também marcada no gráfico. Sem previsão de "segundos até quebrar": depende da condução.
+  Limites por família de motor: [ENGINE_LIMITS.md](ENGINE_LIMITS.md).
+- **Falha**: acima do giro recomendado (lido filtrado, 250 ms) o risco acumula, determinístico; as quedas do
+  limitador não contam como descanso: o risco só recua depois de 0,5 s abaixo da faixa. Ao chegar a 100 % o motor
+  quebra: sem combustão, sem religar, som de quebra e fumaça leve no capô. O carro perde a tração e desacelera
+  livre por 1,25 s (arrasto e rolagem) antes da frenagem de segurança. A corrida vira DNF `engine-blown` (também
+  antes do verde), o rival termina, o resultado mostra o giro exato da falha, é salvo uma vez, sem custo de reparo
+  nem desgaste, e a próxima tentativa começa com o motor inteiro (o acerto continua salvo).
+- **HUD**: barra "RISCO DE QUEBRA" (risco acumulado com filtro visual de 250 ms independente do FPS; faixas com
+  histerese: Atenção 15/10 %, Alto risco 45/40 %, Crítico 75/70 %), aviso separado "RPM EXCESSIVO" e, com risco alto,
+  "TROQUE DE MARCHA!" (ou "REDUZA O GIRO!" em neutro/última marcha). Um bipe curto ao entrar em Crítico, no máximo
+  a cada 4 s. Cor + texto/símbolo, sem °C; respeita movimento reduzido.
+- **Sandbox**: "Falhas mecânicas" vem desligado; na campanha está sempre ligado (só no carro do jogador). No
+  Sandbox o giro seguro vem do corte do carro de catálogo: subir o corte no editor não aumenta a resistência (subir
+  o limite mecânico, sim). Reiniciar (R) devolve o motor inteiro e mantém as falhas ligadas.
 
 ## Diálogos e retratos
 

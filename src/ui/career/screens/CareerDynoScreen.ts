@@ -42,6 +42,20 @@ const isErr = (r: Result | null): r is { error: string } => !!r && 'error' in r;
 const f1 = (v: number): string => v.toFixed(1).replace('.', ',');
 const f2 = (v: number): string => v.toFixed(2).replace('.', ',');
 const f3 = (v: number | null): string => (v === null ? '—' : `${v.toFixed(2).replace('.', ',')} s`);
+
+/** Chart markers of the recommended upshifts: gears sharing a speed get one label ("1-2/2-3"). */
+function uniqueShifts(rpms: readonly number[], cut: number): { rpm: number; label: string }[] {
+  const out: { rpm: number; label: string }[] = [];
+  rpms.forEach((r, i) => {
+    if (r >= cut - 25) return; // at the cut: the cut marker already says it
+    const same = out.find((o) => Math.abs(o.rpm - r) < 60);
+    const g = `${i + 1}-${i + 2}`;
+    if (same) same.label += `/${g}`;
+    else out.push({ rpm: r, label: `troca ${g}` });
+  });
+  return out;
+}
+
 const LEVEL_SYMBOL: Record<ReliabilityLevel, string> = { safe: '●', sport: '▲', aggressive: '▲▲', critical: '⚠' };
 
 type Tab = 'motor' | 'arrancada' | 'transmissao';
@@ -71,7 +85,7 @@ export function buildDynoLab(d: DynoLabDeps): DynoLabView {
     { id: 't100', label: '0–100 km/h', get: (m) => m.t100, fmt: f3, better: 'low' },
     { id: 't201', label: '201 m', get: (m) => m.t201, fmt: f3, better: 'low' },
     { id: 't402', label: '402 m', get: (m) => m.t402, fmt: f3, better: 'low' },
-    { id: 'vmax', label: 'Vel. máx. estabilizada', get: (m) => m.vmaxKmh, fmt: (v) => (v === null ? '—' : `${f1(v)} km/h`), better: 'high' },
+    { id: 'vmax', label: 'Maior velocidade no teste', get: (m) => m.vmaxKmh, fmt: (v) => (v === null ? '—' : `${f1(v)} km/h`), better: 'high' },
     { id: 'spin', label: 'Patinação', get: (m) => m.wheelspinS, fmt: (v) => (v === null ? '—' : `${f2(v)} s`), better: 'low' },
   ];
   const metricCells = metricDefs.map((m) => ({
@@ -287,7 +301,11 @@ export function buildDynoLab(d: DynoLabDeps): DynoLabView {
             { from: lim.maxSafeRpm, to: xMax, color: 'rgba(217, 90, 94, 0.22)' },
           ]
         : [],
-      markers: [{ x: cut, color: '#ff5a5f', label: `corte ${nf(cut)}`, dashed: true }],
+      markers: [
+        { x: cut, color: '#ff5a5f', label: `corte ${nf(cut)}`, dashed: true },
+        // recommended upshift points of the measured build (B while editing, else A)
+        ...uniqueShifts(((ctl.dirty ? b : a) ?? null)?.shiftRpms ?? [], cut).map((s) => ({ x: s.rpm, color: '#8fd8ff', label: s.label, dashed: true })),
+      ],
     });
   }
 
@@ -326,12 +344,20 @@ export function buildDynoLab(d: DynoLabDeps): DynoLabView {
     relBadge.textContent = `${LEVEL_SYMBOL[lvl]} ${RELIABILITY_LABEL[lvl]}`;
     relGauge.dataset.level = lvl;
     const cut = ctl.draft.revLimitRpm ?? caps.revLimit.default;
+    const shifts = (cur && !isErr(cur) ? cur.shiftRpms : []) ?? [];
     relDetail.replaceChildren(
       ...(lim
         ? [
+            h('div', {}, h('small', {}, 'Corte original'), h('b', { 'data-testid': 'dyno-orig-rpm' }, rpm(caps.revLimit.default))),
+            h('div', {}, h('small', {}, 'Corte configurado'), h('b', { 'data-testid': 'dyno-cut-rpm' }, rpm(cut))),
             h('div', {}, h('small', {}, 'Rotação recomendada'), h('b', { 'data-testid': 'dyno-rec-rpm' }, rpm(lim.recommendedSafeRpm))),
-            h('div', {}, h('small', {}, 'Corte'), h('b', { 'data-testid': 'dyno-cut-rpm' }, rpm(cut))),
             h('div', {}, h('small', {}, 'Limite mecânico'), h('b', { 'data-testid': 'dyno-max-rpm' }, rpm(lim.maxSafeRpm))),
+            ...(lvl !== 'safe'
+              ? [h('p', { class: 'dx-rel-warn', 'data-testid': 'dyno-rel-warning', role: 'note' }, 'Este ajuste permite rotações acima da faixa recomendada. Sustentar o motor nessa região durante a corrida aumenta o risco de quebra.')]
+              : []),
+            ...(shifts.length
+              ? [h('p', { class: 'dx-rel-note', 'data-testid': 'dyno-shift-points' }, `Troca recomendada: ${shifts.map((s, i) => `${i + 1}ª→${i + 2}ª ${nf(s)}`).join(' · ')} rpm.`)]
+              : []),
             h('p', { class: 'dx-rel-note' }, `${lim.label}. ${lim.estimated ? 'Limites estimados para este motor (sem dado de fábrica de falha).' : ''}`),
           ]
         : [h('p', {}, 'Build inválido.')]),

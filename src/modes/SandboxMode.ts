@@ -16,7 +16,7 @@ import { DevLab } from '../ui/DevLab';
 import { clear, fmt, h, toast } from '../ui/dom';
 import type { VehicleSimulation } from '../physics/vehicle/VehicleSimulation';
 import { failureSpecForCar } from '../game/career/tuning/TuningCapabilities';
-import { playBlownEngine } from '../audio/core/blownEngineSound';
+import { playBlownEngine, playRiskWarning } from '../audio/core/blownEngineSound';
 import { CarEditor } from '../ui/editor/CarEditor';
 import { TrackEditor } from '../ui/editor/TrackEditor';
 import { Hud } from '../ui/Hud';
@@ -88,6 +88,7 @@ export class SandboxMode implements Mode {
     });
     this.buildVehicles();
     this.hud = new Hud(ctx.hud);
+    this.hud.onRiskCritical = () => playRiskWarning(ctx.audio);
     this.buildPanel();
     const inp = ctx.input;
     this.offs.push(
@@ -201,7 +202,9 @@ export class SandboxMode implements Mode {
   private runT1: number | null = null;
 
   private applyFailures(sim: VehicleSimulation): void {
-    sim.enableEngineFailure(this.failures ? failureSpecForCar(sim.car) : null);
+    // reference: the catalogue car (an edited cut must not move the safe speed)
+    const ref = LAB_CARS.find((c) => c.id === sim.car.id) ?? sim.car;
+    sim.enableEngineFailure(this.failures ? failureSpecForCar(sim.car, ref) : null);
     sim.onEvent = (e) => {
       if (e.type === 'ENGINE_BLOWN') {
         playBlownEngine(this.ctx.audio);
@@ -372,7 +375,7 @@ export class SandboxMode implements Mode {
       h('div', { class: 'row' }, h('label', {}, 'Pista'), trackSel),
       h(
         'div',
-        { class: 'row', title: 'Quebra o motor se ele ficar tempo demais acima da rotação recomendada (ESFORÇO DO MOTOR no painel). Na campanha é sempre ligado.' },
+        { class: 'row', title: 'Quebra o motor se ele ficar tempo demais acima da rotação recomendada (RISCO DE QUEBRA no painel). Na campanha é sempre ligado.' },
         h('label', { for: 'sandbox-failures' }, 'Falhas mecânicas'),
         h('input', {
           type: 'checkbox',

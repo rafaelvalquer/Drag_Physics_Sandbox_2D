@@ -32,7 +32,7 @@ import { ownedCarBuild, ownedCarConfig, rivalBuild, rivalCar } from '../game/car
 import { BUILD_RESOLVER_VERSION, resolveBuild, type BuildResult } from '../game/career/tuning/BuildResolver';
 import type { BuildTune } from '../game/career/tuning/buildCommon';
 import { failureSpecFor, reconcileTune, tuneReliability } from '../game/career/tuning/TuningCapabilities';
-import { playBlownEngine } from '../audio/core/blownEngineSound';
+import { playBlownEngine, playRiskWarning } from '../audio/core/blownEngineSound';
 import { ALL_PARTS, CATEGORY_DESCRIPTION, CATEGORY_LABEL, CATEGORY_ORDER_V1, UNLOCK_LABEL, WORKSHOP_TABS, findPart, type PartCategory, type PartDef } from '../game/career/tuning/parts';
 import { RACE_DISTANCES, RaceController, type LaneResult, type RaceLane } from '../game/race/RaceController';
 import { runAccelerationTest } from '../game/race/accelerationTest';
@@ -1243,7 +1243,10 @@ export class CareerMode implements Mode {
       probes[1].sample(o.sim, racing, hh);
     });
     this.markerList = race.splits.map((s) => ({ xM: s.m, label: s.label, major: s.trap }));
-    if (!this.hud) this.hud = new Hud(this.ctx.hud);
+    if (!this.hud) {
+      this.hud = new Hud(this.ctx.hud);
+      this.hud.onRiskCritical = () => playRiskWarning(this.ctx.audio);
+    }
     if (!this.banner) {
       this.banner = h('div', { class: 'banner career-banner', 'data-testid': 'race-status' }, '');
       this.ctx.overlay.append(this.banner);
@@ -1265,7 +1268,7 @@ export class CareerMode implements Mode {
       finished: r.finished,
       dnf: r.dnf,
       ...(r.dnfReason ? { dnfReason: r.dnfReason } : {}),
-      ...(r.dnfReason === 'engine-blown' && r.maxRpm !== undefined ? { blownAtRpm: Math.round(r.maxRpm) } : {}),
+      ...(r.dnfReason === 'engine-blown' && r.blownAtRpm !== undefined ? { blownAtRpm: Math.round(r.blownAtRpm) } : {}),
       launchRpm: t.launchRpm,
       maxSlipRatio: t.maxSlipRatio,
       wheelspinS: t.wheelspinS,

@@ -120,7 +120,7 @@ function buildBlown(d: ResultDeps, b: { rpm: number; onDyno(): void }): HTMLElem
       {},
       h('small', { class: 'rs-blown-tag', lang: 'en' }, 'BLOWN ENGINE'),
       h('h2', { 'data-testid': 'result-winner', 'data-outcome': 'dnf' }, 'MOTOR QUEBRADO'),
-      h('p', {}, `DNF · o motor não aguentou o giro (quebrou a ${nf(Math.round(b.rpm))} rpm). ${d.winnerLine}.`),
+      h('p', { 'data-testid': 'blown-rpm', 'data-rpm': String(Math.round(b.rpm)) }, `Falha por excesso de rotação a ${nf(Math.round(b.rpm))} RPM. DNF · ${d.winnerLine}.`),
     ),
   );
   const info = panel(
@@ -129,7 +129,7 @@ function buildBlown(d: ResultDeps, b: { rpm: number; onDyno(): void }): HTMLElem
     h(
       'ul',
       { class: 'rs-blown-list' },
-      h('li', {}, 'O esforço do motor passou do limite: muito tempo acima da rotação recomendada, com carga.'),
+      h('li', {}, 'O risco de quebra chegou a 100 %: o motor ficou tempo demais acima da rotação recomendada, com carga.'),
       h('li', {}, 'Sem custo e sem desgaste: na próxima tentativa o motor volta inteiro.'),
       h('li', {}, 'No Dyno Lab, baixe o corte de giro ou instale molas de válvula / internos forjados para ter mais folga.'),
     ),

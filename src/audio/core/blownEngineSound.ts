@@ -45,3 +45,26 @@ export function playBlownEngine(audio: AudioEngine, gain = 0.7): void {
   src.connect(g).connect(audio.master);
   src.start();
 }
+
+/**
+ * Short, soft two-tone warning when the blown-engine risk enters the critical band (~0.3 s,
+ * procedural). The HUD rate-limits it (StrainDisplay cooldown); it never loops.
+ */
+export function playRiskWarning(audio: AudioEngine, gain = 0.18): void {
+  const ctx = audio.ctx;
+  if (!ctx || !audio.master || !audio.running) return;
+  const t0 = ctx.currentTime;
+  for (const [i, f] of [880, 660].entries()) {
+    const o = ctx.createOscillator();
+    o.type = 'triangle';
+    o.frequency.value = f;
+    const g = ctx.createGain();
+    const s = t0 + i * 0.14;
+    g.gain.setValueAtTime(0, s);
+    g.gain.linearRampToValueAtTime(gain, s + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, s + 0.13);
+    o.connect(g).connect(audio.master);
+    o.start(s);
+    o.stop(s + 0.14);
+  }
+}
