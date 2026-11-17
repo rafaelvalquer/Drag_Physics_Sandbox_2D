@@ -15,7 +15,6 @@ import {
   nextEvent,
   partStatus,
   stockStatus,
-  canTuneBoost,
   partRequirements,
   unlocksOf,
 } from '../game/career/CareerProgression';
@@ -29,18 +28,19 @@ import { SPEAKER_NAME, pendingScenes, type StoryScene, type StoryTrigger } from 
 import type { RaceRecord } from '../game/career/CareerController';
 import { TelemetryProbe, runHeadlessRace } from '../game/career/headlessRace';
 import { ownedCarBuild, ownedCarConfig, rivalBuild, rivalCar } from '../game/career/RivalBuildFactory';
-import { BUILD_RESOLVER_VERSION, boostRangeForParts, resolveBuild, type BuildResult } from '../game/career/tuning/BuildResolver';
+import { BUILD_RESOLVER_VERSION, resolveBuild, type BuildResult } from '../game/career/tuning/BuildResolver';
+import type { BuildTune } from '../game/career/tuning/buildCommon';
+import { failureSpecFor, reconcileTune, tuneReliability } from '../game/career/tuning/TuningCapabilities';
+import { playBlownEngine } from '../audio/core/blownEngineSound';
 import { ALL_PARTS, CATEGORY_DESCRIPTION, CATEGORY_LABEL, CATEGORY_ORDER_V1, UNLOCK_LABEL, WORKSHOP_TABS, findPart, type PartCategory, type PartDef } from '../game/career/tuning/parts';
 import { RACE_DISTANCES, RaceController, type LaneResult, type RaceLane } from '../game/race/RaceController';
 import { runAccelerationTest } from '../game/race/accelerationTest';
 import type { CameraMode, RenderVehicle, TrackMarker, TreeLights } from '../game/scenes/RaceScene';
 import { TREE_X_M } from '../game/scenes/worldScale';
 import { PHYSICS_DT, SimulationRunner } from '../game/SimulationRunner';
-import { EngineDyno, type DynoPoint } from '../physics/engine/EngineDyno';
 import type { AppContext, Mode } from '../app/Mode';
 import type { AppSettings } from '../app/settings';
 import { VehicleViews } from '../app/vehicleView';
-import { drawLineChart, drawMessage } from '../ui/charts';
 import { clear, downloadText, h, pickTextFile, toast } from '../ui/dom';
 import { Hud } from '../ui/Hud';
 import { GarageVehiclePreview } from '../ui/garage/GarageVehiclePreview';
@@ -60,7 +60,9 @@ import { buildChoose } from '../ui/career/screens/CareerChooseCarScreen';
 import { buildEnding } from '../ui/career/screens/CareerEndingScreen';
 import { buildResult } from '../ui/career/screens/CareerResultScreen';
 import { buildRival } from '../ui/career/screens/CareerRivalScreen';
-import { buildDyno, type DynoView } from '../ui/career/screens/CareerDynoScreen';
+import { buildDynoLab, type DynoLabView } from '../ui/career/screens/CareerDynoScreen';
+import { measureLab } from '../game/career/tuning/dynoLab';
+import { TRACKS } from '../data/tracks/index';
 import { buildHistory, type HistoryRow } from '../ui/career/screens/CareerHistoryScreen';
 import { buildMarket, type Offer } from '../ui/career/screens/CareerMarketScreen';
 import { buildChapters } from '../ui/career/screens/CareerChaptersScreen';
@@ -93,9 +95,10 @@ export function gearboxLabel(c: CarConfig): string {
   return `manual, ${n} marchas`;
 }
 
-/** Tune that survives a part change: only the kit turbo or a programmable ECU holds a boost setting. */
-function keptTune(car: OwnedCar, parts: readonly string[]): { boostBar?: number } {
-  return parts.includes('ecu-programmable') || parts.some((id) => findPart(id)?.category === 'turbo') ? (car.tune ?? {}) : {};
+/** Settings that survive a part change (the hardware still allows them and they are in range). */
+function keptTune(car: OwnedCar, parts: readonly string[]): BuildTune {
+  if (!car.tune) return {};
+  return reconcileTune(findCampaignCar(car.baseCarId)!, parts, buildVersionFor(car, parts), car.tune).tune;
 }
 
 /** Resolves a hypothetical part list of an owned car with the resolver version it would use. */
@@ -243,6 +246,8 @@ export class CareerMode implements Mode {
   show(screen: Screen): void {
     this.screen = screen;
     this.disposePreviews();
+    this.dynoLab?.dispose(); // a pending Dyno Lab measurement is discarded with its screen
+    this.dynoLab = null;
     this.menuAnim?.dispose();
     this.menuAnim = null;
     this.transition.cancel();
@@ -829,7 +834,7 @@ export class CareerMode implements Mode {
     if (!confirm(`Voltar o carro ao original? ${n === 1 ? 'A peça vai' : `As ${n} peças vão`} para o estoque e pode${n === 1 ? '' : 'm'} ser reinstalada${n === 1 ? '' : 's'} depois.`)) return;
     const r = await this.controller.restoreStock();
     if (!r.ok) toast(r.error, 'error');
-    else toast('Carro de volta ao original. As peças estão no estoque.');
+    else toast(r.notice ? `Carro de volta ao original. As peças estão no estoque. ${r.notice}` : 'Carro de volta ao original. As peças estão no estoque.');
     this.selectedPart = null;
     this.show('workshop');
   }
@@ -872,7 +877,8 @@ export class CareerMode implements Mode {
                 if (!this.guard()) return;
                 const r = await this.controller.restoreStock(cat);
                 if (!r.ok) toast(r.error, 'error');
-                else toast(`${CATEGORY_LABEL[cat]} original instalado. ${inSlot.map((id) => findPart(id)!.name).join(', ')} foi para o estoque.`);
+                else if (r.notice) toast(r.notice, 'error');
+                if (r.ok) toast(`${CATEGORY_LABEL[cat]} original instalado. ${inSlot.map((id) => findPart(id)!.name).join(', ')} foi para o estoque.`);
                 this.show('workshop');
               })(),
           },
@@ -968,11 +974,14 @@ export class CareerMode implements Mode {
     const after = resolveOwned(car, nextParts);
     const reqs = partRequirements(p, fam).map((u) => `${UNLOCK_LABEL[u]}${unlocksOf(s).has(u) ? ' ✓' : ''}`);
     const cmpHost = this.compareTable(before, after, installed ? 'Sem a peça' : 'Depois');
-    const act = async (fn: () => Promise<{ ok: boolean; error?: string }>, okMsg: string): Promise<void> => {
+    const act = async (fn: () => Promise<{ ok: boolean; error?: string; notice?: string }>, okMsg: string): Promise<void> => {
       if (!this.guard()) return;
       const r = await fn();
       if (!r.ok) toast(r.error ?? 'falhou', 'error');
-      else toast(okMsg);
+      else {
+        toast(okMsg);
+        if (r.notice) toast(r.notice, 'error');
+      }
       this.show('workshop');
     };
     const buttons: HTMLElement[] = [];
@@ -1002,104 +1011,49 @@ export class CareerMode implements Mode {
 
   // ------------------------------------------------------------------ dyno
 
+  private dynoLab: DynoLabView | null = null;
+
+  /**
+   * Dyno Lab 3.0: editing a setting changes only the draft (measured after a debounce, with the A/B
+   * comparison); the save is written by "Aplicar" through CareerController.applyTune, which
+   * validates again. The screen is never rebuilt while editing.
+   */
   private dynoScreen(): HTMLElement {
-    const s = this.controller.save!;
+    this.dynoLab?.dispose();
     const car = this.controller.activeCar!;
+    const base = findCampaignCar(car.baseCarId)!;
+    const version = buildVersionFor(car, car.installedParts);
     const b = ownedCarBuild(car);
-    const canvas = h('canvas', { class: 'career-dyno-chart', 'data-testid': 'career-dyno-chart' }) as HTMLCanvasElement;
-    const info = h('div', { class: 'hint', 'data-testid': 'career-dyno-info' }, 'Medindo no dinamômetro…');
-    const programmable = car.installedParts.includes('ecu-programmable');
-    const factoryBoost = findCampaignCar(car.baseCarId)!.engine.turbo?.maxBoostBar;
-    // programmable ECU (Caio, modern engines): factory boost + 0.1 … + 0.8 bar;
-    // turbo kit of a classic engine (tuners): the range of the installed kit and wastegate
-    const boostRange = programmable ? null : boostRangeForParts(car.installedParts.filter((id) => (findPart(id)?.since ?? 1) === 1));
-    const [bMin, bMax, bDef] =
-      programmable && factoryBoost !== undefined
-        ? [factoryBoost + 0.1, factoryBoost + 0.8, b.ok ? Math.max(...b.steadyBoostBar.map((x) => x.bar), factoryBoost) : factoryBoost]
-        : [boostRange?.[0] ?? 0.4, boostRange?.[1] ?? 1.0, b.ok ? (b.car.engine.turbo?.maxBoostBar ?? 0.6) : 0.6];
-    const tuneRow =
-      (canTuneBoost(s) && boostRange !== null) || (programmable && factoryBoost !== undefined)
-        ? h(
-            'div',
-            { class: 'row' },
-            h('label', {}, programmable ? 'Pressão alvo da ECU programável (Caio)' : 'Pressão do turbo (preparadores)'),
-            h('input', {
-              type: 'range',
-              min: bMin.toFixed(2),
-              max: bMax.toFixed(2),
-              step: '0.05',
-              value: String(car.tune?.boostBar ?? bDef),
-              'data-testid': 'career-boost',
-              onchange: (e: Event) =>
-                void (async () => {
-                  if (!this.guard()) return;
-                  const r = await this.controller.setBoost(Number((e.target as HTMLInputElement).value));
-                  if (!r.ok) toast(r.error, 'error');
-                  this.show('dyno');
-                })(),
-            }),
-            h('span', {}, car.tune?.boostBar !== undefined ? `${f2(car.tune.boostBar)} bar` : programmable ? 'mapa padrão' : `${f2(bDef)} bar`),
-          )
-        : null;
-    const view = buildDyno({
+    const caps = this.controller.capabilitiesOf(car)!;
+    const track = TRACKS.find((t) => t.id === 'test-track') ?? this.trackCfg;
+    const view = buildDynoLab({
       carName: car.nickname,
-      cfg: b.ok ? ownedCarConfig(car) : null,
+      cfg: b.ok ? b.car : null,
       makePreview: (c, w, hh) => this.preview(c, w, hh, 'plain', 0.86),
-      canvas,
-      info,
-      tuneRow,
+      caps,
+      saved: car.tune ?? {},
       turbo: b.ok && b.car.engine.induction === 'turbo',
-      onRun: () => {
-        info.removeAttribute('data-done');
-        info.textContent = 'Medindo no dinamômetro…';
-        this.runDyno(b, canvas, info, view);
+      measure: async (tune, stale, prog) => {
+        const r = resolveBuild(base, car.installedParts, tune, version);
+        if (!r.ok) return { error: r.errors.join('; ') };
+        const m = await measureLab(r.car, track, () => stale() || !view.el.isConnected, prog);
+        return m ?? (stale() || !view.el.isConnected ? null : { error: 'o motor não pegou no banco' });
+      },
+      reliabilityOf: (tune) => tuneReliability(caps, tune),
+      apply: async (tune) => {
+        if (!this.guard()) return { ok: false, error: 'aguarde' };
+        const r = await this.controller.applyTune(car.id, tune);
+        if (!r.ok) {
+          toast(r.error, 'error');
+          return { ok: false, error: r.error };
+        }
+        toast('Ajustes do Dyno Lab aplicados.');
+        return { ok: true };
       },
       onBack: () => this.show('garage'),
     });
-    setTimeout(() => this.runDyno(b, canvas, info, view), 20);
-    return this.frame('Dinamômetro', 'career-dyno', h('p', { class: 'lead' }, `${car.nickname}: o dinamômetro mede o motor que está no carro, com as peças instaladas. Os valores vêm do freio do banco, não da ficha.`), view.el);
-  }
-
-  private dynoToken = 0;
-
-  private runDyno(b: BuildResult, canvas: HTMLCanvasElement, info: HTMLElement, view?: DynoView): void {
-    const token = ++this.dynoToken; // a newer run or another screen cancels this one
-    if (!b.ok) {
-      drawMessage(canvas, b.errors.join('; '));
-      return;
-    }
-    const e = b.car.engine;
-    const d = new EngineDyno(e);
-    if (!d.start()) {
-      drawMessage(canvas, 'o motor não pegou no banco');
-      return;
-    }
-    const pts: DynoPoint[] = [];
-    const rpms: number[] = [];
-    for (let r = 1500; r <= e.revLimitRpm; r += 250) rpms.push(r);
-    let i = 0;
-    const boostMax = b.steadyBoostBar.length ? Math.max(...b.steadyBoostBar.map((x) => x.bar)) : null;
-    const stepChunk = (): void => {
-      if (!canvas.isConnected || token !== this.dynoToken) return;
-      for (let k = 0; k < 3 && i < rpms.length; k++, i++) pts.push(d.measure(rpms[i]!, 1, PHYSICS_DT, e.induction === 'turbo' ? 1.5 : 0.6, 0.15));
-      drawLineChart(
-        canvas,
-        [
-          { label: 'torque N·m', color: '#f2b705', x: pts.map((p) => p.rpm), y: pts.map((p) => p.torqueNm), points: true },
-          { label: 'potência cv', color: '#2bb3ff', x: pts.map((p) => p.rpm), y: pts.map((p) => p.powerCv), right: true, points: true },
-        ],
-        { xLabel: 'rpm', title: b.car.name, xMin: 1000, xMax: e.revLimitRpm, yMin: 0 },
-      );
-      view?.live(pts, pts[pts.length - 1]?.rpm ?? 0, i / rpms.length, i >= rpms.length, i >= rpms.length ? boostMax : null);
-      if (i < rpms.length) setTimeout(stepChunk, 0);
-      else {
-        const t = pts.reduce((a, p) => (p.torqueNm > a.torqueNm ? p : a));
-        const p = pts.reduce((a, q) => (q.powerCv > a.powerCv ? q : a));
-        info.textContent = `Medido: ${f1(t.torqueNm)} N·m a ${t.rpm.toFixed(0)} rpm · ${f1(p.powerCv)} cv a ${p.rpm.toFixed(0)} rpm${b.steadyBoostBar.length ? ` · pressão máx. ${f2(Math.max(...b.steadyBoostBar.map((x) => x.bar)))} bar` : ''}`;
-        info.dataset.done = '1';
-      }
-    };
-    stepChunk();
+    this.dynoLab = view;
+    return this.frame('Dyno Lab', 'career-dyno', h('p', { class: 'lead' }, `${car.nickname}: o dinamômetro mede o motor que está no carro, com as peças instaladas, e a pista de testes mede o carro. Os valores vêm da física, não da ficha.`), view.el);
   }
 
   // ------------------------------------------------------------------ events
@@ -1209,6 +1163,12 @@ export class CareerMode implements Mode {
     this.runner.setTrack(this.trackCfg);
     this.ctx.input.pedal = 0;
     const p = this.runner.add(playerCar, { id: 'player', lane: 0, isPlayer: true });
+    // mechanical failures are on in the campaign (player car only: the rivals run their own stock limits)
+    const base = findCampaignCar(owned.baseCarId)!;
+    p.sim.enableEngineFailure(failureSpecFor(base, owned.installedParts, buildVersionFor(owned, owned.installedParts)));
+    p.sim.onEvent = (e) => {
+      if (e.type === 'ENGINE_BLOWN') playBlownEngine(this.ctx.audio);
+    };
     const o = this.runner.add(rivalCarCfg, { id: 'opponent', lane: 1, isPlayer: false });
     this.views.names.set('opponent', `${rv.name} "${rv.nickname}"`);
     this.seed++;
@@ -1261,6 +1221,8 @@ export class CareerMode implements Mode {
       redLight: r.redLight,
       finished: r.finished,
       dnf: r.dnf,
+      ...(r.dnfReason ? { dnfReason: r.dnfReason } : {}),
+      ...(r.dnfReason === 'engine-blown' && r.maxRpm !== undefined ? { blownAtRpm: Math.round(r.maxRpm) } : {}),
       launchRpm: t.launchRpm,
       maxSlipRatio: t.maxSlipRatio,
       wheelspinS: t.wheelspinS,
@@ -1403,6 +1365,7 @@ export class CareerMode implements Mode {
       chapterEvents: ev.chapter === CHAPTER_1_ID ? 'Noites' : 'Etapas',
       won,
       onRetry: () => this.startRace(ev),
+      blown: p.dnfReason === 'engine-blown' ? { rpm: p.blownAtRpm ?? 0, onDyno: () => this.show('dyno') } : null,
       onGarage: () => this.show('garage'),
       onEvents: () => this.show('events'),
     });

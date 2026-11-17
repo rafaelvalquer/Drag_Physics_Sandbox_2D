@@ -147,6 +147,30 @@ física não produziu.
 - Exportar/importar: JSON com `format: "drag-physics-sandbox-2d/career"`. A importação valida o schema, os builds e
   os eventos antes de substituir o save.
 
+- Formato do save: versão 3. A migração v2 → v3 só muda o número da versão: os novos ajustes do Dyno Lab são
+  opcionais e um save antigo mantém o boost salvo.
+
+## Dyno Lab 3.0 e motor quebrado
+
+- **Ajustes** (`BuildTune`): pressão do turbo, corte de giro, giro de largada, resposta do acelerador
+  (suave/padrão/agressiva), relação final (curta/padrão/longa), giro de troca automática (AT/DCT) e pressão dos pneus.
+  Cada controle só abre com a peça real instalada (`TuningCapabilities.ts`); um controle travado mostra o motivo,
+  por exemplo "Exige kit turbo compatível." em motor aspirado. Instalar ou remover peça revalida o ajuste salvo: o
+  que deixou de valer é removido, com aviso.
+- **Peças novas** (só onde faltavam): molas de válvula reforçadas (+400 rpm de giro seguro) e controle de largada
+  (giro de largada em manual/DCT). Os forjados existentes também elevam o limite.
+- **Tela**: abas Motor/Arrancada/Transmissão. Editar não reconstrói a tela nem grava o save: o rascunho (B) é medido
+  após uma pausa curta (cache limitado, medições antigas descartadas) e comparado ao build salvo (A) na curva e em
+  0–100 km/h, 201 m, 402 m, velocidade máxima e patinagem, todos medidos na física real. **Aplicar** grava;
+  **Descartar** volta ao salvo.
+- **Confiabilidade**: painel "CONFIABILIDADE DA PREPARAÇÃO" (Seguro/Esportivo/Agressivo/Crítico) com giro
+  recomendado, corte e limite mecânico. Limites por família de motor: [ENGINE_LIMITS.md](ENGINE_LIMITS.md).
+- **Falha**: acima do giro recomendado o motor acumula desgaste (determinístico). Ao chegar a 100 % ele quebra: sem
+  combustão, sem religar, som de quebra e fumaça leve no capô. A corrida vira DNF `engine-blown` (também antes do
+  verde), o rival termina, o resultado é salvo uma vez, sem custo de reparo, e a próxima tentativa começa com o motor
+  inteiro. O HUD mostra "ESFORÇO DO MOTOR" (cor + texto/símbolo, sem °C; respeita movimento reduzido).
+- **Sandbox**: "Falhas mecânicas" vem desligado; na campanha está sempre ligado (só no carro do jogador).
+
 ## Diálogos e retratos
 
 Cenas como dados (`CareerStory.ts`), com avanço manual e botão "Pular". Uma cena vista entra em

@@ -9,8 +9,11 @@ import { CHAPTER_1_ID, CHAPTER_2_ID, CHAPTER_IDS, type ChapterId } from './chapt
  *    milestones), the build resolver version of every owned car, gearbox preference per car and
  *    the price paid (resale). A v1 save is migrated without losing anything: cars, credits, parts,
  *    reputation, results and seen dialogues are kept; its cars keep resolver version 1.
+ *  - v3: Dyno Lab settings per car (cut, launch speed, throttle map, final drive preset, shift
+ *    speed, tyre pressure next to the boost). A v2 save is migrated as it is: its boost setting
+ *    (the only v2 setting) is kept and the new settings are absent (= hardware default).
  */
-export const CAREER_SAVE_VERSION = 2;
+export const CAREER_SAVE_VERSION = 3;
 export const DEFAULT_SLOT = 'slot-1';
 /** Budget the player has to buy the first car. */
 export const START_CREDITS = 4500;
@@ -36,7 +39,17 @@ export const OwnedCarSchema = z.object({
   paint: z.object({ color: hex, accent: hex }),
   installedParts: z.array(z.string().min(1).max(64)).max(40),
   /** Dyno settings of the engine tuners (absent = kit / ECU defaults). */
-  tune: z.object({ boostBar: z.number().min(0.3).max(2.2).optional() }).optional(),
+  tune: z
+    .object({
+      boostBar: z.number().min(0.3).max(2.2).optional(),
+      revLimitRpm: z.number().int().min(2000).max(13000).optional(),
+      launchRpm: z.number().int().min(800).max(12000).optional(),
+      throttleResponse: z.enum(['soft', 'standard', 'sharp']).optional(),
+      finalDrive: z.enum(['short', 'standard', 'long']).optional(),
+      shiftRpm: z.number().int().min(1500).max(13000).optional(),
+      tirePressureKpa: z.number().int().min(100).max(320).optional(),
+    })
+    .optional(),
   /**
    * Build resolver version of this car (1: chapter 1 resolver). A car stays at 1 until a part of
    * version 2 is installed; then it moves to 2 for good (on a chapter 1 build both give the same car).
@@ -60,6 +73,10 @@ export const RunSummarySchema = z.object({
   redLight: z.boolean(),
   finished: z.boolean(),
   dnf: z.boolean(),
+  /** Why the run did not finish (absent in results of older versions). */
+  dnfReason: z.enum(['timeout', 'engine-blown']).optional(),
+  /** Engine speed when the engine broke (rpm). */
+  blownAtRpm: z.number().optional(),
   launchRpm: z.number().optional(),
   maxSlipRatio: z.number().optional(),
   wheelspinS: z.number().optional(),
@@ -172,6 +189,7 @@ export function migrateCareerSave(input: unknown): unknown {
   if (!input || typeof input !== 'object') return input;
   let doc = input as Record<string, unknown>;
   if (doc.version === 1) doc = migrateV1toV2(doc);
+  if (doc.version === 2) doc = migrateV2toV3(doc);
   return doc;
 }
 
@@ -193,6 +211,11 @@ function migrateV1toV2(v1: Record<string, unknown>): Record<string, unknown> {
     storyMilestones: completedAt ? ['chapter-1-complete'] : [],
     ownedCars: cars.map((c) => (c && typeof c === 'object' ? { ...(c as object), buildVersion: 1 } : c)),
   };
+}
+
+/** v2 → v3: the settings format only grew (every new field is optional): nothing else changes. */
+function migrateV2toV3(v2: Record<string, unknown>): Record<string, unknown> {
+  return { ...v2, version: 3 };
 }
 
 /** Export file: the save wrapped with a format tag. */

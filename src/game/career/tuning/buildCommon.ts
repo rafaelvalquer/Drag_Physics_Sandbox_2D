@@ -9,9 +9,63 @@ export const CLUTCH_TORQUE_MARGIN = 1.2;
 /** Largest ignition-retard loss a tuner accepts before calling the boost setting unsafe. */
 export const MAX_KNOCK_LOSS = 0.25;
 
-/** Settings made on the dyno by the engine tuners (career unlock). */
+/** Discrete crown-and-pinion presets of an adjustable final drive (ratio scale over the build's). */
+export const FINAL_DRIVE_PRESETS = { short: 1.06, standard: 1, long: 0.95 } as const;
+export type FinalDrivePreset = keyof typeof FINAL_DRIVE_PRESETS;
+/** Pedal map presets of an electronic / reworked throttle: actuator time and linkage exponent scales. */
+export const THROTTLE_PRESETS = {
+  soft: { responseScale: 1.4, gammaScale: 1.15 },
+  standard: { responseScale: 1, gammaScale: 1 },
+  sharp: { responseScale: 0.7, gammaScale: 0.85 },
+} as const;
+export type ThrottlePreset = keyof typeof THROTTLE_PRESETS;
+/** Nominal cold tyre pressure every car leaves the factory with (kPa). */
+export const NOMINAL_TIRE_KPA = 220;
+
+/**
+ * Settings made on the dyno (Dyno Lab). Every field is optional: absent = the hardware's default.
+ * Each one changes a real physical input of the simulation (see TuningCapabilities.applyTuneOverlay):
+ *  - boostBar: wastegate / ECU boost target (applied by the resolvers);
+ *  - revLimitRpm: ignition cut of a programmable ECU (never raises the mechanical limit);
+ *  - launchRpm: speed the launch clutch logic holds at the start;
+ *  - throttleResponse: actuator time constant and pedal linkage exponent;
+ *  - finalDrive: crown-and-pinion preset of an adjustable differential;
+ *  - shiftRpm: full-throttle upshift speed of the automatic shift schedule (TCU);
+ *  - tirePressureKpa: cold pressure of the tyres (grip, slip stiffness, rolling resistance).
+ */
 export interface BuildTune {
   boostBar?: number;
+  revLimitRpm?: number;
+  launchRpm?: number;
+  throttleResponse?: ThrottlePreset;
+  finalDrive?: FinalDrivePreset;
+  shiftRpm?: number;
+  tirePressureKpa?: number;
+}
+
+/** Fields of BuildTune in their canonical order (keys, comparison, migration). */
+export const TUNE_FIELDS = ['boostBar', 'revLimitRpm', 'launchRpm', 'throttleResponse', 'finalDrive', 'shiftRpm', 'tirePressureKpa'] as const;
+export type TuneField = (typeof TUNE_FIELDS)[number];
+
+/** Canonical string of the tune (build key); '' for the default tune. boostBar keeps its old format. */
+export function tuneKey(t: BuildTune): string {
+  let k = t.boostBar !== undefined ? `|b${t.boostBar.toFixed(2)}` : '';
+  if (t.revLimitRpm !== undefined) k += `|r${Math.round(t.revLimitRpm)}`;
+  if (t.launchRpm !== undefined) k += `|l${Math.round(t.launchRpm)}`;
+  if (t.throttleResponse !== undefined) k += `|t${t.throttleResponse}`;
+  if (t.finalDrive !== undefined) k += `|f${t.finalDrive}`;
+  if (t.shiftRpm !== undefined) k += `|s${Math.round(t.shiftRpm)}`;
+  if (t.tirePressureKpa !== undefined) k += `|p${Math.round(t.tirePressureKpa)}`;
+  return k;
+}
+
+export function sameTune(a: BuildTune, b: BuildTune): boolean {
+  return tuneKey(a) === tuneKey(b);
+}
+
+/** Only the boost setting is applied inside the resolvers; the rest is an overlay on the result. */
+export function resolverTune(t: BuildTune): BuildTune {
+  return t.boostBar === undefined ? {} : { boostBar: t.boostBar };
 }
 
 export type BuildResult =

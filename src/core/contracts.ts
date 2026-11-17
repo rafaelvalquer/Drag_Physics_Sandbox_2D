@@ -3,7 +3,8 @@
  * The physics engine is the single source of truth; every consumer only reads these frames.
  */
 
-export type EngineRunState = 'OFF' | 'CRANKING' | 'RUNNING' | 'STALLED';
+/** BROKEN: the engine failed mechanically (blown engine); final for the attempt, nothing restarts it. */
+export type EngineRunState = 'OFF' | 'CRANKING' | 'RUNNING' | 'STALLED' | 'BROKEN';
 
 export type ShiftState =
   | 'IDLE'
@@ -128,6 +129,8 @@ export interface VehicleTelemetry {
   converterSpeedRatio?: number;
   /** Automatic gearbox mode: D (schedule) or M (manual requests); null for the manual gearbox. */
   gearboxMode?: 'D' | 'M' | null;
+  /** Engine strain 0..1 (over-rev exposure, see EngineOverrevFailure); 0 when failures are off. */
+  engineStrain?: number;
 }
 
 export interface InputState {

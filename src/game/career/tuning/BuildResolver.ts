@@ -2,7 +2,8 @@ import { validateCar, type CarConfig } from '../../../data/schema';
 import { exhaustPreset } from '../../../data/exhaustPresets';
 import { applyEngineParts, curvePeakCv, engineFuel, powerPeakRpm, TURBO_MAX_COMPRESSION, withStockBreathing, type EngineParts } from './breathingModel';
 import { CATEGORY_LABEL, CATEGORY_ORDER_V1, findPart, findPartForVersion, type PartCategory, type PartDef, type TirePart, type FilterPart, type ManifoldPart, type CamPart, type ExhaustPart, type TurboPart, type MechanicalMods } from './parts';
-import { applyTyre, CLUTCH_TORQUE_MARGIN, deepFreeze, workshopFinalDrive, workshopGearRatios, fmtBar, MAX_KNOCK_LOSS, type BuildResult, type BuildTune, type ResolverVersion } from './buildCommon';
+import { applyTuneOverlay, needsOverlay } from './TuningCapabilities';
+import { tuneKey, resolverTune, sameTune, applyTyre, CLUTCH_TORQUE_MARGIN, deepFreeze, workshopFinalDrive, workshopGearRatios, fmtBar, MAX_KNOCK_LOSS, type BuildResult, type BuildTune, type ResolverVersion } from './buildCommon';
 import { resolveV2 } from './BuildResolverV2';
 
 export { CLUTCH_TORQUE_MARGIN, MAX_KNOCK_LOSS, type BuildResult, type BuildTune, type ResolverVersion };
@@ -27,7 +28,7 @@ export const BUILD_RESOLVER_VERSION: ResolverVersion = 2;
 export const BUILD_RESOLVER_V1: ResolverVersion = 1;
 
 export function buildKey(baseId: string, partIds: readonly string[], tune: BuildTune = {}, version: ResolverVersion = 1): string {
-  const k = `${baseId}|${[...new Set(partIds)].sort().join(',')}${tune.boostBar !== undefined ? `|b${tune.boostBar.toFixed(2)}` : ''}`;
+  const k = `${baseId}|${[...new Set(partIds)].sort().join(',')}${tuneKey(tune)}`;
   return version === 1 ? k : `v${version}|${k}`;
 }
 
@@ -48,8 +49,33 @@ export function resolveBuild(base: CarConfig, partIds: readonly string[], tune: 
   const key = buildKey(base.id, partIds, tune, version);
   const hit = cache.get(key);
   if (hit) return hit;
-  const r = version === 1 ? resolveUncached(base, partIds, key, tune) : resolveV2(base, partIds, key, tune, resolveUncached);
+  const hwTune = resolverTune(tune);
+  let r: BuildResult;
+  if (!needsOverlay(tune, partIds) && sameTune(hwTune, tune)) r = resolveHardware(base, partIds, tune, version);
+  else {
+    // the hardware build (boost included) first, then the Dyno Lab settings / parts on top of it
+    const hw = resolveHardware(base, partIds, hwTune, version);
+    r = hw.ok ? applyTuneOverlay(base, partIds, version, hw, tune, key) : hw;
+  }
+  if (cache.size > 2000) cache.clear(); // the Dyno Lab previews many settings: keep the cache bounded
   cache.set(key, r);
+  return r;
+}
+
+const hwCache = new Map<string, BuildResult>();
+
+/**
+ * The build of the resolvers alone (hardware + boost setting), without the Dyno Lab overlay. Its
+ * key is the plain build key, so a build without settings is exactly what it always was.
+ */
+export function resolveHardware(base: CarConfig, partIds: readonly string[], tune: BuildTune, version: ResolverVersion): BuildResult {
+  const hwTune = resolverTune(tune);
+  const key = buildKey(base.id, partIds, hwTune, version);
+  const hit = hwCache.get(key);
+  if (hit) return hit;
+  const r = version === 1 ? resolveUncached(base, partIds, key, hwTune) : resolveV2(base, partIds, key, hwTune, resolveUncached);
+  if (hwCache.size > 2000) hwCache.clear();
+  hwCache.set(key, r);
   return r;
 }
 
@@ -62,6 +88,7 @@ export function resolveBuildOrThrow(base: CarConfig, partIds: readonly string[],
 
 export function clearBuildCache(): void {
   cache.clear();
+  hwCache.clear();
 }
 
 /** Version 1 (Chapter 1). Do not change: saved builds of version 1 must resolve exactly as before. */

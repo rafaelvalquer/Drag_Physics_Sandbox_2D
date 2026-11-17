@@ -10,6 +10,10 @@ import { AutomaticClutchController, type ClutchContext } from '../drivetrain/Aut
 import { PowershiftController, autoShiftDecision, type GearboxMode } from '../drivetrain/PowershiftController';
 import { TorqueConverterController, converterState } from '../drivetrain/TorqueConverter';
 import { TireModel } from './TireModel';
+import { EngineOverrevFailure, type OverrevSpec } from '../engine/EngineOverrevFailure';
+
+/** Events of one simulation (emitted once each). */
+export type VehicleEvent = { type: 'ENGINE_BLOWN'; simTime: number; rpm: number };
 
 export interface VehicleControls {
   /** Driver/AI throttle request 0..1 (already progressive). */
@@ -114,6 +118,10 @@ export class VehicleSimulation {
   slipIntegral = 0;
   gearsUsed = new Set<number>();
   lastShiftResult: ShiftRequestResult | null = null;
+  /** Over-rev failure model (null = mechanical failures off: sandbox default, dyno, AI rivals). */
+  failure: EngineOverrevFailure | null = null;
+  /** Listener of the simulation events (ENGINE_BLOWN). */
+  onEvent: ((e: VehicleEvent) => void) | null = null;
   private autoStartCooldown = 0;
   private autoStartAttempts = 0;
   private ignitionEventsStep = 0;
@@ -362,6 +370,11 @@ export class VehicleSimulation {
     else row.set2(input, 1, this.driveline, -ratio);
   }
 
+  /** Turns the over-rev failure model on (career races, sandbox option) or off (null). */
+  enableEngineFailure(spec: OverrevSpec | null): void {
+    this.failure = spec ? new EngineOverrevFailure(spec) : null;
+  }
+
   /** One fixed physics step. */
   step(h: number): void {
     const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
@@ -378,7 +391,9 @@ export class VehicleSimulation {
       ignitionOn = true;
       starter = false;
       if (eng.runState === 'CRANKING') starter = true;
-      else if (eng.runState !== 'RUNNING') {
+      else if (eng.runState === 'BROKEN') {
+        // a blown engine is not restarted
+      } else if (eng.runState !== 'RUNNING') {
         this.autoStartCooldown -= h;
         const clutchOpen = this.tcCtl ? true : this.clutchCtl.engagement < 0.05 || !this.gearbox.engaged;
         if (this.autoStartCooldown <= 0 && clutchOpen && this.autoStartAttempts < 4) {
@@ -683,6 +698,14 @@ export class VehicleSimulation {
     this.slipIntegral += Math.abs(slipMax) * h;
 
     eng.postStep(h, ei, this.simTime);
+    const fl = this.failure;
+    if (fl && eng.runState !== 'BROKEN') {
+      const egt = (eng.exhaustTempK - c.engine.egt.idleK) / (c.engine.egt.maxK - c.engine.egt.idleK);
+      if (fl.update(h, eng.rpm, eng.load, eng.turbo ? Math.max(0, eng.turbo.boostPa) / 1e5 : 0, egt, this.simTime)) {
+        eng.breakEngine();
+        this.onEvent?.({ type: 'ENGINE_BLOWN', simTime: this.simTime, rpm: fl.brokenRpm });
+      }
+    }
     this.ignitionEventsStep = eng.ignition.eventsLastStep;
     if (eng.rpm > this.maxRpm) this.maxRpm = eng.rpm;
     if (this.gearbox.engaged && this.gearbox.gear > 0) this.gearsUsed.add(this.gearbox.gear);
@@ -741,6 +764,7 @@ export class VehicleSimulation {
     t.centerCouplingTorque = this.centerRow.enabled ? this.centerRow.lambda : 0;
     t.converterSpeedRatio = this.turbine ? this.converterSr : 1;
     t.gearboxMode = this.gearboxMode;
+    t.engineStrain = this.failure ? this.failure.strain : 0;
   }
 
   private fillAudioFrame(slipVel: number, drivenLoad: number): void {

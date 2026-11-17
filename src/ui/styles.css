@@ -859,6 +859,35 @@ details.fold[open] > summary {
 .rhud .hbar .fill.hot {
   background: var(--bad);
 }
+/* engine strain gauge (career / sandbox "falhas mecânicas"): colour + symbol + text */
+.rhud .strain-row .k {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+.rhud .strain-row .val {
+  min-width: 76px;
+  font-weight: 600;
+}
+.rhud .strain-row[data-level='normal'] .fill { background: var(--ok); }
+.rhud .strain-row[data-level='elevated'] .fill { background: #e8c547; }
+.rhud .strain-row[data-level='elevated'] .val { color: #e8c547; }
+.rhud .strain-row[data-level='high'] .fill { background: #ff8a3d; }
+.rhud .strain-row[data-level='high'] .val { color: #ff8a3d; }
+.rhud .strain-row[data-level='critical'] .fill,
+.rhud .strain-row[data-level='broken'] .fill { background: var(--bad); }
+.rhud .strain-row[data-level='critical'] .val,
+.rhud .strain-row[data-level='broken'] .val { color: var(--bad); }
+.rhud.strain-alert {
+  border-color: rgba(255, 120, 60, 0.55);
+  animation: strain-pulse 1.2s ease-in-out infinite;
+}
+@keyframes strain-pulse {
+  0%, 100% { box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45); }
+  50% { box-shadow: 0 0 0 2px rgba(255, 110, 60, 0.35), 0 6px 24px rgba(0, 0, 0, 0.45); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rhud.strain-alert { animation: none; }
+}
 .rhud .info {
   display: flex;
   flex-direction: column;

@@ -40,6 +40,8 @@ export interface RenderVehicle {
   rpm: number;
   running: boolean;
   cranking: boolean;
+  /** The engine is broken (blown engine): light smoke from under the bonnet. */
+  blown?: boolean;
   /** Engine load 0..1. */
   load: number;
   /** The automatic brakes are applied (held on the line or stopping after the finish). */

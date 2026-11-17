@@ -483,3 +483,25 @@
     grid-template-columns: 76px 1fr;
   }
 }
+
+/* ------------------------------------------------------------ blown engine (DNF) */
+.rs-banner.blown {
+  background: linear-gradient(90deg, rgba(255, 110, 60, 0.22), rgba(21, 28, 37, 0.85) 65%);
+  border-left-color: #ff6e3c;
+}
+.rs-blown-tag {
+  display: inline-block;
+  font: 800 11px var(--cs-font-ui);
+  letter-spacing: 0.22em;
+  color: #ff8a5c;
+  margin-bottom: 2px;
+}
+.rs-blown-info {
+  margin-bottom: 14px;
+}
+.rs-blown-list {
+  margin: 0 0 10px;
+  padding-left: 18px;
+  color: var(--cs-muted);
+  line-height: 1.6;
+}

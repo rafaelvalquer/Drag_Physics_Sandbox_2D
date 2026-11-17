@@ -121,6 +121,7 @@ export class VehicleVisualController {
   private loadSlow = 0;
   private puffCooldown = 0;
   private crankPuff = 0;
+  private blownPuff = 0;
   private wasRunning = false;
   private lastX = 0;
   private destroyed = false;
@@ -298,6 +299,16 @@ export class VehicleVisualController {
     if (v.running && v.load - this.loadSlow > 0.32 && this.puffCooldown <= 0) {
       this.puffCooldown = 0.5;
       this.particles.exhaustPuff(exX, exY, v.speed, 0.45, 2, sc);
+    }
+    // blown engine: light smoke out of the bonnet (front of the body), a few puffs per second
+    if (v.blown) {
+      this.blownPuff += dtS;
+      if (this.blownPuff > 0.18) {
+        this.blownPuff = 0;
+        const hoodX = v.x * PPM_BASE + (m.noseX - 0.6) * PPM_BASE * sc;
+        const hoodY = ly - 0.95 * PPM_BASE * sc;
+        this.particles.exhaustPuff(hoodX, hoodY, v.speed, 0.55, 1, sc * 1.4);
+      }
     }
     if (env.dustTint !== null && v.speed > 8) this.particles.dust(this.id, v.x - m.wheelbaseM - 0.4, v.lane, v.speed, env.dustTint, dtS);
   }

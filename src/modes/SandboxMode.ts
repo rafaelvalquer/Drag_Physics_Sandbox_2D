@@ -14,6 +14,9 @@ import type { AppSettings } from '../app/settings';
 import { VehicleViews } from '../app/vehicleView';
 import { DevLab } from '../ui/DevLab';
 import { clear, fmt, h, toast } from '../ui/dom';
+import type { VehicleSimulation } from '../physics/vehicle/VehicleSimulation';
+import { failureSpecForCar } from '../game/career/tuning/TuningCapabilities';
+import { playBlownEngine } from '../audio/core/blownEngineSound';
 import { CarEditor } from '../ui/editor/CarEditor';
 import { TrackEditor } from '../ui/editor/TrackEditor';
 import { Hud } from '../ui/Hud';
@@ -57,6 +60,8 @@ export class SandboxMode implements Mode {
   private trackEditor: TrackEditor | null = null;
   private readonly views = new VehicleViews();
   private hud: Hud | null = null;
+  /** "Falhas mecânicas": over-rev failure of the player's engine (off by default in the Sandbox). */
+  private failures = false;
   private editor: CarEditor | null = null;
   private lab: DevLab | null = null;
   private mix: ChannelMix = { ...DEFAULT_MIX };
@@ -123,6 +128,7 @@ export class SandboxMode implements Mode {
       playerSound.reset();
     }
     p.sim.controls.autoStart = this.engineOn; // ignition is automatic on entering the track
+    this.applyFailures(p.sim);
     p.control = (h) => {
       const pedal = this.ctx.input.updatePedal(h);
       const c = p.sim.controls;
@@ -193,6 +199,16 @@ export class SandboxMode implements Mode {
   /** Run timer start/stop (simulation time, s). */
   private runT0: number | null = null;
   private runT1: number | null = null;
+
+  private applyFailures(sim: VehicleSimulation): void {
+    sim.enableEngineFailure(this.failures ? failureSpecForCar(sim.car) : null);
+    sim.onEvent = (e) => {
+      if (e.type === 'ENGINE_BLOWN') {
+        playBlownEngine(this.ctx.audio);
+        toast('Motor quebrado: reinicie (R) para correr de novo.', 'error');
+      }
+    };
+  }
 
   private toggleEngine(): void {
     this.engineOn = !this.engineOn;
@@ -354,6 +370,22 @@ export class SandboxMode implements Mode {
         ),
       ),
       h('div', { class: 'row' }, h('label', {}, 'Pista'), trackSel),
+      h(
+        'div',
+        { class: 'row', title: 'Quebra o motor se ele ficar tempo demais acima da rotação recomendada (ESFORÇO DO MOTOR no painel). Na campanha é sempre ligado.' },
+        h('label', { for: 'sandbox-failures' }, 'Falhas mecânicas'),
+        h('input', {
+          type: 'checkbox',
+          id: 'sandbox-failures',
+          'data-testid': 'sandbox-failures',
+          onchange: (e: Event) => {
+            this.failures = (e.target as HTMLInputElement).checked;
+            const p = this.runner.player;
+            if (p && p.sim.engine.runState !== 'BROKEN') this.applyFailures(p.sim);
+            else this.restart();
+          },
+        }),
+      ),
       h('div', { class: 'row' }, this.engineBtn, h('button', { 'data-testid': 'restart', onclick: () => this.restart() }, 'Reiniciar (R)')),
       h(
         'div',

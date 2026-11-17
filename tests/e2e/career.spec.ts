@@ -285,6 +285,6 @@ test('campanha: salvar e continuar, segunda aba só leitura, exportar', async ({
   const file = await (await download).path();
   const doc = JSON.parse(readFileSync(file, 'utf8')) as { format: string; save: { ownedCars: { baseCarId: string }[]; version: number } };
   expect(doc.format).toBe('drag-physics-sandbox-2d/career');
-  expect(doc.save.version).toBe(2); // chapter 2 save format (v1 saves are migrated on load)
+  expect(doc.save.version).toBe(3); // v3 save format (Dyno Lab settings; v1/v2 saves are migrated on load)
   expect(doc.save.ownedCars[0]!.baseCarId).toBe('gm-chevette-sl-1988');
 });

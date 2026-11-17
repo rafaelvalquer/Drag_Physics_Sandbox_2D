@@ -2,6 +2,7 @@ import type { CarConfig, TrackConfig } from '../../../data/schema';
 import { runAccelerationTest } from '../../race/accelerationTest';
 import { resolveBuild, type ResolverVersion } from './BuildResolver';
 import { findPart, type PartDef } from './parts';
+import { reliabilityLimits } from './EngineReliability';
 
 /**
  * Workshop audit: the gain of one part on one car, measured with the real physics (factory-style
@@ -21,6 +22,12 @@ export interface PartGain {
   t100After: number;
   clutchBeforeNm: number;
   clutchAfterNm: number;
+  /** Recommended safe engine speed (EngineReliability) before / after (rpm). */
+  safeRpmBefore: number;
+  safeRpmAfter: number;
+  /** Launch speed of the clutch logic before / after (rpm). */
+  launchRpmBefore: number;
+  launchRpmAfter: number;
 }
 
 /** Smallest supporting builds tried in order until the part fits. */
@@ -89,6 +96,10 @@ export function measurePartGain(car: CarConfig, part: PartDef, track: TrackConfi
       t100After: b.t100,
       clutchBeforeNm: base.car.transmission.clutch.maxTorqueNm,
       clutchAfterNm: withPart.car.transmission.clutch.maxTorqueNm,
+      safeRpmBefore: reliabilityLimits(base.car, baseIds).recommendedSafeRpm,
+      safeRpmAfter: reliabilityLimits(base.car, [...ctx, part.id]).recommendedSafeRpm,
+      launchRpmBefore: base.car.transmission.clutch.launchRpm,
+      launchRpmAfter: withPart.car.transmission.clutch.launchRpm,
     };
   }
   return null;
@@ -99,14 +110,21 @@ export const GAIN_ET_S = 0.005;
 export const NOT_WORSE_S = 0.01;
 export const GAIN_CV = 0.3;
 export const GAIN_CLUTCH_NM = 1;
+export const GAIN_SAFE_RPM = 100;
+export const GAIN_LAUNCH_RPM = 100;
 
 /**
  * A part gains when it makes the car quicker over 402 m, or when it raises one of the car's
- * performance figures (power, clutch capacity) without costing time.
+ * performance figures (power, clutch capacity, safe engine speed, launch speed) without costing time.
  */
 export function isGain(g: PartGain): boolean {
   const dEt = g.etAfter - g.etBefore;
   if (dEt <= -GAIN_ET_S) return true;
   if (dEt > NOT_WORSE_S) return false;
-  return g.cvAfter - g.cvBefore >= GAIN_CV || g.clutchAfterNm - g.clutchBeforeNm >= GAIN_CLUTCH_NM;
+  return (
+    g.cvAfter - g.cvBefore >= GAIN_CV ||
+    g.clutchAfterNm - g.clutchBeforeNm >= GAIN_CLUTCH_NM ||
+    g.safeRpmAfter - g.safeRpmBefore >= GAIN_SAFE_RPM ||
+    g.launchRpmAfter - g.launchRpmBefore >= GAIN_LAUNCH_RPM
+  );
 }

@@ -37,6 +37,7 @@ export const SPLITS: SplitDef[] = [
 ];
 
 export type TreeType = 'pro' | 'sportsman';
+export type DnfReason = 'timeout' | 'engine-blown';
 export type RacePhase = 'staging' | 'tree' | 'racing' | 'finished';
 
 export interface LaneResult {
@@ -51,6 +52,8 @@ export interface LaneResult {
   trapMs: number | null;
   finished: boolean;
   dnf: boolean;
+  /** Why the lane did not finish: timeout (45 s after the green) or a blown engine. */
+  dnfReason?: DnfReason;
   maxSpeedMs: number;
   /** Total time = RT + ET = finish − green (s); null until the finish line is crossed. */
   total?: number | null;
@@ -177,7 +180,8 @@ export class RaceController {
     const t = this.time;
     // tree sequence
     if (this.phase === 'staging') {
-      const allReady = this.lanes.every((l) => l.ready);
+      // a lane out of the race (blown engine on the line) does not hold the others
+      const allReady = this.lanes.every((l) => l.ready || l.result.dnf) && this.lanes.some((l) => l.ready);
       // ready = engine running + car at rest at the line (neutral or first gear); the tree
       // starts by itself once everybody has been ready for a moment
       if (allReady) {
@@ -229,6 +233,15 @@ export class RaceController {
       const sim = lane.sim;
       const res = st.result;
       st.engineOn = sim.engine.runState === 'RUNNING';
+      // blown engine: out of this attempt, before or after the green (the other lane races on)
+      if (sim.engine.runState === 'BROKEN' && !res.finished && !res.dnf) {
+        res.dnf = true;
+        res.dnfReason = 'engine-blown';
+        res.maxRpm = sim.maxRpm;
+        st.endT = t;
+        st.ready = false;
+        this.status = `Motor quebrado: ${lane.name}`;
+      }
       if (st.leftAt === null) st.ready = st.engineOn && Math.abs(sim.speed) < READY_SPEED_MS && sim.x < ROLLOUT_M;
       res.maxSpeedMs = Math.max(res.maxSpeedMs, sim.speed);
       const x0 = st.prevX;
@@ -288,6 +301,7 @@ export class RaceController {
       }
       if (!res.finished && !res.dnf && this.greenAt !== null && t - this.greenAt > this.dnfTimeoutS) {
         res.dnf = true;
+        res.dnfReason = 'timeout';
         st.endT = t;
       }
       st.prevX = x1;

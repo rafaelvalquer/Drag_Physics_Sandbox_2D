@@ -21,6 +21,7 @@ export type PartCategory =
   | 'electronics-ecu' | 'electronics-fuel' | 'electronics-ignition'
   | 'cooling-radiator' | 'cooling-oil' | 'cooling-fan'
   | 'chassis-weight' | 'chassis-suspension'
+  | 'engine-valvetrain' | 'electronics-launch'
   | V2Category;
 
 /** Slots of the Chapter 2 parts (BuildResolver v2, modern engine families only). */
@@ -57,13 +58,13 @@ export interface WorkshopTab {
  * catalogue (classic engines: the slot catalogue; modern families: the Chapter 2 parts).
  */
 export const WORKSHOP_TABS: readonly WorkshopTab[] = [
-  { id: 'engine', label: 'Motor', icon: '⚙', description: 'Comando, cabeçote, taxa e internos', categories: ['camshaft', 'engine-head', 'engine-compression', 'engine-internals', 'engine-flywheel', 'cylinder-head', 'pistons', 'flywheel'] },
+  { id: 'engine', label: 'Motor', icon: '⚙', description: 'Comando, cabeçote, taxa e internos', categories: ['camshaft', 'engine-head', 'engine-compression', 'engine-internals', 'engine-flywheel', 'cylinder-head', 'pistons', 'flywheel', 'engine-valvetrain'] },
   { id: 'intake', label: 'Admissão', icon: '◉', description: 'Ar limpo, dutos e resposta', categories: ['intake-filter', 'intake-manifold', 'intake-throttle', 'intake-airbox'] },
   { id: 'exhaust', label: 'Escape', icon: '≋', description: 'Contrapressão e acústica', categories: ['exhaust', 'exhaust-header', 'exhaust-pipe', 'exhaust-muffler'] },
   { id: 'transmission', label: 'Transmissão', icon: '⌁', description: 'Relações e embreagem', categories: ['clutch', 'transmission-gearbox', 'differential', 'gearbox', 'awd'] },
   { id: 'tires', label: 'Pneus', icon: '◎', description: 'Composto, largura e pressão', categories: ['tires', 'tires-width', 'tires-pressure'] },
   { id: 'turbo', label: 'Turbo', icon: '◌', description: 'Pressão, spool e temperatura', categories: ['turbo', 'turbo-turbine', 'turbo-intercooler', 'turbo-wastegate', 'turbo-boost', 'intercooler'] },
-  { id: 'electronics', label: 'Eletrônica', icon: '⌘', description: 'ECU, combustível e ignição', categories: ['electronics-ecu', 'electronics-fuel', 'electronics-ignition', 'ecu', 'boost-control'] },
+  { id: 'electronics', label: 'Eletrônica', icon: '⌘', description: 'ECU, combustível e ignição', categories: ['electronics-ecu', 'electronics-fuel', 'electronics-ignition', 'ecu', 'boost-control', 'electronics-launch'] },
   { id: 'cooling', label: 'Arrefecimento', icon: '❄', description: 'Gerenciamento térmico', categories: ['cooling-radiator', 'cooling-oil', 'cooling-fan', 'turbo-intercooler'] },
   { id: 'chassis', label: 'Estrutura', icon: '◇', description: 'Massa e geometria', categories: ['chassis-weight', 'chassis-suspension', 'suspension'] },
 ];
@@ -100,6 +101,8 @@ export const CATEGORY_LABEL: Record<PartCategory, string> = {
   gearbox: 'Câmbio automático / dupla embreagem',
   awd: 'Tração integral',
   suspension: 'Suspensão de arrancada',
+  'engine-valvetrain': 'Molas de válvula',
+  'electronics-launch': 'Controle de largada',
 };
 export const CATEGORY_DESCRIPTION: Record<PartCategory, string> = {
   'intake-filter': 'Restrição do filtro de ar em alta vazão.', 'intake-manifold': 'Comprimento e área dos dutos de admissão.',
@@ -125,6 +128,8 @@ export const CATEGORY_DESCRIPTION: Record<PartCategory, string> = {
   pistons: 'Taxa de compressão e limite mecânico de torque.', flywheel: 'Inércia rotacional do motor.',
   gearbox: 'Embreagens e central do câmbio automático ou de dupla embreagem.', awd: 'Acoplamento central da tração integral.',
   suspension: 'Altura efetiva do centro de gravidade na transferência de carga.',
+  'engine-valvetrain': 'Rotação em que as válvulas deixam de seguir o comando (flutuação).',
+  'electronics-launch': 'Rotação mantida na linha de largada (two-step).',
 };
 
 /** Numeric mechanical changes use SI units or the documented suffix (Bar, KPa, Mm, Rpm).
@@ -404,6 +409,29 @@ export interface SuspensionPart extends PartBase {
   massRemoveKg?: number;
 }
 
+/**
+ * Reinforced valve springs (and retainers): the valves follow the cam to a higher speed before they
+ * float, so the speed the engine tolerates rises. They do not move the ignition cut and add no
+ * power by themselves: the gain is the mechanical headroom used by EngineReliability / Dyno Lab.
+ */
+export interface ValveSpringPart extends PartBase {
+  category: 'engine-valvetrain';
+  /** Recommended and mechanical safe speed added (rpm). */
+  safeRpmAdd: number;
+  modernUnlock?: UnlockId;
+}
+
+/**
+ * Launch control (two-step): the ECU holds the engine at a set speed on the line with a soft spark
+ * cut, so the launch clutch (manual automatic clutch / twin-clutch pack) bites at that speed.
+ */
+export interface LaunchControlPart extends PartBase {
+  category: 'electronics-launch';
+  /** Default launch speed added over the clutch logic's (rpm). */
+  launchRpmAdd: number;
+  modernUnlock?: UnlockId;
+}
+
 /** Slot-catalogue part (classic engines, BuildResolver v1): hardware changes in `mod`. */
 export interface ExpandedPart extends PartBase {
   category: Exclude<PartCategory, V2Category>;
@@ -434,7 +462,9 @@ export type PartDef =
   | FlywheelPart
   | GearboxPart
   | AwdPart
-  | SuspensionPart;
+  | SuspensionPart
+  | ValveSpringPart
+  | LaunchControlPart;
 
 /** Things the career unlocks (event wins). */
 export type UnlockId =
@@ -646,7 +676,36 @@ const BASE_PARTS: readonly PartDef[] = [
   },
 ];
 
-export const PARTS: readonly PartDef[] = [...BASE_PARTS, ...EXPANDED_PARTS];
+/** Dyno Lab hardware: fits the classic and the modern engines (the parts are not engine specific). */
+const DYNO_LAB_PARTS: readonly PartDef[] = [
+  {
+    id: 'valve-springs',
+    category: 'engine-valvetrain',
+    name: 'Molas de válvula reforçadas',
+    price: 700,
+    unlock: 'part-cam',
+    modernUnlock: 'c2-engine-family',
+    description: 'Molas duplas de carga maior com pratos de cromo-molibdênio: as válvulas param de flutuar mais alto.',
+    physics:
+      'Rotação recomendada e limite mecânico +400 rpm (o motor aguenta girar mais antes de as válvulas baterem). Não muda o corte nem a potência: o corte só sobe na ECU programável, dentro do novo limite.',
+    safeRpmAdd: 400,
+  },
+  {
+    id: 'launch-control',
+    category: 'electronics-launch',
+    name: 'Controle de largada (two-step)',
+    price: 900,
+    unlock: 'part-clutch',
+    modernUnlock: 'c2-gearbox',
+    compat: { transmissions: ['manual', 'dual-clutch'] },
+    description: 'Módulo two-step: segura o motor numa rotação fixa na linha com corte de centelha suave.',
+    physics:
+      'A embreagem automática (ou o pacote da dupla embreagem) morde a +400 rpm sobre a rotação de largada original, e a rotação de largada passa a ser ajustável no Dyno Lab. No automático com conversor não existe: lá a largada é o estol do conversor.',
+    launchRpmAdd: 400,
+  },
+];
+
+export const PARTS: readonly PartDef[] = [...BASE_PARTS, ...EXPANDED_PARTS, ...DYNO_LAB_PARTS];
 
 /** Every part of every resolver version (ids are unique across versions). */
 export const ALL_PARTS: readonly PartDef[] = [...PARTS, ...CHAPTER2_PARTS];

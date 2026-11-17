@@ -20,6 +20,10 @@ export interface ChartOptions {
   yMin?: number;
   yMax?: number;
   title?: string;
+  /** Shaded x ranges drawn behind the series (e.g. recommended / risk rpm bands). */
+  bands?: { from: number; to: number; color: string; label?: string }[];
+  /** Vertical marker lines (e.g. the rev limiter). */
+  markers?: { x: number; color: string; label?: string; dashed?: boolean }[];
 }
 
 const AXIS = '#3a4450';
@@ -144,6 +148,36 @@ export function drawLineChart(canvas: HTMLCanvasElement, series: Series[], o: Ch
   ctx.beginPath();
   ctx.rect(L, T, pw, ph);
   ctx.clip();
+  for (const b of o.bands ?? []) {
+    const a = X(Math.max(x0, b.from));
+    const z = X(Math.min(x1, b.to));
+    if (z <= a) continue;
+    ctx.fillStyle = b.color;
+    ctx.fillRect(a, T, z - a, ph);
+    if (b.label) {
+      ctx.fillStyle = '#c9d1da';
+      ctx.globalAlpha = 0.8;
+      ctx.textAlign = 'left';
+      ctx.fillText(b.label, a + 3, T + ph - 6);
+      ctx.globalAlpha = 1;
+    }
+  }
+  for (const m of o.markers ?? []) {
+    const px = X(m.x);
+    ctx.strokeStyle = m.color;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash(m.dashed ? [4, 3] : []);
+    ctx.beginPath();
+    ctx.moveTo(px, T);
+    ctx.lineTo(px, T + ph);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    if (m.label) {
+      ctx.fillStyle = m.color;
+      ctx.textAlign = 'right';
+      ctx.fillText(m.label, px - 3, T + 30);
+    }
+  }
   for (const s of series) {
     const yf = s.right ? YR : Y;
     ctx.strokeStyle = s.color;

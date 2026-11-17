@@ -36,7 +36,13 @@ export function evaluateRace(i: EvaluationInput): Comment[] {
     return out;
   }
   if (p.dnf) {
-    out.push({ id: 'dnf', text: 'Não completou. Sem cruzar a linha não tem tempo nem prêmio.' });
+    out.push({
+      id: 'dnf',
+      text:
+        p.dnfReason === 'engine-blown'
+          ? 'Quebrou o motor. Ficou tempo demais acima do giro que ele aguenta, com carga. Baixa o corte no Dyno Lab ou dá folga com molas de válvula e internos forjados.'
+          : 'Não completou. Sem cruzar a linha não tem tempo nem prêmio.',
+    });
     return out;
   }
   const car = i.playerCar;

@@ -67,6 +67,17 @@ npm run test:e2e:build
 | pista, botões, HUD, configurações | condição inválida recusada e válida aplicada ao vivo; condução só pelos botões na tela; HUD de distância e tempo; configurações persistem após recarregar |
 | editor e Developer Lab | arquitetura mantém a configuração válida; restaurar padrão; aba Testes; contadores medidos; estimativa de áudio rotulada; `T` oculta o painel |
 
+| Dyno Lab 3.0 (`dyno-lab-3.spec.ts`) | controle travado com motivo; editar não reconstrói a tela; rascunho medido contra o salvo; descartar; aplicar grava |
+| motor quebrado (`blown-engine.spec.ts`) | esforço no HUD sobe; o motor quebra e não religa; tela MOTOR QUEBRADO/DNF; resultado salvo uma vez, sem custo; "Tentar novamente" volta com o motor inteiro |
+
+Unitários do Dyno Lab e da falha: `engine-overrev-failure`, `tuning-capabilities`, `dyno-tuning`,
+`tuning-save-migration` e `blown-engine-dnf`. Calibração sem tela do motor quebrado (casos A–H em sete motores,
+ver [ENGINE_LIMITS.md](ENGINE_LIMITS.md)):
+
+```bash
+npx tsx scripts/overrev-calibration.ts
+```
+
 O teste "seleção, motor..." anexa ao relatório o custo medido de um passo de física no navegador.
 
 ### Testes visuais

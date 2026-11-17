@@ -57,6 +57,7 @@ export class VehicleViews {
         rpm: s.engine.rpm,
         running: s.engine.runState === 'RUNNING',
         cranking: s.engine.runState === 'CRANKING',
+        blown: s.engine.runState === 'BROKEN',
         braking: s.controls.autoBrake || s.controls.holdBrake,
         shifting: s.shift.active,
         load: s.engine.load,

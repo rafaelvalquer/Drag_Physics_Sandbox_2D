@@ -560,7 +560,9 @@ export class EngineModel {
     const rpm = radSToRpm(omega);
 
     // ----- run state transitions that depend on requests -----
-    if (!input.ignitionOn) {
+    if (this.runState === 'BROKEN') {
+      // a broken engine stays broken for the attempt: no ignition, no starter
+    } else if (!input.ignitionOn) {
       if (this.runState === 'RUNNING' || this.runState === 'CRANKING') this.lastMessage = 'ignição desligada';
       this.runState = 'OFF';
     } else if (input.starter && (this.runState === 'OFF' || this.runState === 'STALLED')) {
@@ -621,7 +623,7 @@ export class EngineModel {
     const f = cfg.friction;
     const w = Math.abs(omega);
     const viscous = (f.viscousNmPerRadS * w + f.quadraticNmPerRadS2 * w * w) * Math.sign(omega);
-    const accessories = burningState || this.runState === 'STALLED' ? cfg.accessoriesNm : cfg.accessoriesNm * 0.3;
+    const accessories = burningState || this.runState === 'STALLED' || this.runState === 'BROKEN' ? cfg.accessoriesNm : cfg.accessoriesNm * 0.3;
     // pumping gain (boosted manifold) acts as a positive torque only while turning forward
     const pumpingGain = pumping < 0 && omega > 0 ? -pumping : 0;
     const coulomb = f.coulombNm + accessories + Math.max(pumping, 0) * clamp01(w / 4);
@@ -731,6 +733,18 @@ export class EngineModel {
     fr.turboShaftRpm = this.turbo ? this.turbo.shaftRpm : 0;
     fr.bovFlow = this.turbo ? this.turbo.bovFlow : 0;
     fr.starterActive = this.starterRow.enabled;
+  }
+
+  /**
+   * Mechanical failure (blown engine): combustion stops for good, the crank keeps its friction, so
+   * the car coasts down naturally. Final for this engine instance (a new attempt builds a new one).
+   */
+  breakEngine(message = 'motor quebrou'): void {
+    if (this.runState === 'BROKEN') return;
+    this.runState = 'BROKEN';
+    this.fuelCut = true;
+    this.lastMessage = message;
+    this.frame.runState = 'BROKEN';
   }
 
   /** Can the engine produce combustion right now (used by the acoustic model). */

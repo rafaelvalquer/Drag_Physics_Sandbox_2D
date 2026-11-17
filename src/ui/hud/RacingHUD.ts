@@ -4,6 +4,16 @@ import { GearIndicator } from './GearIndicator';
 import { ShiftLights, shiftLightState, shiftTargets } from './ShiftLights';
 import { TurboGauge, turboGaugeState } from './TurboGauge';
 import { Tachometer, tachScale, type TachScale } from './Tachometer';
+import { strainLevel, type StrainLevel } from '../../physics/engine/EngineOverrevFailure';
+
+/** Text and symbol of each strain band (colour is never the only cue). */
+export const STRAIN_TEXT: Record<StrainLevel | 'broken', { text: string; symbol: string }> = {
+  normal: { text: 'Normal', symbol: '●' },
+  elevated: { text: 'Elevado', symbol: '▲' },
+  high: { text: 'Alto', symbol: '▲▲' },
+  critical: { text: 'Crítico', symbol: '⚠' },
+  broken: { text: 'Quebrado', symbol: '✖' },
+};
 
 /** Run information shown next to the gauges (computed by the mode). */
 export interface HudInfo {
@@ -50,6 +60,9 @@ export class RacingHUD {
   private readonly gap: HTMLElement;
   private readonly slipBar: HTMLElement;
   private readonly slipText: HTMLElement;
+  private readonly strainRow: HTMLElement;
+  private readonly strainBar: HTMLElement;
+  private readonly strainText: HTMLElement;
   /** Overrides the computed shift point (rpm) when set. */
   shiftRpm: number | null = null;
   private scale: TachScale = tachScale(7000, 7200);
@@ -77,6 +90,25 @@ export class RacingHUD {
     this.gapRow = h('div', { class: 'kv-row' }, h('span', { class: 'k' }, 'adversário'), this.gap);
     this.slipBar = h('div', { class: 'fill' });
     this.slipText = h('span', { class: 'val', 'data-testid': 'hud-slip' }, '0 %');
+    this.strainBar = h('div', { class: 'fill' });
+    this.strainText = h('span', { class: 'val', 'data-testid': 'hud-strain-text' }, '● Normal');
+    this.strainRow = h(
+      'div',
+      {
+        class: 'bar-row strain-row',
+        'data-testid': 'hud-strain',
+        'data-level': 'normal',
+        role: 'meter',
+        'aria-label': 'Esforço do motor',
+        'aria-valuemin': '0',
+        'aria-valuemax': '100',
+        title: 'Esforço do motor: acumula acima da rotação recomendada (mais rápido com carga e pressão) e alivia abaixo dela.',
+      },
+      h('span', { class: 'k' }, 'ESFORÇO DO MOTOR'),
+      h('div', { class: 'hbar' }, this.strainBar),
+      this.strainText,
+    );
+    this.strainRow.style.display = 'none';
     this.el = h(
       'div',
       { class: 'rhud', 'data-testid': 'hud' },
@@ -96,6 +128,7 @@ export class RacingHUD {
         h('div', { class: 'kv-row' }, h('span', { class: 'k' }, 'distância'), this.dist),
         this.gapRow,
         h('div', { class: 'bar-row', title: 'Escorregamento longitudinal dos pneus de tração: (ωr − v) / v' }, h('span', { class: 'k' }, 'patinagem'), h('div', { class: 'hbar' }, this.slipBar), this.slipText),
+        this.strainRow,
         this.msg,
       ),
     );
@@ -150,6 +183,27 @@ export class RacingHUD {
     this.slipBar.style.width = `${Math.min(100, slip * 100).toFixed(0)}%`;
     this.slipBar.classList.toggle('hot', slip > 0.15);
     this.slipText.textContent = slip > 9.99 ? '>999 %' : `${(slip * 100).toFixed(0)} %`;
+    this.updateStrain(sim);
+  }
+
+  /** Engine strain gauge: only when mechanical failures are on for this car. */
+  private updateStrain(sim: VehicleSimulation): void {
+    const f = sim.failure;
+    this.strainRow.style.display = f ? '' : 'none';
+    if (!f) return;
+    const strain = f.strain;
+    const level: StrainLevel | 'broken' = f.broken ? 'broken' : strainLevel(strain);
+    this.strainBar.style.width = `${Math.round(strain * 100)}%`;
+    const t = STRAIN_TEXT[level];
+    this.strainText.textContent = `${t.symbol} ${t.text}`;
+    if (this.strainRow.dataset.level !== level) this.strainRow.dataset.level = level;
+    this.strainRow.setAttribute('aria-valuenow', String(Math.round(strain * 100)));
+    this.el.classList.toggle('strain-alert', level === 'high' || level === 'critical');
+  }
+
+  /** Strain gauge state for the tests. */
+  get strainDebug(): { visible: boolean; level: string; text: string } {
+    return { visible: this.strainRow.style.display !== 'none', level: this.strainRow.dataset.level ?? '', text: this.strainText.textContent ?? '' };
   }
 
   /** Current scale and shift target (for the tests). */
@@ -172,6 +226,7 @@ function stateText(sim: VehicleSimulation): string {
   if (e.runState === 'OFF') return 'motor desligado';
   if (e.runState === 'CRANKING') return 'dando partida…';
   if (e.runState === 'STALLED') return 'motor apagou';
+  if (e.runState === 'BROKEN') return 'MOTOR QUEBRADO';
   if (sim.controls.autoBrake) return 'frenagem automática';
   return '';
 }

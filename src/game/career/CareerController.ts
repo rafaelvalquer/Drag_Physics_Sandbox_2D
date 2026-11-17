@@ -20,6 +20,21 @@ import {
 import { resolveBuild, type ResolverVersion } from './tuning/BuildResolver';
 import { findPart, type PartCategory, type UnlockId } from './tuning/parts';
 import { familyOf } from './tuning/BuildResolverV2';
+import type { BuildTune } from './tuning/buildCommon';
+import { droppedNotice, reconcileTune, tuningCapabilities, validateTune, type TuneContext, type TuningCapabilities } from './tuning/TuningCapabilities';
+
+/** Rounds a settings set to the precision the save keeps (and drops absent fields). */
+export function normalizeTune(t: BuildTune): BuildTune {
+  const o: BuildTune = {};
+  if (t.boostBar !== undefined) o.boostBar = Math.round(t.boostBar * 100) / 100;
+  if (t.revLimitRpm !== undefined) o.revLimitRpm = Math.round(t.revLimitRpm);
+  if (t.launchRpm !== undefined) o.launchRpm = Math.round(t.launchRpm);
+  if (t.throttleResponse !== undefined) o.throttleResponse = t.throttleResponse;
+  if (t.finalDrive !== undefined) o.finalDrive = t.finalDrive;
+  if (t.shiftRpm !== undefined) o.shiftRpm = Math.round(t.shiftRpm);
+  if (t.tirePressureKpa !== undefined) o.tirePressureKpa = Math.round(t.tirePressureKpa);
+  return o;
+}
 
 const CHAPTER2_CAR_IDS = new Set(CHAPTER2_CARS.map((c) => c.id));
 
@@ -51,7 +66,7 @@ const shortName = (name: string): string => name.replace(/^(Volkswagen|Chevrolet
  * then changes the save in ONE atomic transaction: a purchase never debits without delivering the
  * part, and a race result is applied once per attempt id.
  */
-export type OpResult<T = CareerSave> = { ok: true; value: T } | { ok: false; error: string };
+export type OpResult<T = CareerSave> = { ok: true; value: T; /** Something the player must know (settings reset by a part change). */ notice?: string } | { ok: false; error: string };
 
 export interface RaceRecord {
   save: CareerSave;
@@ -151,7 +166,8 @@ export class CareerController {
     if (s.inventoryPartIds.includes(inventoryEntry(partId, car.baseCarId))) return fail(`${p.name} já está no seu estoque: instale de lá`);
     if (s.credits < p.price) return fail(`créditos insuficientes: ${p.name} custa ${p.price} CR, você tem ${s.credits} CR`);
     const { parts, replaced } = CareerController.withPart(car.installedParts, partId);
-    const chk = this.checkBuild(car, parts, tuneFor(car, parts));
+    const rt = this.reconciledTune(car, parts);
+    const chk = this.checkBuild(car, parts, rt.tune);
     if (!chk.ok) return fail(`incompatível: ${chk.error}`);
     try {
       const v = await this.commit((n) => {
@@ -159,11 +175,11 @@ export class CareerController {
         const c = n.ownedCars.find((x) => x.id === car.id)!;
         n.credits -= p.price;
         c.installedParts = parts;
-        c.tune = tuneFor(c, parts);
+        c.tune = rt.tune;
           c.buildVersion = buildVersionFor(c, parts);
         if (replaced) n.inventoryPartIds.push(inventoryEntry(replaced, c.baseCarId));
       });
-      return { ok: true, value: v };
+      return { ok: true, value: v, notice: rt.notice };
     } catch (e) {
       return fail((e as Error).message);
     }
@@ -177,17 +193,19 @@ export class CareerController {
     if (!s.inventoryPartIds.includes(entry)) return fail('a peça não está no estoque deste carro');
     if (car.installedParts.includes(partId)) return fail('a peça já está instalada');
     const { parts, replaced } = CareerController.withPart(car.installedParts, partId);
-    const chk = this.checkBuild(car, parts, tuneFor(car, parts));
+    const rt = this.reconciledTune(car, parts);
+    const chk = this.checkBuild(car, parts, rt.tune);
     if (!chk.ok) return fail(`incompatível: ${chk.error}`);
     try {
       return {
         ok: true,
+        notice: rt.notice,
         value: await this.commit((n) => {
           const c = n.ownedCars.find((x) => x.id === car.id)!;
           n.inventoryPartIds.splice(n.inventoryPartIds.indexOf(entry), 1);
           if (replaced) n.inventoryPartIds.push(inventoryEntry(replaced, c.baseCarId));
           c.installedParts = parts;
-          c.tune = tuneFor(c, parts);
+          c.tune = rt.tune;
           c.buildVersion = buildVersionFor(c, parts);
         }),
       };
@@ -201,15 +219,17 @@ export class CareerController {
     if (!this.save || !car) return fail('nenhum carro ativo');
     if (!car.installedParts.includes(partId)) return fail('a peça não está instalada');
     const parts = car.installedParts.filter((id) => id !== partId);
-    const chk = this.checkBuild(car, parts, tuneFor(car, parts));
+    const rt = this.reconciledTune(car, parts);
+    const chk = this.checkBuild(car, parts, rt.tune);
     if (!chk.ok) return fail(`não dá para remover: ${chk.error}`);
     try {
       return {
         ok: true,
+        notice: rt.notice,
         value: await this.commit((n) => {
           const c = n.ownedCars.find((x) => x.id === car.id)!;
           c.installedParts = parts;
-          c.tune = tuneFor(c, parts);
+          c.tune = rt.tune;
           c.buildVersion = buildVersionFor(c, parts);
           n.inventoryPartIds.push(inventoryEntry(partId, c.baseCarId));
         }),
@@ -231,15 +251,17 @@ export class CareerController {
     const removed = car.installedParts.filter((id) => category === undefined || findPart(id)?.category === category);
     if (!removed.length) return fail(category ? 'a peça original já está em uso' : 'o carro já está original');
     const parts = car.installedParts.filter((id) => !removed.includes(id));
-    const chk = this.checkBuild(car, parts, tuneFor(car, parts));
+    const rt = this.reconciledTune(car, parts);
+    const chk = this.checkBuild(car, parts, rt.tune);
     if (!chk.ok) return fail(`não dá para voltar ao original: ${chk.error}`);
     try {
       return {
         ok: true,
+        notice: rt.notice,
         value: await this.commit((n) => {
           const c = n.ownedCars.find((x) => x.id === car.id)!;
           c.installedParts = parts;
-          c.tune = tuneFor(c, parts);
+          c.tune = rt.tune;
           c.buildVersion = buildVersionFor(c, parts);
           for (const id of removed) n.inventoryPartIds.push(inventoryEntry(id, c.baseCarId));
         }),
@@ -249,7 +271,54 @@ export class CareerController {
     }
   }
 
-  /** Engine tuners: wastegate setting on the dyno (undefined = kit default). */
+  /** Progression context of the Dyno Lab settings (the chapter 1 tuners set the classic boost). */
+  tuneContext(): TuneContext {
+    return { tunersUnlocked: !!this.save && canTuneBoost(this.save) };
+  }
+
+  /** Settings of `car` that survive the part list `parts`, and the notice of the dropped ones. */
+  reconciledTune(car: OwnedCar, parts: readonly string[]): { tune: NonNullable<OwnedCar['tune']>; notice?: string } {
+    const base = findCampaignCar(car.baseCarId);
+    if (!base || !car.tune) return { tune: {} };
+    const r = reconcileTune(base, parts, buildVersionFor(car, parts), car.tune, this.tuneContext());
+    return { tune: r.tune as NonNullable<OwnedCar['tune']>, notice: droppedNotice(r.dropped) ?? undefined };
+  }
+
+  /** Dyno Lab capabilities of an owned car with its installed parts. */
+  capabilitiesOf(car: OwnedCar): TuningCapabilities | null {
+    const base = findCampaignCar(car.baseCarId);
+    return base ? tuningCapabilities(base, car.installedParts, buildVersionFor(car, car.installedParts), this.tuneContext()) : null;
+  }
+
+  /**
+   * Dyno Lab: applies a whole settings set to a car (absent fields = hardware default). Validated
+   * here again (capabilities with the progression of this save, then the resolver), never only in
+   * the UI. One atomic write.
+   */
+  async applyTune(carId: string, tune: BuildTune): Promise<OpResult> {
+    const s = this.save;
+    const car = s?.ownedCars.find((c) => c.id === carId);
+    if (!s || !car) return fail('carro não encontrado');
+    const base = findCampaignCar(car.baseCarId);
+    if (!base) return fail('carro base desconhecido');
+    const clean = normalizeTune(tune);
+    const errs = validateTune(base, car.installedParts, buildVersionFor(car, car.installedParts), clean, this.tuneContext());
+    if (errs.length) return fail(errs.join('; '));
+    const chk = this.checkBuild(car, car.installedParts, clean);
+    if (!chk.ok) return fail(chk.error);
+    try {
+      return {
+        ok: true,
+        value: await this.commit((n) => {
+          n.ownedCars.find((x) => x.id === car.id)!.tune = clean;
+        }),
+      };
+    } catch (e) {
+      return fail((e as Error).message);
+    }
+  }
+
+  /** Engine tuners: wastegate setting on the dyno (undefined = kit default); keeps the other settings. */
   async setBoost(boostBar: number | undefined): Promise<OpResult> {
     const s = this.save;
     const car = this.activeCar;
@@ -258,19 +327,8 @@ export class CareerController {
     if (!programmable && !canTuneBoost(s)) return fail('os preparadores de motor ainda não trabalham para você');
     if (!programmable && !car.installedParts.some((id) => findPart(id)?.category === 'turbo'))
       return fail('sem turbo (ou sem ECU programável) não há pressão para ajustar');
-    const tune = boostBar === undefined ? {} : { boostBar: Math.round(boostBar * 100) / 100 };
-    const chk = this.checkBuild(car, car.installedParts, tune);
-    if (!chk.ok) return fail(chk.error);
-    try {
-      return {
-        ok: true,
-        value: await this.commit((n) => {
-          n.ownedCars.find((x) => x.id === car.id)!.tune = tune;
-        }),
-      };
-    } catch (e) {
-      return fail((e as Error).message);
-    }
+    const { boostBar: _old, ...rest } = car.tune ?? {};
+    return this.applyTune(car.id, boostBar === undefined ? rest : { ...rest, boostBar });
   }
 
   /**
@@ -466,10 +524,6 @@ export class CareerController {
   }
 }
 
-/** The boost setting survives only while something can hold it: the kit turbo or a programmable ECU. */
-function tuneFor(car: OwnedCar, parts: string[]): OwnedCar['tune'] {
-  return parts.includes('ecu-programmable') || parts.some((id) => findPart(id)?.category === 'turbo') ? (car.tune ?? {}) : {};
-}
 
 export { EVENTS, CHAPTER_2_ID };
 export type { PartCategory };
