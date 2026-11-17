@@ -1,13 +1,14 @@
 import { validateCar, type CarConfig, type TransmissionKind } from '../../../data/schema';
 import { exhaustPreset } from '../../../data/exhaustPresets';
 import { applyEngineParts, curvePeakCv, engineFuel, powerPeakRpm, TURBO_MAX_COMPRESSION, withStockBreathing, type EngineParts } from './breathingModel';
-import { applyTyre, CLUTCH_TORQUE_MARGIN, deepFreeze, fmtBar, workshopFinalDrive, MAX_KNOCK_LOSS, type BuildResult, type BuildTune } from './buildCommon';
+import { applyGenericChassisMods, applyTyre, CLUTCH_TORQUE_MARGIN, combineMods, deepFreeze, fmtBar, workshopFinalDrive, MAX_KNOCK_LOSS, type BuildResult, type BuildTune } from './buildCommon';
 import { ENGINE_FAMILIES } from './chapter2Parts';
 import { applyFactoryTurboParts, wastegateMaxBar } from './factoryTurboModel';
 import {
   CATEGORY_LABEL,
   CATEGORY_ORDER_V2,
   findPartForVersion,
+  GENERIC_V2_CATEGORIES,
   LEGACY_FAMILY,
   type CamPart,
   type PartCategory,
@@ -49,7 +50,8 @@ export function transmissionKindOf(car: CarConfig): TransmissionKind {
 export function incompatibility(base: CarConfig, p: PartDef): string | null {
   const fam = familyOf(base);
   // two catalogues: the slot catalogue (v1, classic engines) and the family parts (v2, modern engines)
-  if ('mod' in p && fam !== LEGACY_FAMILY) return `${p.name} é do catálogo dos motores clássicos`;
+  // car hardware of the slot catalogue (mass, cooling, tyre size/pressure) fits every car
+  if ('mod' in p && fam !== LEGACY_FAMILY && !GENERIC_V2_CATEGORIES.includes(p.category)) return `${p.name} é do catálogo dos motores clássicos`;
   if ((p.since ?? 1) === 2 && fam === LEGACY_FAMILY) return `${p.name} é para motores modernos`;
   const c = p.compat;
   if (!c) return null;
@@ -57,6 +59,7 @@ export function incompatibility(base: CarConfig, p: PartDef): string | null {
     const label = ENGINE_FAMILIES[fam]?.label ?? 'este motor';
     return `${p.name} não é feita para ${label}`;
   }
+  if (c.layouts && !c.layouts.includes(base.engine.architecture)) return `${p.name} não é feita para este tipo de motor`;
   if (c.induction && c.induction !== base.engine.induction)
     return c.induction === 'turbo' ? `${p.name} é para motor turbo` : `${p.name} é para motor aspirado`;
   if (c.transmissions && !c.transmissions.includes(transmissionKindOf(base))) {
@@ -92,6 +95,8 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
 
   const parts = CATEGORY_ORDER_V2.map((c) => bySlot.get(c)).filter((p): p is PartDef => !!p);
   const fam = familyOf(base);
+  // generic slot-catalogue hardware on a modern car (cooling, mass, tyre size/pressure)
+  const genericMod = fam === LEGACY_FAMILY ? {} : combineMods(parts);
 
   // Chapter 1 hardware: the version 1 resolver is the reference (identical result, v2 key)
   if (fam === LEGACY_FAMILY && parts.every((p) => (p.since ?? 1) === 1)) {
@@ -115,17 +120,21 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   if (factoryTurbo) {
     const family = ENGINE_FAMILIES[fam];
     if (!family) return { ok: false, errors: [`família de motor sem dados de preparação: ${fam}`] };
-    if (turboUp && ecu?.level !== 'programmable') return { ok: false, errors: ['a turbina de maior fluxo exige ECU programável'] };
+    if (turboUp && ecu?.level !== 'programmable' && ecu?.level !== 'stage3') return { ok: false, errors: ['a turbina de maior fluxo exige ECU programável'] };
     if (tune.boostBar !== undefined) {
       if (ecu?.level !== 'programmable') return { ok: false, errors: ['ajuste de pressão exige ECU programável'] };
       const b0 = base.engine.turbo!.maxBoostBar;
       const [lo, hi] = ecu.boostRangeAddBar ?? [0, 0];
       if (!(tune.boostBar >= b0 + lo - 1e-9 && tune.boostBar <= b0 + hi + 1e-9))
         return { ok: false, errors: [`pressão fora da faixa da ECU (${fmtBar(b0 + lo)} a ${fmtBar(b0 + hi)} bar)`] };
-      const wg = wastegateMaxBar(stockEngine, get('boost-control'));
+      const wg = wastegateMaxBar(stockEngine, get('boost-control'), ecu);
       if (tune.boostBar > wg + 1e-9) return { ok: false, errors: [`a wastegate não segura ${fmtBar(tune.boostBar)} bar (máximo ${fmtBar(wg)} bar): instale o controle de pressão`] };
     }
-    const anyEngine = ecu || turboUp || get('intercooler') || get('boost-control') || get('pistons') || get('intake-filter') || get('exhaust');
+    // a map calibrated for given hardware (Stage 2/3) refuses the build without it
+    for (const req of ecu?.requiresParts ?? [])
+      if (!req.ids.some((id) => partIds.includes(id))) errors.push(`${ecu!.name} exige ${req.label}`);
+    if (errors.length) return { ok: false, errors };
+    const anyEngine = genericMod.coolingFrictionScale || genericMod.coolingKnockScale || ecu || turboUp || get('intercooler') || get('boost-control') || get('pistons') || get('intake-filter') || get('exhaust');
     if (anyEngine) {
       const r = applyFactoryTurboParts(stockEngine, {
         family,
@@ -137,6 +146,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
         boostControl: get('boost-control'),
         pistons: get('pistons'),
         boostBar: tune.boostBar,
+        mod: genericMod,
       });
       car.engine = r.engine;
       steadyBoostBar = r.steadyBoostBar;
@@ -173,7 +183,12 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
       compressionAdd: pistons?.compressionAdd,
       ignitionGain: ecu?.ignitionGain,
       revLimitAddRpm: ecu ? Math.min(ecu.revLimitAddRpm, family?.valvetrainRevAddRpm ?? 0) : undefined,
-      mod: pistons?.frictionScale ? { coolingFrictionScale: pistons.frictionScale } : undefined,
+      mod: pistons?.frictionScale || genericMod.coolingFrictionScale || genericMod.coolingKnockScale
+        ? {
+            ...(genericMod.coolingFrictionScale || pistons?.frictionScale ? { coolingFrictionScale: (genericMod.coolingFrictionScale ?? 1) * (pistons?.frictionScale ?? 1) } : {}),
+            ...(genericMod.coolingKnockScale ? { coolingKnockScale: genericMod.coolingKnockScale } : {}),
+          }
+        : undefined,
     };
     const any = Object.values(engineParts).some((v) => v !== undefined);
     if (any) {
@@ -292,6 +307,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   if (susp) car.cgHeightM = Math.round((car.cgHeightM + susp.cgHeightDeltaM) * 1000) / 1000;
   const tyre = get('tires');
   if (tyre) applyTyre(car, base, tyre);
+  applyGenericChassisMods(car, genericMod);
   if (susp?.massRemoveKg) car.massKg = Math.max(500, car.massKg - susp.massRemoveKg);
   if (fly?.massRemoveKg) car.massKg = Math.max(500, car.massKg - fly.massRemoveKg);
   // crown and pinion chosen for the finished car (engine, tyres, mass above)
@@ -316,6 +332,10 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
     errors.push(`as embreagens do câmbio de dupla embreagem (${cap} N·m) não seguram ${peakTorqueNm.toFixed(0)} N·m com folga: instale o upgrade DSG/SST`);
   if (kind === 'torque-converter-auto' && cap < peakTorqueNm * AT_TORQUE_MARGIN)
     errors.push(`os elementos do câmbio automático (${cap} N·m) não seguram ${peakTorqueNm.toFixed(0)} N·m com folga: instale o upgrade do automático`);
+  if (factoryTurbo && ecu?.forgedAboveFraction && !get('pistons')) {
+    const lim = ENGINE_FAMILIES[fam]!.internalsTorqueNm * ecu.forgedAboveFraction;
+    if (peakTorqueNm > lim) errors.push(`o torque (${peakTorqueNm.toFixed(0)} N·m) passa do que pistões e bielas de fábrica aguentam com folga (${lim.toFixed(0)} N·m): instale pistões e bielas forjados`);
+  }
   if (knockLoss > MAX_KNOCK_LOSS)
     errors.push(`detonação: este motor perde ${(knockLoss * 100).toFixed(0)} % do torque em atraso de ignição nesta pressão; baixe a pressão`);
   const v = validateCar(car);

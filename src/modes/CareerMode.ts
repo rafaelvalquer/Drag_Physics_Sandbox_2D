@@ -21,7 +21,7 @@ import {
 } from '../game/career/CareerProgression';
 import { CHAPTER_1_ID, CHAPTER_2_ID, CHAPTERS, chapterOf, type ChapterId } from '../game/career/chapters';
 import { DEALER_CARS, offerAvailability, resaleValue } from '../game/career/chapter2/dealer';
-import { incompatibility } from '../game/career/tuning/BuildResolverV2';
+import { familyOf, incompatibility } from '../game/career/tuning/BuildResolverV2';
 import { CareerRepository, CareerTabLock } from '../game/career/CareerRepository';
 import { evaluateRace, type Comment } from '../game/career/CareerResultEvaluator';
 import { DEFAULT_SLOT, STARTER_CARS, type CareerRaceResult, type OutcomeSchema, type OwnedCar, type RunSummary } from '../game/career/CareerState';
@@ -698,7 +698,7 @@ export class CareerMode implements Mode {
     const sel = stockSel ? undefined : (this.selectedPart ? findPart(this.selectedPart) : allInTab[0]);
     const equipped = car.installedParts.map((id) => findPart(id)).filter((p): p is PartDef => !!p);
     const kit = equipped.find((p) => p.category === 'turbo');
-    const highestTier = equipped.reduce((top, p) => Math.max(top, 'chapter' in p ? p.chapter : 1), 1);
+    const highestTier = equipped.reduce((top, p) => Math.max(top, p.chapter ?? 1), 1);
     const stage = kit ? (highestTier >= 3 ? 'Stage 6 • Turbo preparado' : highestTier === 2 ? 'Stage 5 • Turbo street' : 'Stage 4 • Turbo básico')
       : equipped.length >= 5 ? 'Stage 3 • Aspirado forte' : equipped.length >= 2 ? 'Stage 2 • Aspirado street' : equipped.length ? 'Stage 1 • Rua leve' : 'Original';
     const metric = (label: string, value: string): HTMLElement => h('div', { class: 'ws-metric' }, h('small', {}, label), h('b', {}, value));
@@ -744,7 +744,7 @@ export class CareerMode implements Mode {
       const inSlot = equipped.find((p) => p.category === cat);
       const categoryParts = allInTab.filter((p) => p.category === cat);
       const entries = categoryParts.map((p) => {
-        const st = partStatus(s, car, p);
+        const st = partStatus(s, car, p, familyOf(findCampaignCar(car.baseCarId)!));
         return h('li', {
           class: `ws-part-card ${sel?.id === p.id ? 'sel' : ''} ${st.state}`,
           'data-testid': `ws-part-${p.id}`,
@@ -962,10 +962,11 @@ export class CareerMode implements Mode {
     const s = this.controller.save!;
     const installed = car.installedParts.includes(p.id);
     const owned = s.inventoryPartIds.includes(`${p.id}@${car.baseCarId}`);
-    const unlocked = isPartUnlocked(s, p);
+    const fam = familyOf(findCampaignCar(car.baseCarId)!);
+    const unlocked = isPartUnlocked(s, p, fam);
     const nextParts = installed ? car.installedParts.filter((x) => x !== p.id) : CareerController.withPart(car.installedParts, p.id).parts;
     const after = resolveOwned(car, nextParts);
-    const reqs = partRequirements(p).map((u) => `${UNLOCK_LABEL[u]}${unlocksOf(s).has(u) ? ' ✓' : ''}`);
+    const reqs = partRequirements(p, fam).map((u) => `${UNLOCK_LABEL[u]}${unlocksOf(s).has(u) ? ' ✓' : ''}`);
     const cmpHost = this.compareTable(before, after, installed ? 'Sem a peça' : 'Depois');
     const act = async (fn: () => Promise<{ ok: boolean; error?: string }>, okMsg: string): Promise<void> => {
       if (!this.guard()) return;

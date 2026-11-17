@@ -194,13 +194,13 @@ type Ev = Omit<CareerEventDef, 'chapter'>;
 
 const EV: readonly Ev[] = [
   { id: 'c2e1-portas-abertas', order: 1, title: 'Portas Abertas', rivalId: 'guga', trackId: 'patio-das-torres', regionLabel: 'Pátio das Torres', distance: 'eighth', rewardCr: 2500, reputation: 15, unlocks: ['c2-ecu'] },
-  { id: 'c2e2-turbo-frances', order: 2, title: 'Turbo Francês', rivalId: 'camila', trackId: 'patio-das-torres', regionLabel: 'Pátio das Torres', distance: 'eighth', rewardCr: 3500, reputation: 20, unlocks: ['c2-intercooler', 'c2-boost-control'] },
+  { id: 'c2e2-turbo-frances', order: 2, title: 'Turbo Francês', rivalId: 'camila', trackId: 'patio-das-torres', regionLabel: 'Pátio das Torres', distance: 'eighth', rewardCr: 3500, reputation: 20, unlocks: ['c2-intercooler', 'c2-boost-control', 'c2-generic-tires'] },
   { id: 'c2e3-lenda-do-gti', order: 3, title: 'A Lenda do GTI', rivalId: 'ricardo', trackId: 'patio-das-torres', regionLabel: 'Pátio das Torres', distance: 'quarter', rewardCr: 4500, reputation: 25, unlocks: ['c2-engine-family'] },
   { id: 'c2e4-quatro-argolas', order: 4, title: 'Quatro Argolas', rivalId: 'andre', trackId: 'distrito-financeiro', regionLabel: 'Distrito Financeiro', distance: 'quarter', rewardCr: 5500, reputation: 30, unlocks: ['c2-gearbox'] },
-  { id: 'c2e5-precisao-alema', order: 5, title: 'Precisão Alemã', rivalId: 'helena', trackId: 'distrito-financeiro', regionLabel: 'Distrito Financeiro', distance: 'quarter', rewardCr: 6500, reputation: 35, unlocks: [] },
+  { id: 'c2e5-precisao-alema', order: 5, title: 'Precisão Alemã', rivalId: 'helena', trackId: 'distrito-financeiro', regionLabel: 'Distrito Financeiro', distance: 'quarter', rewardCr: 6500, reputation: 35, unlocks: ['c2-generic-chassis'] },
   { id: 'c2e6-tracao-traseira', order: 6, title: 'Tração Traseira', rivalId: 'daniel', trackId: 'distrito-financeiro', regionLabel: 'Distrito Financeiro', distance: 'quarter', rewardCr: 7500, reputation: 40, unlocks: ['c2-suspension'] },
   { id: 'c2e7-vtec', order: 7, title: 'VTEC', rivalId: 'lucas', trackId: 'distrito-financeiro', regionLabel: 'Distrito Financeiro', distance: 'quarter', rewardCr: 8500, reputation: 45, unlocks: ['c2-programmable'] },
-  { id: 'c2e8-troca-perfeita', order: 8, title: 'Troca Perfeita', rivalId: 'felipe', trackId: 'corredor-da-liga', regionLabel: 'Corredor da Liga', distance: 'quarter', rewardCr: 10000, reputation: 50, unlocks: ['c2-turbo-hybrid', 'c2-internals', 'c2-tires-slick'] },
+  { id: 'c2e8-troca-perfeita', order: 8, title: 'Troca Perfeita', rivalId: 'felipe', trackId: 'corredor-da-liga', regionLabel: 'Corredor da Liga', distance: 'quarter', rewardCr: 10000, reputation: 50, unlocks: ['c2-turbo-hybrid', 'c2-internals', 'c2-tires-slick', 'c2-stage2'] },
   { id: 'c2e9-tracao-total', order: 9, title: 'Tração Total', rivalId: 'bianca', trackId: 'corredor-da-liga', regionLabel: 'Corredor da Liga', distance: 'quarter', rewardCr: 13000, reputation: 60, unlocks: ['c2-awd', 'c2-final-challenge'] },
   {
     id: 'c2e10-dono-da-liga',

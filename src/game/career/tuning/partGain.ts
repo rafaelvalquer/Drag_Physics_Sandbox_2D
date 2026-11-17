@@ -34,6 +34,14 @@ const CONTEXTS: readonly string[][] = [
   ['ecu-programmable'],
   ['ecu-programmable', 'dct-upgrade'],
   ['ecu-programmable', 'at-upgrade'],
+  // Stage 2 map: on its own hardware (downpipe, intercooler), with forged internals and a gearbox upgrade
+  ['downpipe-catless', 'intercooler-race'],
+  ['downpipe-catless', 'intercooler-race', 'clutch-reinforced'],
+  ['downpipe-catless', 'intercooler-race', 'dct-upgrade'],
+  ['downpipe-catless', 'intercooler-race', 'at-upgrade'],
+  ['downpipe-catless', 'intercooler-race', 'pistons-forged-modern', 'clutch-reinforced'],
+  ['downpipe-catless', 'intercooler-race', 'pistons-forged-modern', 'dct-upgrade'],
+  ['downpipe-catless', 'intercooler-race', 'pistons-forged-modern', 'at-upgrade'],
 ];
 
 const requiresTurbo = (id: string): boolean => {

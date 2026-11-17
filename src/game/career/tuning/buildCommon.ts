@@ -1,5 +1,5 @@
 import type { CarConfig } from '../../../data/schema';
-import type { PartDef, TirePart } from './parts';
+import type { MechanicalMods, PartDef, TirePart } from './parts';
 
 /** Resolver versions. A build is always resolved by the version stored with it (saves keep theirs). */
 export type ResolverVersion = 1 | 2;
@@ -160,4 +160,32 @@ export function deepFreeze<T>(o: T): T {
     for (const v of Object.values(o as Record<string, unknown>)) deepFreeze(v);
   }
   return o;
+}
+
+/** How slot-catalogue mods of several parts combine (the same rules the v1 resolver uses). */
+const COMPOUND_MODS = new Set(['knockRetardScale', 'coolingKnockScale', 'coolingFrictionScale', 'burnDurationScale', 'turboSpoolScale', 'tireRollingScale']);
+const ADDITIVE_MODS = new Set(['backPressureReductionKPa', 'filterDropReductionKPa', 'intercoolerEffectivenessAdd', 'intercoolerMassAddKg', 'wastegateHoldAddBar', 'drivelineEfficiencyAdd', 'massRemoveKg']);
+
+export function combineMods(parts: readonly PartDef[]): MechanicalMods {
+  const mod: MechanicalMods = {};
+  for (const p of parts) if ('mod' in p) {
+    for (const [k, v] of Object.entries(p.mod)) {
+      if (v === undefined) continue;
+      mod[k] = mod[k] === undefined ? v : COMPOUND_MODS.has(k) ? mod[k]! * v : ADDITIVE_MODS.has(k) ? mod[k]! + v : v;
+    }
+  }
+  return mod;
+}
+
+/**
+ * Car hardware of the generic slot-catalogue parts on a modern car (resolver v2): tyre size and
+ * pressure (after the compound), and mass. Same physics as the v1 resolver applies.
+ */
+export function applyGenericChassisMods(car: CarConfig, mod: MechanicalMods): void {
+  if (mod.tireMuScale) car.tires.muPeak = Math.min(2.5, car.tires.muPeak * mod.tireMuScale);
+  if (mod.tireInertiaAddKgM2) car.tires.wheelInertiaKgM2 += mod.tireInertiaAddKgM2;
+  if (mod.tireStiffnessScale) car.tires.B = Math.min(25, car.tires.B * mod.tireStiffnessScale);
+  if (mod.tireTempSensitivityScale) car.tires.tempSensitivityPerC *= mod.tireTempSensitivityScale;
+  if (mod.tireRollingScale) car.tires.rollingResistance = Math.max(0.005, car.tires.rollingResistance * mod.tireRollingScale);
+  if (mod.massRemoveKg) car.massKg = Math.max(500, car.massKg - mod.massRemoveKg);
 }

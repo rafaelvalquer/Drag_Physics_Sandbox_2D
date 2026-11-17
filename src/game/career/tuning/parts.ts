@@ -37,6 +37,14 @@ export type V2Category =
 
 export const V2_CATEGORIES: readonly V2Category[] = ['cylinder-head', 'pistons', 'flywheel', 'ecu', 'intercooler', 'boost-control', 'gearbox', 'awd', 'suspension'];
 
+/**
+ * Slot-catalogue categories that are hardware of the CAR, not of a classic engine (mass, cooling,
+ * tyre size and pressure): they also fit the modern engine families (resolver v2), where they open
+ * with their own Chapter 2 unlock (`modernUnlock`). The rest of the slot catalogue stays with the
+ * classic engines.
+ */
+export const GENERIC_V2_CATEGORIES: readonly PartCategory[] = ['chassis-weight', 'cooling-radiator', 'cooling-oil', 'cooling-fan', 'tires-width', 'tires-pressure'];
+
 export interface WorkshopTab {
   id: string;
   label: string;
@@ -166,6 +174,11 @@ export interface PartCompat {
   transmissions?: readonly TransmissionKind[];
   /** Driven axles the part is for. */
   drives?: readonly ('front' | 'rear' | 'awd')[];
+  /**
+   * Cylinder layouts the part is made for (e.g. a V8 header). Future premium engines (flat-six,
+   * V8, V12) get their own parts by declaring their family/layout here; the resolver is unchanged.
+   */
+  layouts?: readonly string[];
 }
 
 interface PartBase {
@@ -180,6 +193,8 @@ interface PartBase {
   /** First resolver version that knows the part (absent = 1). */
   since?: 1 | 2;
   compat?: PartCompat;
+  /** Career chapter whose shop sells the part (absent = the chapter of its unlock). */
+  chapter?: 1 | 2 | 3;
 }
 
 export interface FilterPart extends PartBase {
@@ -197,6 +212,8 @@ export interface ExhaustPart extends PartBase {
   acousticPreset: 'sport';
   /** Diameter scale of the primaries (header). */
   headerDiameterScale: number;
+  /** Factory turbo: a freer path after the turbine lets it reach speed sooner (spool time scale). */
+  spoolTimeScale?: number;
 }
 
 export interface ManifoldPart extends PartBase {
@@ -274,7 +291,7 @@ export interface TirePart extends PartBase {
  */
 export interface EcuPart extends PartBase {
   category: 'ecu';
-  level: 'stage1' | 'programmable';
+  level: 'stage1' | 'stage2' | 'stage3' | 'programmable';
   /** Boost target added to the factory target (bar); programmable maps follow the tune instead. */
   boostAddBar: number;
   /** Torque limiter as a fraction of the mechanical limit of the pistons/rods. */
@@ -285,6 +302,14 @@ export interface EcuPart extends PartBase {
   revLimitAddRpm: number;
   /** Boost range the tuner can set on the dyno (programmable only, bar above the factory target). */
   boostRangeAddBar?: [number, number];
+  /** Boost-control solenoid that comes with the map: wastegate headroom over the factory target (bar). */
+  wastegateHeadroomBar?: number;
+  /** Hardware the map is calibrated for: the build is refused without one of the ids of each entry. */
+  requiresParts?: readonly { ids: readonly string[]; label: string }[];
+  /** Above this fraction of the factory internals' torque, forged pistons/rods are required. */
+  forgedAboveFraction?: number;
+  /** Staged map: torque target at most this multiple of the factory peak torque. */
+  stockTorqueGainMax?: number;
 }
 
 /** Larger-flow (hybrid) turbocharger for a factory-turbo engine. */
@@ -386,6 +411,8 @@ export interface ExpandedPart extends PartBase {
   mod: MechanicalMods;
   /** This part is only meaningful with a turbo kit already installed. */
   requiresTurbo?: boolean;
+  /** Extra career unlock this part needs on a modern engine family (generic categories only). */
+  modernUnlock?: UnlockId;
 }
 
 export type PartDef =
@@ -437,7 +464,11 @@ export type UnlockId =
   | 'c2-tires-slick'
   | 'c2-awd'
   | 'c2-final-challenge'
-  | 'c2-dealer-335i';
+  | 'c2-dealer-335i'
+  | 'c2-generic-tires'
+  | 'c2-generic-chassis'
+  | 'c2-stage2'
+  | 'c3-stage3';
 
 export const UNLOCK_LABEL: Record<UnlockId, string> = {
   'workshop-basic': 'Oficina básica',
@@ -466,6 +497,10 @@ export const UNLOCK_LABEL: Record<UnlockId, string> = {
   'c2-awd': 'Calibração da tração integral',
   'c2-final-challenge': 'Desafio final da Liga',
   'c2-dealer-335i': 'BMW 335i à venda',
+  'c2-generic-tires': 'Largura e pressão de pneus nos carros modernos',
+  'c2-generic-chassis': 'Alívio de peso e arrefecimento nos carros modernos',
+  'c2-stage2': 'Stage 2 do turbo de fábrica (downpipe, admissão direta, mapa Stage 2)',
+  'c3-stage3': 'Stage 3 do turbo de fábrica',
 };
 
 const BASE_PARTS: readonly PartDef[] = [

@@ -68,7 +68,7 @@ const specs: Spec[] = [
   ['ignition-race', 'electronics-ignition', 'Ignição performance', 3, 2400, 'engine-tuners', { knockRetardScale: 0.88, burnDurationScale: 0.97 }, 'Ignição de descarga capacitiva com bobinas individuais.'],
   ['radiator-large', 'cooling-radiator', 'Radiador maior', 2, 1450, 'part-cam', { coolingFrictionScale: 0.985, coolingKnockScale: 0.98 }, 'Radiador de alumínio de colmeia mais grossa.'],
   ['oil-cooler', 'cooling-oil', 'Sistema de óleo melhorado', 2, 1700, 'part-cam', { coolingFrictionScale: 0.965 }, 'Radiador de óleo e óleo sintético de baixa viscosidade.'],
-  ['fan-upgrade', 'cooling-fan', 'Ventoinha melhorada', 1, 780, 'part-cam', { coolingFrictionScale: 0.992 }, 'Ventoinha elétrica comandada por termostato, no lugar da mecânica.'],
+  ['fan-upgrade', 'cooling-fan', 'Ventoinha melhorada', 1, 780, 'part-cam', { coolingFrictionScale: 0.986 }, 'Ventoinha elétrica comandada por termostato, no lugar da mecânica.'],
   ['weight-light', 'chassis-weight', 'Alívio de peso leve', 1, 1350, 'workshop-basic', { massRemoveKg: 18 }, 'Retirada de estepe, macaco, tapetes e bancos traseiros.', 'Menos massa para acelerar e menos resistência ao rolamento; o motor não muda.'],
   ['weight-medium', 'chassis-weight', 'Alívio de peso médio', 2, 2800, 'workshop-basic', { massRemoveKg: 48 }, 'Retirada do acabamento interno e banco de fibra.', 'Menos massa para acelerar e menos resistência ao rolamento; o motor não muda.'],
   ['weight-race', 'chassis-weight', 'Alívio de peso forte', 3, 5500, 'workshop-basic', { massRemoveKg: 83 }, 'Preparação de competição: vidros de policarbonato, capô de fibra e interior vazio.', 'Menos massa para acelerar e menos resistência ao rolamento; o motor não muda.'],
@@ -140,4 +140,10 @@ export const EXPANDED_PARTS: readonly ExpandedPart[] = specs.map(([id, category,
   physics: note ? `${describeMods(mod)} ${note}` : describeMods(mod),
   requiresTurbo: category === 'turbo-turbine' || category === 'turbo-intercooler' ||
     category === 'turbo-wastegate' || category === 'turbo-boost' || id === 'compression-low',
+  // car hardware that also fits the modern engine families, opened along Chapter 2
+  ...(category === 'tires-width' || category === 'tires-pressure'
+    ? { modernUnlock: 'c2-generic-tires' as const }
+    : category === 'chassis-weight' || category.startsWith('cooling-')
+      ? { modernUnlock: 'c2-generic-chassis' as const }
+      : {}),
 }));

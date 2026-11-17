@@ -69,6 +69,7 @@ const UNLOCK_SPEAKER: Partial<Record<UnlockId, PortraitId>> = {
   'c2-programmable': 'caio',
   'c2-turbo-hybrid': 'caio',
   'c2-internals': 'caio',
+  'c2-stage2': 'caio',
 };
 
 const UNLOCK_INTRO: Partial<Record<UnlockId, string>> = {
@@ -84,6 +85,9 @@ const UNLOCK_INTRO: Partial<Record<UnlockId, string>> = {
   'c2-turbo-hybrid': 'Turbina híbrida: mais vazão em cima, enche um pouco mais tarde. Só com ECU programável, senão a pressão nem muda.',
   'c2-internals': 'Pistões forjados. Não dão potência sozinhos, mas sobem o limite de torque que o motor aguenta.',
   'c2-tires-slick': 'Slick de arrancada. Gruda como nada, mas só quando estiver quente.',
+  'c2-generic-tires': 'Pneu mais largo e pressão de arrancada agora servem nos carros modernos também.',
+  'c2-generic-chassis': 'Alívio de peso, radiador, óleo e ventoinha: agora também nos importados.',
+  'c2-stage2': 'Stage 2: downpipe sem catalisador, admissão direta e o meu mapa com mais pressão. Precisa de intercooler maior, e se o torque subir demais, de forjados e câmbio reforçado.',
   'c2-awd': 'Acerto do diferencial central: o acoplamento passa torque para o outro eixo mais cedo. Só para tração integral.',
   'c2-final-challenge': 'O Victor aceitou correr com você. Corredor da Liga, quatrocentos metros.',
   'c2-dealer-335i': 'O Victor disse que, se você quiser, a revenda libera uma 335i igual à dele.',

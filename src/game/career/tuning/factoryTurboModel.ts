@@ -4,7 +4,7 @@ import { EngineModel, WILLANS_OFFSET } from '../../../physics/engine/EngineModel
 import { engineGeometry } from '../../../physics/engine/EngineGeometry';
 import { extendCurve, ottoEfficiency, powerPeakRpm } from './breathingModel';
 import type { EngineFamilyDef } from './chapter2Parts';
-import type { BoostControlPart, EcuPart, ExhaustPart, FilterPart, IntercoolerPart, PistonPart, TurboUpgradePart } from './parts';
+import type { BoostControlPart, EcuPart, ExhaustPart, FilterPart, IntercoolerPart, MechanicalMods, PistonPart, TurboUpgradePart } from './parts';
 
 /**
  * Tuning of a FACTORY turbocharged engine (resolver v2). The stock WOT curve is the brake torque
@@ -49,6 +49,8 @@ export interface FactoryTurboParts {
   pistons?: PistonPart;
   /** Boost target set on the dyno (programmable ECU only), bar gauge. */
   boostBar?: number;
+  /** Generic car hardware (cooling): internal friction and knock margin. */
+  mod?: MechanicalMods;
 }
 
 export interface FactoryTurboResult {
@@ -62,8 +64,8 @@ export interface FactoryTurboResult {
 }
 
 /** Highest boost target the wastegate of this build can hold (bar). */
-export function wastegateMaxBar(stock: EngineConfig, bc?: BoostControlPart): number {
-  return stock.turbo!.maxBoostBar + (bc?.wastegateHeadroomBar ?? FACTORY_WASTEGATE_HEADROOM_BAR);
+export function wastegateMaxBar(stock: EngineConfig, bc?: BoostControlPart, ecu?: EcuPart): number {
+  return stock.turbo!.maxBoostBar + Math.max(bc?.wastegateHeadroomBar ?? FACTORY_WASTEGATE_HEADROOM_BAR, ecu?.wastegateHeadroomBar ?? 0);
 }
 
 /** Boost target the ECU of this build aims at (bar), before the wastegate limit. */
@@ -83,24 +85,27 @@ export function applyFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboP
   const ratedRpm = powerPeakRpm(stock.torqueCurve, stock.revLimitRpm);
 
   // ---- calibration and hardware ----
-  const wgMax = wastegateMaxBar(stock, parts.boostControl);
+  const wgMax = wastegateMaxBar(stock, parts.boostControl, parts.ecu);
   const target = Math.min(ecuBoostTarget(stock, parts.ecu, parts.boostBar) + (parts.boostBar === undefined ? parts.boostControl?.holdAddBar ?? 0 : 0), wgMax);
   const up = parts.turbo;
   const turboCfg = {
     ...t0,
     maxBoostBar: target,
     fullBoostFlowFraction: t0.fullBoostFlowFraction * (up?.spoolFlowScale ?? 1),
-    spoolTimeS: t0.spoolTimeS * (up?.spoolTimeScale ?? 1) * (parts.boostControl?.spoolTimeScale ?? 1),
+    spoolTimeS: t0.spoolTimeS * (up?.spoolTimeScale ?? 1) * (parts.boostControl?.spoolTimeScale ?? 1) * (parts.exhaust?.spoolTimeScale ?? 1),
     compressorBlades: up?.compressorBlades ?? t0.compressorBlades,
   };
   const icEff = parts.intercooler?.effectiveness ?? FACTORY_INTERCOOLER;
   const cr = stock.compressionRatio + (parts.pistons?.compressionAdd ?? 0);
   const knockFree = (fam.knockFreeBoostBar ?? t0.maxBoostBar) + 0.3 * (stock.compressionRatio - cr) + 0.5 * (icEff - FACTORY_INTERCOOLER);
-  const knockAt = (bar: number): number => KNOCK_LOSS_PER_BAR * Math.max(0, bar - knockFree);
+  const knockAt = (bar: number): number => KNOCK_LOSS_PER_BAR * (parts.mod?.coolingKnockScale ?? 1) * Math.max(0, bar - knockFree);
   const knockStock = (bar: number): number => KNOCK_LOSS_PER_BAR * Math.max(0, bar - (fam.knockFreeBoostBar ?? t0.maxBoostBar));
   const indicatedScale = (ottoEfficiency(cr) / ottoEfficiency(stock.compressionRatio)) * (1 + (parts.ecu?.ignitionGain ?? 0));
   const internals = fam.internalsTorqueNm * (parts.pistons?.torqueLimitScale ?? 1);
-  const limitNm = parts.ecu ? internals * parts.ecu.torqueLimitFraction : Infinity;
+  // the map's torque target: a fraction of the mechanical limit, and for a staged map also a ceiling
+  // over the factory peak (the calibration the stage is sold for)
+  const stockPeakCfg = Math.max(...stock.torqueCurve.torqueNm);
+  const limitNm = parts.ecu ? Math.min(internals * parts.ecu.torqueLimitFraction, stockPeakCfg * (parts.ecu.stockTorqueGainMax ?? Infinity)) : Infinity;
   const revAdd = Math.min(parts.ecu?.revLimitAddRpm ?? 0, fam.valvetrainRevAddRpm) + (parts.pistons?.revLimitAddRpm ?? 0);
   const revLimit = stock.revLimitRpm + revAdd;
   // a free-flow part never restricts more than the factory part it replaces
@@ -156,11 +161,13 @@ export function applyFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboP
       const map = op0.map * pressureRatio;
       const back = op0.back + 0.85 * (boostPa - op0.boost) + (backRef - b0.exhaustBackPressureKPa) * 1000 * r * r;
       const pumping = (back - map) * vdOver4pi;
-      let brake = indicated - op0.frictionNm * (parts.pistons?.frictionScale ?? 1) - pumping;
+      let brake = indicated - op0.frictionNm * (parts.pistons?.frictionScale ?? 1) * (parts.mod?.coolingFrictionScale ?? 1) - pumping;
       // torque limiter of the ECU: the factory map holds the factory plateau (the stock peak torque);
       // above it, where the factory curve falls with the air flow, freer breathing still gains.
       // A remap moves the limit to the mechanical one.
       brake = Math.min(brake, parts.ecu ? limitNm : Math.max(stockCurve[i]!, Math.min(brake, stockPeakNm)));
+      // a staged map targets at most a multiple of the factory torque at every speed
+      if (parts.ecu?.stockTorqueGainMax) brake = Math.min(brake, stockCurve[i]! * parts.ecu.stockTorqueGainMax);
       // freer breathing, a remap, a bigger intercooler or a hybrid turbine that fills at the same
       // exhaust flow never lose steady full-load torque against the factory engine (off-boost
       // points stay the factory ones)

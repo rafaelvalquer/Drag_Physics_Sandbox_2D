@@ -84,6 +84,31 @@ tempo, em todos os carros em que cabe. O ganho é sempre físico:
 Os textos de vitrine e de "Efeito físico" são diferentes. O efeito físico das peças do catálogo ampliado é gerado
 dos próprios números aplicados pelo resolvedor (`describeMods`).
 
+### Carros modernos (Capítulo 2): peças por família e liberação progressiva
+
+Cada peça declara onde cabe (`compat`): família de motor, alimentação (aspirado/turbo), câmbio, tração e,
+para motores futuros (seis contrapostos, V8, V12), a arquitetura do motor (`layouts`). Um carro mais caro pode
+ter peças só dele: basta cadastrar a família e as peças, sem mexer no resolvedor.
+
+- **Peças do carro, não do motor clássico:** alívio de peso, radiador, óleo, ventoinha, largura e pressão de
+  pneu também servem nos carros modernos (`GENERIC_V2_CATEGORIES`). Comandos, coletores, kits turbo e o
+  resto do catálogo clássico continuam só nos motores clássicos.
+- **Liberação ao longo do capítulo:** nos carros modernos, essas peças pedem um desbloqueio a mais
+  (`modernUnlock`):
+  - largura e pressão de pneu na etapa 2;
+  - peso e arrefecimento na etapa 5;
+  - os níveis de competição só no Capítulo 3.
+- **Stage 2 do turbo de fábrica (etapa 8):**
+  - **peças:** downpipe sem catalisador (contrapressão ≈ 4 kPa), admissão direta
+    turbo e Remap Stage 2;
+  - **mapa:** +0,55 bar, com solenoide que segura até +0,7 bar, e torque no máximo 28 % acima do original
+    em cada rotação;
+  - **requisitos:** o mapa exige o downpipe e o intercooler maior. Acima de 85 % do limite dos internos de
+    fábrica, exige pistões e bielas forjados, e o câmbio precisa aguentar o torque (embreagem reforçada nos
+    manuais; os automáticos e DSG de fábrica já seguram o Stage 2);
+  - **resultado:** +28 % de potência em todos os turbo de fábrica (320i: 184 → 235 cv).
+- **Stage 3** (mapa para a turbina híbrida e motor forjado) já está cadastrado e aparece como "Capítulo 3".
+
 O relatório completo, com todas as peças em todos os carros, sai com `npx tsx scripts/parts-gain-report.ts`. O
 teste `tests/unit/career/parts-gain.test.ts` confere uma amostra.
 

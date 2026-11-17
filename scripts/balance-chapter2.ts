@@ -32,7 +32,7 @@ import { DEALER_CARS, offerAvailability, resaleValue } from '../src/game/career/
 import { rivalBuild, rivalCar } from '../src/game/career/RivalBuildFactory';
 import { runHeadlessRace } from '../src/game/career/headlessRace';
 import { resolveBuild, type BuildTune, type BuildResult } from '../src/game/career/tuning/BuildResolver';
-import { incompatibility } from '../src/game/career/tuning/BuildResolverV2';
+import { familyOf, incompatibility } from '../src/game/career/tuning/BuildResolverV2';
 import { findPart } from '../src/game/career/tuning/parts';
 
 const argv = process.argv.slice(2);
@@ -251,7 +251,7 @@ if (want('--campaign')) {
           const base = findCampaignCar(carId)!;
           for (const id of PRIORITY) {
             const p = findPart(id)!;
-            if (installed.includes(id) || incompatibility(base, p) || !isPartUnlocked(save, p)) continue;
+            if (installed.includes(id) || incompatibility(base, p) || !isPartUnlocked(save, p, familyOf(base))) continue;
             if (installed.some((x) => findPart(x)!.category === p.category && PRIORITY.indexOf(x) > PRIORITY.indexOf(id))) continue;
             const next = [...installed.filter((x) => findPart(x)!.category !== p.category), id];
             if (!resolveBuild(base, next, {}, 2).ok) continue;

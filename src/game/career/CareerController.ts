@@ -19,6 +19,7 @@ import {
 } from './CareerState';
 import { resolveBuild, type ResolverVersion } from './tuning/BuildResolver';
 import { findPart, type PartCategory, type UnlockId } from './tuning/parts';
+import { familyOf } from './tuning/BuildResolverV2';
 
 const CHAPTER2_CAR_IDS = new Set(CHAPTER2_CARS.map((c) => c.id));
 
@@ -145,7 +146,7 @@ export class CareerController {
     const p = findPart(partId);
     if (!s || !car) return fail('nenhum carro ativo');
     if (!p) return fail(`peça desconhecida: ${partId}`);
-    if (!isPartUnlocked(s, p)) return fail(`${p.name} ainda não está liberada`);
+    if (!isPartUnlocked(s, p, familyOf(findCampaignCar(car.baseCarId)!))) return fail(`${p.name} ainda não está liberada`);
     if (car.installedParts.includes(partId)) return fail(`${p.name} já está instalada neste carro`);
     if (s.inventoryPartIds.includes(inventoryEntry(partId, car.baseCarId))) return fail(`${p.name} já está no seu estoque: instale de lá`);
     if (s.credits < p.price) return fail(`créditos insuficientes: ${p.name} custa ${p.price} CR, você tem ${s.credits} CR`);

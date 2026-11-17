@@ -1,7 +1,7 @@
 import { ALL_EVENTS, eventsOf, type CareerEventDef } from './CareerEvents';
 import type { CareerSave } from './CareerState';
 import { CHAPTER_1_ID, CHAPTERS, chapterOf, type ChapterId } from './chapters';
-import type { PartCategory, PartDef, UnlockId } from './tuning/parts';
+import { LEGACY_FAMILY, type PartCategory, type PartDef, type UnlockId } from './tuning/parts';
 
 type Progress = Pick<CareerSave, 'completedEventIds'>;
 
@@ -48,8 +48,13 @@ export function nextEvent(save: Progress, chapter: ChapterId = CHAPTER_1_ID): Ca
 }
 
 /** Shop requirements of a part: its own unlock plus the workshop it is installed in. */
-export function partRequirements(p: PartDef): UnlockId[] {
+/**
+ * Unlocks a part needs. `family` is the engine family of the car it is for: a generic part of
+ * the slot catalogue on a modern engine also needs its Chapter 2 unlock (modernUnlock).
+ */
+export function partRequirements(p: PartDef, family?: string): UnlockId[] {
   const req: UnlockId[] = ['workshop-basic', p.unlock];
+  if ('modernUnlock' in p && p.modernUnlock && family && family !== LEGACY_FAMILY) req.push(p.modernUnlock);
   if (p.category === 'clutch' || p.category === 'differential' || p.category === 'transmission-gearbox' || p.category === 'gearbox' || p.category === 'awd')
     req.push('workshop-transmission');
   return [...new Set(req)];
@@ -60,10 +65,10 @@ function availableChapterNumber(save: Progress): number {
   return CHAPTERS.filter((c) => isChapterUnlocked(save, c.id)).reduce((n, c) => Math.max(n, c.number), 1);
 }
 
-export function isPartUnlocked(save: Progress, p: PartDef): boolean {
-  if ('chapter' in p && p.chapter > availableChapterNumber(save)) return false;
+export function isPartUnlocked(save: Progress, p: PartDef, family?: string): boolean {
+  if (p.chapter && p.chapter > availableChapterNumber(save)) return false;
   const u = unlocksOf(save);
-  return partRequirements(p).every((r) => u.has(r));
+  return partRequirements(p, family).every((r) => u.has(r));
 }
 
 /** Boost setting of the kit turbo on the dyno (chapter 1 tuners). */
@@ -99,18 +104,19 @@ export function partStatus(
   save: Pick<CareerSave, 'completedEventIds' | 'inventoryPartIds' | 'credits'>,
   car: { baseCarId: string; installedParts: readonly string[] },
   p: PartDef,
+  family?: string,
 ): PartStatus {
   if (car.installedParts.includes(p.id)) return { state: 'installed', label: 'Em uso', detail: 'Instalada neste carro.' };
   if (save.inventoryPartIds.includes(`${p.id}@${car.baseCarId}`))
     return { state: 'owned', label: 'Comprada', detail: 'No estoque deste carro: instale sem pagar de novo.' };
-  if (!isPartUnlocked(save, p)) {
-    const chapter = 'chapter' in p ? p.chapter : 1;
-    if (chapter > 1) return {
+  if (!isPartUnlocked(save, p, family)) {
+    const chapter = p.chapter ?? 1;
+    if (chapter > availableChapterNumber(save)) return {
       state: 'locked', label: `Capítulo ${chapter}`,
       detail: `Disponível no capítulo ${chapter}, ainda não implementado na campanha.`,
     };
     const have = unlocksOf(save);
-    const missing = partRequirements(p).find((r) => !have.has(r))!;
+    const missing = partRequirements(p, family).find((r) => !have.has(r))!;
     const ev = eventUnlocking(missing);
     if (!ev) return { state: 'locked', label: 'Bloqueada', detail: 'Ainda bloqueada.' };
     const what = ev.chapter === CHAPTER_1_ID ? 'a noite' : 'a etapa';
