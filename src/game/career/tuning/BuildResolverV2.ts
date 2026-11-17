@@ -1,7 +1,7 @@
 import { validateCar, type CarConfig, type TransmissionKind } from '../../../data/schema';
 import { exhaustPreset } from '../../../data/exhaustPresets';
 import { applyEngineParts, curvePeakCv, engineFuel, powerPeakRpm, TURBO_MAX_COMPRESSION, withStockBreathing, type EngineParts } from './breathingModel';
-import { applyTyre, CLUTCH_TORQUE_MARGIN, deepFreeze, fmtBar, MAX_KNOCK_LOSS, type BuildResult, type BuildTune } from './buildCommon';
+import { applyTyre, CLUTCH_TORQUE_MARGIN, deepFreeze, fmtBar, workshopFinalDrive, MAX_KNOCK_LOSS, type BuildResult, type BuildTune } from './buildCommon';
 import { ENGINE_FAMILIES } from './chapter2Parts';
 import { applyFactoryTurboParts, wastegateMaxBar } from './factoryTurboModel';
 import {
@@ -173,6 +173,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
       compressionAdd: pistons?.compressionAdd,
       ignitionGain: ecu?.ignitionGain,
       revLimitAddRpm: ecu ? Math.min(ecu.revLimitAddRpm, family?.valvetrainRevAddRpm ?? 0) : undefined,
+      mod: pistons?.frictionScale ? { coolingFrictionScale: pistons.frictionScale } : undefined,
     };
     const any = Object.values(engineParts).some((v) => v !== undefined);
     if (any) {
@@ -215,6 +216,9 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   }
   const fly = get('flywheel');
   if (fly) car.engine.inertiaKgM2 = Math.round(car.engine.inertiaKgM2 * fly.inertiaScale * 10000) / 10000;
+  // lighter reciprocating/rotating parts of a forged set
+  const pist = get('pistons');
+  if (pist?.inertiaScale) car.engine.inertiaKgM2 = Math.round(car.engine.inertiaKgM2 * pist.inertiaScale * 10000) / 10000;
 
   const peakTorqueNm = Math.max(...car.engine.torqueCurve.torqueNm.filter((_, i) => car.engine.torqueCurve.rpm[i]! <= car.engine.revLimitRpm));
   const peakPowerCv = curvePeakCv(car.engine.torqueCurve, car.engine.revLimitRpm);
@@ -251,6 +255,8 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
     c.maxTorqueNm = Math.round(c.maxTorqueNm * clutch.capacityScale);
     c.engageRatePerS = Math.min(50, c.engageRatePerS * clutch.engageRateScale);
     c.launchRpm = Math.min(c.launchRpm + clutch.launchRpmAdd, car.engine.redlineRpm - 800);
+    if (clutch.inputInertiaScale) car.transmission.inputInertiaKgM2 = Math.max(0.001, car.transmission.inputInertiaKgM2 * clutch.inputInertiaScale);
+    if (clutch.engineInertiaScale) car.engine.inertiaKgM2 = Math.round(car.engine.inertiaKgM2 * clutch.engineInertiaScale * 10000) / 10000;
   }
   const gb = get('gearbox');
   if (gb) {
@@ -274,7 +280,6 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
     }
   }
   const diff = get('differential');
-  if (diff) car.transmission.finalDrive = Math.round(car.transmission.finalDrive * diff.finalDriveScale * 1000) / 1000;
   const awd = get('awd');
   if (awd && car.awd) {
     car.awd = {
@@ -287,6 +292,16 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   if (susp) car.cgHeightM = Math.round((car.cgHeightM + susp.cgHeightDeltaM) * 1000) / 1000;
   const tyre = get('tires');
   if (tyre) applyTyre(car, base, tyre);
+  if (susp?.massRemoveKg) car.massKg = Math.max(500, car.massKg - susp.massRemoveKg);
+  if (fly?.massRemoveKg) car.massKg = Math.max(500, car.massKg - fly.massRemoveKg);
+  // crown and pinion chosen for the finished car (engine, tyres, mass above)
+  if (diff) {
+    car.transmission.finalDrive = workshopFinalDrive(car, base.transmission.finalDrive, diff.finalDriveScale);
+    if (diff.efficiencyAdd) car.transmission.efficiency = Math.min(0.97, Math.round((car.transmission.efficiency + diff.efficiencyAdd) * 1000) / 1000);
+  }
+  if (gb?.efficiencyAdd) car.transmission.efficiency = Math.min(0.97, Math.round((car.transmission.efficiency + gb.efficiencyAdd) * 1000) / 1000);
+  if (fly?.launchRpmAdd) car.transmission.clutch.launchRpm = Math.min(car.transmission.clutch.launchRpm + fly.launchRpmAdd, car.engine.redlineRpm - 800);
+  if (awd?.transferEfficiencyAdd && car.awd) car.awd = { ...car.awd, transferEfficiency: Math.min(1, car.awd.transferEfficiency + awd.transferEfficiencyAdd) };
 
   // ---- visible parts ----
   car.visual = { ...car.visual, mods: { intercooler: !!(turboKit || ic || turboUp), sportTip: !!exhaust, tyre: tyre?.grade ?? 'stock' } };

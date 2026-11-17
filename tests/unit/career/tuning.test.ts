@@ -7,6 +7,7 @@ import { CAR_VW_SAVEIRO_GL_1994 } from '../../../src/data/cars/vwSaveiroGl1994';
 import { CAR_GM_CELTA_2003 } from '../../../src/data/cars/gmCelta2003';
 import type { CarConfig } from '../../../src/data/schema';
 import { buildKey, resolveBuild, resolveBuildOrThrow } from '../../../src/game/career/tuning/BuildResolver';
+import { TYRE_START_TEMP_C } from '../../../src/game/career/tuning/buildCommon';
 import { CATEGORY_ORDER, PARTS, WORKSHOP_TABS, findPart } from '../../../src/game/career/tuning/parts';
 import { isPartUnlocked, partStatus } from '../../../src/game/career/CareerProgression';
 import { EngineDyno } from '../../../src/physics/engine/EngineDyno';
@@ -68,8 +69,12 @@ describe('build resolver rules', () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.errors[0]).toMatch(/só cabe uma peça em (Pneus|Composto)/);
     const semi = ok(CAR_VW_SAVEIRO_GL_1994, ['tires-semislick']).car;
-    expect(semi.tires.muPeak).toBe(1.32);
-    expect(semi.tires.wheelInertiaKgM2).toBeCloseTo(CAR_VW_SAVEIRO_GL_1994.tires.wheelInertiaKgM2 + 0.15, 9);
+    // nominal 1.32, sized up so that even cold at the line it grips ≥ 16 % more than the stock tyre
+    const grip = (t: { muPeak: number; tempSensitivityPerC: number; optimalTempC: number }): number =>
+      t.muPeak * Math.max(0.6, 1 - t.tempSensitivityPerC * Math.abs(TYRE_START_TEMP_C - t.optimalTempC));
+    expect(semi.tires.muPeak).toBeGreaterThanOrEqual(1.32);
+    expect(grip(semi.tires)).toBeGreaterThanOrEqual(grip(CAR_VW_SAVEIRO_GL_1994.tires) * 1.16 - 1e-9);
+    expect(semi.tires.wheelInertiaKgM2).toBeCloseTo(CAR_VW_SAVEIRO_GL_1994.tires.wheelInertiaKgM2 - 0.03, 9);
     expect(semi.tires.radiusM).toBe(CAR_VW_SAVEIRO_GL_1994.tires.radiusM);
     expect(semi.visual.mods?.tyre).toBe('semiSlick');
   });
@@ -147,7 +152,10 @@ describe('physical effects', () => {
   it('clutch and differential change the driveline only', () => {
     const c = ok(CAR_VW_SAVEIRO_GL_1994, ['clutch-reinforced', 'differential-short']).car;
     expect(c.transmission.clutch.maxTorqueNm).toBe(Math.round(235 * 1.5));
-    expect(c.transmission.finalDrive).toBeCloseTo(4.111 * 1.12, 3);
+    // the workshop picks the crown and pinion for the car between 3 % longer and the nominal 12 % shorter
+    expect(c.transmission.finalDrive).toBeGreaterThanOrEqual(4.111 * 0.97 - 1e-3);
+    expect(c.transmission.finalDrive).toBeLessThanOrEqual(4.111 * 1.12 + 1e-3);
+    expect(c.transmission.efficiency).toBeCloseTo(CAR_VW_SAVEIRO_GL_1994.transmission.efficiency + 0.01, 6);
     expect(c.engine.torqueCurve).toEqual(base.engine.torqueCurve);
   });
 });
@@ -208,7 +216,7 @@ describe('expanded premium workshop', () => {
     expect(r.peakPowerCv).toBeGreaterThan(140);
     expect(r.peakPowerCv).toBeLessThan(185);
   });
-  it('keeps a fully equipped chapter-one Gol AP near its 180 cv tuning ceiling', () => {
+  it('keeps a fully equipped chapter-one Gol AP near its 185 cv tuning ceiling', () => {
     // Every chapter-one engine-breathing and turbo support slot can coexist.
     // No power cap is added: the physical parameterization must balance the combination.
     const allStreet = [
@@ -221,7 +229,9 @@ describe('expanded premium workshop', () => {
     expect(result.ok, result.ok ? undefined : result.errors.join('; ')).toBe(true);
     if (result.ok) {
       expect(result.peakPowerCv).toBeGreaterThan(160);
-      expect(result.peakPowerCv).toBeLessThanOrEqual(182);
+      // every street part now gains on its own (wastegate hold, ignition burn, compressor
+      // efficiency), so the stack sits a few cv above the old 180 cv mark
+      expect(result.peakPowerCv).toBeLessThanOrEqual(190);
     }
   });
 

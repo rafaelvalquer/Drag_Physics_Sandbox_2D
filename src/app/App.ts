@@ -162,6 +162,7 @@ export class App {
     const m = make();
     this.mode = m;
     m.mount(this.ctx);
+    this.el.app.classList.toggle('panel-less', !!m.noPanel);
     this.el.game.style.visibility = m.usesTrack ? 'visible' : 'hidden';
     this.touch?.setVisible(m.usesTrack && TouchControls.wanted(this.settings.touchControls));
     for (const b of this.el.topbar.querySelectorAll<HTMLButtonElement>('button.tab[data-mode]')) b.classList.toggle('active', b.dataset.mode === id);

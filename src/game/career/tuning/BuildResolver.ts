@@ -2,7 +2,7 @@ import { validateCar, type CarConfig } from '../../../data/schema';
 import { exhaustPreset } from '../../../data/exhaustPresets';
 import { applyEngineParts, curvePeakCv, engineFuel, powerPeakRpm, TURBO_MAX_COMPRESSION, withStockBreathing, type EngineParts } from './breathingModel';
 import { CATEGORY_LABEL, CATEGORY_ORDER_V1, findPart, findPartForVersion, type PartCategory, type PartDef, type TirePart, type FilterPart, type ManifoldPart, type CamPart, type ExhaustPart, type TurboPart, type MechanicalMods } from './parts';
-import { applyTyre, CLUTCH_TORQUE_MARGIN, deepFreeze, fmtBar, MAX_KNOCK_LOSS, type BuildResult, type BuildTune, type ResolverVersion } from './buildCommon';
+import { applyTyre, CLUTCH_TORQUE_MARGIN, deepFreeze, workshopFinalDrive, workshopGearRatios, fmtBar, MAX_KNOCK_LOSS, type BuildResult, type BuildTune, type ResolverVersion } from './buildCommon';
 import { resolveV2 } from './BuildResolverV2';
 
 export { CLUTCH_TORQUE_MARGIN, MAX_KNOCK_LOSS, type BuildResult, type BuildTune, type ResolverVersion };
@@ -81,8 +81,8 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
   if (errors.length) return { ok: false, errors };
   const parts = CATEGORY_ORDER_V1.map((c) => bySlot.get(c)).filter((p): p is PartDef => !!p);
   const mod: MechanicalMods = {};
-  const compound = new Set(['knockRetardScale', 'coolingKnockScale', 'coolingFrictionScale']);
-  const additive = new Set(['backPressureReductionKPa', 'filterDropReductionKPa', 'intercoolerEffectivenessAdd', 'intercoolerMassAddKg']);
+  const compound = new Set(['knockRetardScale', 'coolingKnockScale', 'coolingFrictionScale', 'burnDurationScale', 'turboSpoolScale', 'tireRollingScale']);
+  const additive = new Set(['backPressureReductionKPa', 'filterDropReductionKPa', 'intercoolerEffectivenessAdd', 'intercoolerMassAddKg', 'wastegateHoldAddBar', 'drivelineEfficiencyAdd', 'massRemoveKg']);
   for (const p of parts) if ('mod' in p) {
     for (const [k, v] of Object.entries(p.mod)) {
       if (v === undefined) continue;
@@ -155,7 +155,7 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
   let knockLoss = 0;
   // Non-engine upgrades (clutch, tyres, mass, suspension, internals) must not resample
   // the engine curve: restoring them keeps factory motor physics byte-for-byte.
-  const nonEnginePrefix = /^(clutch|finalDrive|gearSpread|tire|massRemove|cgHeight|internalTorqueLimit|fuelBoostLimit)/;
+  const nonEnginePrefix = /^(clutch|finalDrive|gearSpread|driveline|tire|massRemove|cgHeight|launchCg|internalTorqueLimit|fuelBoostLimit)/;
   const changesEngine = !!(engineParts.filter || engineParts.manifold || engineParts.cam || engineParts.exhaust || engineParts.turbo)
     || Object.keys(mod).some((k) => !nonEnginePrefix.test(k));
   if (changesEngine) {
@@ -199,15 +199,11 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
     c.maxTorqueNm = Math.round(c.maxTorqueNm * (clutch?.capacityScale ?? mod.clutchCapacityScale ?? 1));
     c.engageRatePerS = Math.min(50, c.engageRatePerS * (clutch?.engageRateScale ?? mod.clutchEngageRateScale ?? 1));
     c.launchRpm = Math.min(c.launchRpm + (clutch?.launchRpmAdd ?? mod.clutchLaunchAddRpm ?? 0), car.engine.redlineRpm - 800);
+    if (clutch?.inputInertiaScale) car.transmission.inputInertiaKgM2 = Math.max(0.001, car.transmission.inputInertiaKgM2 * clutch.inputInertiaScale);
+    const plate = clutch?.engineInertiaScale ?? mod.clutchEngineInertiaScale;
+    if (plate) car.engine.inertiaKgM2 = Math.round(car.engine.inertiaKgM2 * plate * 10000) / 10000;
   }
   const diff = legacy('differential') as Extract<PartDef, {category: 'differential'}> | undefined;
-  if (diff || mod.finalDriveScale) car.transmission.finalDrive = Math.round(car.transmission.finalDrive * (diff?.finalDriveScale ?? mod.finalDriveScale ?? 1) * 1000) / 1000;
-  if (mod.gearSpreadScale) {
-    // Preserve first gear and smoothly bring intermediate ratios closer to the last gear.
-    const ratios = base.transmission.gearRatios;
-    const first = ratios[0]!;
-    car.transmission.gearRatios = ratios.map((r, i) => Math.max(0.4, Math.min(6, i === 0 ? first : first * Math.pow(r / first, mod.gearSpreadScale!))));
-  }
 
   // ---- tyres (replace the compound, keep the size) ----
   const tyre = legacy('tires') as TirePart | undefined;
@@ -218,8 +214,20 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
   if (mod.tireTempSensitivity !== undefined) car.tires.tempSensitivityPerC = mod.tireTempSensitivity;
   if (mod.tireStiffnessScale) car.tires.B = Math.min(25, car.tires.B * mod.tireStiffnessScale);
   if (mod.tireTempSensitivityScale) car.tires.tempSensitivityPerC *= mod.tireTempSensitivityScale;
+  if (mod.tireRollingScale) car.tires.rollingResistance = Math.max(0.005, car.tires.rollingResistance * mod.tireRollingScale);
   if (mod.massRemoveKg) car.massKg = Math.max(500, car.massKg - mod.massRemoveKg);
   if (mod.cgHeightDeltaM) car.cgHeightM = Math.max(0.25, car.cgHeightM + mod.cgHeightDeltaM);
+  // drag suspension: load transfer towards the driven axle (front drive: less, rear drive: more)
+  if (mod.launchCgDeltaM) car.cgHeightM = Math.max(0.25, car.cgHeightM + (base.drivenAxle === 'front' ? -1 : 1) * mod.launchCgDeltaM);
+
+  // ---- gearing, chosen for the finished car (engine, tyres and mass above) ----
+  // close-ratio box: first and top stay; the intermediate gears close in (see workshopGearRatios)
+  if (mod.gearSpreadScale) car.transmission.gearRatios = workshopGearRatios(car, base.transmission.gearRatios, mod.gearSpreadScale);
+  if (diff || mod.finalDriveScale)
+    car.transmission.finalDrive = workshopFinalDrive(car, base.transmission.finalDrive, diff?.finalDriveScale ?? mod.finalDriveScale ?? 1);
+  // new gears/bearings run with less loss than the worn factory set
+  const effAdd = (diff?.efficiencyAdd ?? 0) + (mod.drivelineEfficiencyAdd ?? 0);
+  if (effAdd) car.transmission.efficiency = Math.min(0.97, Math.round((car.transmission.efficiency + effAdd) * 1000) / 1000);
 
   // ---- visible parts ----
   car.visual = {

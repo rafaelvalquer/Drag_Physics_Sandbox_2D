@@ -142,7 +142,12 @@ export interface MechanicalMods {
   wastegateRangeAddBar?: number; boostTargetBar?: number; fuelBoostLimitBar?: number;
   knockRetardScale?: number; burnDurationScale?: number;
   coolingFrictionScale?: number; coolingKnockScale?: number;
-  massRemoveKg?: number; cgHeightDeltaM?: number;
+  massRemoveKg?: number; cgHeightDeltaM?: number; drivelineEfficiencyAdd?: number; clutchEngineInertiaScale?: number;
+  /** Load transfer towards the driven axle: CG height change, sign chosen by the driven axle. */
+  launchCgDeltaM?: number;
+  /** Boost the wastegate holds above the target instead of tapering at high flow (bar). */
+  wastegateHoldAddBar?: number;
+  tireRollingScale?: number;
 }
 
 /** Pseudo-family of the engines that carry no `family` (Chapter 1 cars and the sandbox cars). */
@@ -236,12 +241,18 @@ export interface ClutchPart extends PartBase {
   capacityScale: number;
   engageRateScale: number;
   launchRpmAdd: number;
+  /** Lighter disc and pressure plate: scale of the gearbox input inertia. */
+  inputInertiaScale?: number;
+  /** Lighter pressure plate bolted to the flywheel: scale of the engine inertia. */
+  engineInertiaScale?: number;
 }
 
 export interface DifferentialPart extends PartBase {
   category: 'differential';
   /** Shorter crown-and-pinion: multiplies the final drive. */
   finalDriveScale: number;
+  /** New gears and bearings: gearbox/driveline efficiency gained (fraction). */
+  efficiencyAdd?: number;
 }
 
 export interface TirePart extends PartBase {
@@ -287,6 +298,8 @@ export interface TurboUpgradePart extends PartBase {
   spoolTimeScale: number;
   compressorBlades: number;
   massAddKg: number;
+  /** Larger turbine housing: exhaust back pressure removed at the reference flow (kPa). */
+  backPressureReductionKPa?: number;
 }
 
 export interface IntercoolerPart extends PartBase {
@@ -304,6 +317,8 @@ export interface BoostControlPart extends PartBase {
   /** Highest boost the wastegate can hold above the factory target (bar); the stock one holds 0.35. */
   wastegateHeadroomBar: number;
   spoolTimeScale: number;
+  /** Boost held above the target at high flow, where the factory wastegate lets it taper (bar). */
+  holdAddBar?: number;
 }
 
 /** Ported cylinder head (flow capacity where the valves choke). */
@@ -319,11 +334,19 @@ export interface PistonPart extends PartBase {
   /** Mechanical torque limit relative to the family's factory internals. */
   torqueLimitScale: number;
   revLimitAddRpm: number;
+  /** Lighter, low-friction rings and skirts: scale of the engine's friction torque. */
+  frictionScale?: number;
+  /** Lighter pistons and rods: scale of the engine's rotating inertia. */
+  inertiaScale?: number;
 }
 
 export interface FlywheelPart extends PartBase {
   category: 'flywheel';
   inertiaScale: number;
+  /** Launch speed raised to make up for the energy the lighter flywheel no longer stores (rpm). */
+  launchRpmAdd?: number;
+  /** Mass saved against the factory (dual-mass) flywheel (kg). */
+  massRemoveKg?: number;
 }
 
 /** Clutch packs / shift elements and the gearbox control unit of an automatic or a twin-clutch. */
@@ -335,6 +358,8 @@ export interface GearboxPart extends PartBase {
   /** Torque converter: lockup capacity and K factor (lower K = higher stall) scales. */
   lockupScale?: number;
   converterKScale?: number;
+  /** Efficiency gained by the new clutch packs / pump (fraction). */
+  efficiencyAdd?: number;
 }
 
 /** Centre coupling / active centre differential calibration. */
@@ -342,12 +367,16 @@ export interface AwdPart extends PartBase {
   category: 'awd';
   couplingScale: number;
   frontFractionDelta: number;
+  /** Less preload in the coupling: transfer-case efficiency gained (fraction). */
+  transferEfficiencyAdd?: number;
 }
 
 /** Drag suspension: effective centre-of-gravity height seen by the load transfer. */
 export interface SuspensionPart extends PartBase {
   category: 'suspension';
   cgHeightDeltaM: number;
+  /** Aluminium springs/dampers: unsprung and total mass removed (kg). */
+  massRemoveKg?: number;
 }
 
 /** Slot-catalogue part (classic engines, BuildResolver v1): hardware changes in `mod`. */
@@ -499,11 +528,13 @@ const BASE_PARTS: readonly PartDef[] = [
     price: 900,
     unlock: 'part-clutch',
     description: 'Platô de carga maior e disco de cerâmica.',
-    physics: 'Capacidade de torque +50 %, engate 30 % mais rápido. Não cria torque: só deixa de patinar.',
+    physics: 'Capacidade de torque +50 %, engate 30 % mais rápido, largada +100 rpm; disco cerâmico e platô de alumínio mais leves: inércia na entrada do câmbio −15 % e do motor −4 %. Não cria torque: deixa de patinar e o giro sobe mais rápido.',
     compat: { transmissions: ['manual'] },
     capacityScale: 1.5,
     engageRateScale: 1.3,
-    launchRpmAdd: 200,
+    launchRpmAdd: 100,
+    inputInertiaScale: 0.85,
+    engineInertiaScale: 0.96,
   },
   {
     id: 'tires-sport',
@@ -513,13 +544,13 @@ const BASE_PARTS: readonly PartDef[] = [
     price: 1000,
     unlock: 'part-tires-sport',
     description: 'Pneus de rua de alto desempenho, mesma medida externa.',
-    physics: 'μ de pico ≈ 1,13, carcaça mais rígida; roda 0,08 kg·m² mais pesada.',
+    physics: 'μ de pico ≈ 1,13 (no mínimo +6 % sobre o pneu original já na largada), carcaça mais rígida, mesma roda.',
     muPeak: 1.13,
     B: 11,
     C: 1.5,
     E: 0.35,
-    wheelInertiaAddKgM2: 0.08,
-    rollingResistanceAdd: 0.001,
+    wheelInertiaAddKgM2: 0,
+    rollingResistanceAdd: 0,
     optimalTempC: 70,
     tempSensitivityPerC: 0.002,
   },
@@ -529,9 +560,10 @@ const BASE_PARTS: readonly PartDef[] = [
     name: 'Diferencial alternativo',
     price: 1200,
     unlock: 'part-differential',
-    description: 'Coroa e pinhão mais curtos (≈ 12 %).',
-    physics: 'Relação final × 1,12: mais força nas rodas e mais patinação; menos velocidade final. Não é melhoria universal.',
+    description: 'Jogo de coroa e pinhão novo, com relação escolhida para o carro.',
+    physics: 'A oficina escolhe a relação final entre 3 % mais longa e 12 % mais curta, a que leva o carro mais rápido aos 402 m; rolamentos e engrenagens novos: eficiência da transmissão +1 ponto.',
     finalDriveScale: 1.12,
+    efficiencyAdd: 0.01,
   },
   {
     id: 'tires-semislick',
@@ -541,13 +573,13 @@ const BASE_PARTS: readonly PartDef[] = [
     price: 1600,
     unlock: 'part-tires-semislick',
     description: 'Composto macio de competição homologado para rua. Precisa de temperatura.',
-    physics: 'μ de pico ≈ 1,32 a 85 °C, perde mais aderência fora da temperatura; roda 0,15 kg·m² mais pesada.',
+    physics: 'μ de pico ≈ 1,32 a 85 °C (no mínimo +16 % sobre o pneu original já na largada, ainda frio), perde aderência fora da temperatura; montado em roda forjada leve: −0,03 kg·m².',
     muPeak: 1.32,
     B: 10,
     C: 1.55,
     E: 0.2,
-    wheelInertiaAddKgM2: 0.15,
-    rollingResistanceAdd: 0.002,
+    wheelInertiaAddKgM2: -0.03,
+    rollingResistanceAdd: 0,
     optimalTempC: 85,
     tempSensitivityPerC: 0.0032,
   },

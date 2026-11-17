@@ -141,6 +141,13 @@ test('campanha: escolha do carro, introdução, corrida visível, oficina, dinam
   await page.getByTestId('ws-part-exhaust-sport').click();
   await expect(page.getByTestId('ws-compare')).toContainText('402 m (estimativa)');
   await expect(page.getByTestId('ws-compare')).not.toContainText('…', { timeout: 30_000 });
+  // change markers: the freer exhaust raises power (green ▲) and nothing it changes gets worse
+  const powerRow = page.getByTestId('ws-compare').locator('tr', { hasText: 'Potência' });
+  await expect(powerRow.getByTestId('delta-up')).toBeVisible();
+  await expect(page.getByTestId('ws-compare').getByTestId('delta-down')).toHaveCount(0);
+  // the shop text and the physical effect are two different texts
+  const texts = await page.getByTestId('ws-detail').locator('p').allTextContents();
+  expect(texts[0]).not.toBe(texts[1]!.replace(/^Efeito físico:\s*/, ''));
   await expect(page.getByTestId('ws-pill-exhaust-sport')).toHaveText('450 CR');
   const before = await credits(page);
   await page.getByTestId('ws-buy').click();

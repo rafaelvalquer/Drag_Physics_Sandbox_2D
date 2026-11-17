@@ -1,0 +1,185 @@
+/* ------------------------------------------------------------ dyno (test lab) */
+.dx-top {
+  display: grid;
+  grid-template-columns: minmax(250px, 0.8fr) minmax(0, 1.8fr) minmax(250px, 0.9fr);
+  gap: 14px;
+  align-items: stretch;
+}
+.dx-bench,
+.dx-meter,
+.dx-chart-panel {
+  min-width: 0;
+}
+.dx-bench {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: linear-gradient(180deg, rgba(82, 140, 191, 0.1), rgba(21, 28, 37, 0.85));
+}
+.dx-bench-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.dx-bench-head .cs-crumb {
+  color: var(--cs-blue);
+}
+.dx-state {
+  font: 600 12px var(--cs-font-ui);
+  color: var(--cs-muted);
+}
+.dx-leds {
+  display: flex;
+  gap: 5px;
+  margin-left: auto;
+}
+.dx-leds i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #243040;
+}
+.dx-leds.running i {
+  background: var(--cs-amber);
+  animation: dx-blink 1.2s ease-in-out infinite;
+}
+.dx-leds.running i:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.dx-leds.running i:nth-child(3) {
+  animation-delay: 0.4s;
+}
+.dx-leds.done i {
+  background: var(--cs-ok);
+}
+@keyframes dx-blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dx-leds.running i {
+    animation: none;
+  }
+}
+.dx-car {
+  position: relative;
+  padding-bottom: 10px;
+}
+.dx-car::after {
+  /* the bench rollers */
+  content: '';
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  bottom: 2px;
+  height: 8px;
+  border-radius: 4px;
+  background: repeating-linear-gradient(90deg, #3a4656 0 14px, #1b2430 14px 18px);
+  opacity: 0.8;
+}
+.dx-car canvas {
+  display: block;
+  width: 100% !important;
+  height: auto !important;
+}
+.dx-rpm small {
+  font: 600 10px var(--cs-font-ui);
+  letter-spacing: 0.12em;
+  color: var(--cs-muted);
+}
+.dx-rpm-val {
+  margin: 2px 0 6px;
+  font: 600 26px var(--cs-font-data);
+  color: var(--cs-text);
+}
+.dx-rpm-val i {
+  font-style: normal;
+  font-size: 12px;
+  color: var(--cs-muted);
+}
+.dx-chart-panel .career-dyno-chart {
+  display: block;
+  width: 100%;
+  height: clamp(220px, 40vh, 380px);
+  border: none;
+  background: rgba(8, 12, 18, 0.5);
+  border-radius: 8px;
+}
+.dx-legend {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+  font: 12px var(--cs-font-ui);
+  color: var(--cs-muted);
+}
+.dx-legend span::before {
+  content: '';
+  display: inline-block;
+  width: 14px;
+  height: 3px;
+  margin-right: 6px;
+  vertical-align: middle;
+  border-radius: 2px;
+}
+.dx-legend .t::before {
+  background: #f2b705;
+}
+.dx-legend .p::before {
+  background: #2bb3ff;
+}
+.dx-meter-grid {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.dx-meter .cs-stat.lg b {
+  font-size: 26px;
+  color: var(--cs-gold);
+}
+.dx-meter .cs-stat small + b + small {
+  margin-top: 0;
+  font: 12px var(--cs-font-data);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.dx-meter [data-testid='career-dyno-info'] {
+  font-size: 12px;
+  color: var(--cs-muted);
+  min-height: 34px;
+}
+.dx-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.dx-tune {
+  margin-top: 14px;
+}
+.dx-tune .row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.dx-tune input[type='range'] {
+  flex: 1;
+  min-width: 180px;
+  accent-color: var(--cs-blue);
+}
+@media (max-width: 1100px) {
+  .dx-top {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .dx-chart-panel {
+    grid-column: 1 / -1;
+    order: 3;
+  }
+}
+@media (max-width: 700px) {
+  .dx-top {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

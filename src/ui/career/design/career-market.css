@@ -1,0 +1,262 @@
+/* ------------------------------------------------------------ market (classifieds, dealer, resale) */
+.mk-lead {
+  margin: 0 0 12px;
+  color: var(--cs-muted);
+}
+.mk-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.mk-filter {
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--cs-line);
+  background: rgba(21, 28, 37, 0.8);
+  color: var(--cs-muted);
+  font: 600 12px var(--cs-font-ui);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.mk-filter:hover {
+  color: var(--cs-text);
+}
+.mk-filter.on {
+  color: var(--cs-text);
+  background: var(--cs-accent-soft);
+  border-color: var(--cs-accent);
+}
+.mk-filter:focus-visible {
+  outline: 2px solid #fff;
+}
+.mk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 14px;
+}
+.mk-card {
+  overflow: hidden;
+  border-radius: var(--cs-radius);
+  background: linear-gradient(180deg, rgba(28, 37, 49, 0.75), rgba(21, 28, 37, 0.85));
+  border: 1px solid var(--cs-line);
+  transition: border-color 0.15s, transform 0.15s;
+}
+.mk-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--cs-accent);
+}
+.mk-card.selected {
+  border-color: var(--cs-accent);
+  box-shadow: inset 0 0 0 1px var(--cs-accent);
+}
+.mk-card.locked .mk-view canvas {
+  filter: grayscale(0.8) brightness(0.6);
+}
+.mk-view {
+  display: block;
+  width: 100%;
+  padding: 6px 6px 0;
+  background: radial-gradient(60% 70% at 50% 60%, rgba(255, 255, 255, 0.06), transparent 75%);
+  border: none;
+  cursor: pointer;
+}
+.mk-view canvas {
+  display: block;
+  width: 100% !important;
+  height: auto !important;
+}
+.mk-view:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: -2px;
+}
+.mk-info {
+  padding: 10px 14px 14px;
+}
+.mk-name {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+.mk-name h3 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.2;
+}
+.mk-spec {
+  margin: 6px 0 10px;
+  font: 12px var(--cs-font-data);
+  color: var(--cs-muted);
+}
+.mk-buy,
+.mk-detail-buy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.career .price {
+  font: 700 17px var(--cs-font-data);
+  color: var(--cs-gold);
+}
+.mk-detail {
+  display: none;
+  margin-bottom: 14px;
+}
+.mk-detail.open {
+  display: block;
+}
+.mk-detail-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(260px, 1fr);
+  gap: 16px;
+  align-items: center;
+  background: radial-gradient(60% 70% at 30% 50%, rgba(217, 164, 95, 0.1), transparent 70%), linear-gradient(180deg, #121922, #0c1118);
+}
+.mk-detail-car canvas {
+  display: block;
+  width: 100% !important;
+  height: auto !important;
+}
+.mk-detail-info h2 {
+  margin: 0 0 12px;
+  font-size: 22px;
+}
+.mk-detail-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 10px 16px;
+  margin-bottom: 14px;
+}
+.mk-resale {
+  margin-top: 18px;
+}
+.mk-fleet {
+  display: grid;
+  gap: 8px;
+}
+.mk-fleet-row {
+  display: grid;
+  grid-template-columns: 150px 1fr auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--cs-line);
+  background: rgba(8, 12, 18, 0.45);
+}
+.mk-fleet-row canvas {
+  display: block;
+  width: 100% !important;
+  height: auto !important;
+}
+.mk-fleet-info small {
+  display: block;
+  color: var(--cs-muted);
+  font-size: 12px;
+}
+@media (max-width: 800px) {
+  .mk-detail-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .mk-fleet-row {
+    grid-template-columns: 90px 1fr;
+  }
+  .mk-fleet-row .price,
+  .mk-fleet-row .cs-btn {
+    grid-column: 2;
+  }
+}
+
+/* ------------------------------------------------------------ history */
+.hx-note {
+  margin: 0 0 10px;
+}
+.hx-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.hx-sum {
+  padding: 12px 14px;
+}
+.hx-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 24px;
+}
+.hx-list {
+  display: grid;
+  gap: 8px;
+}
+.hx-row {
+  border-radius: 10px;
+  border: 1px solid var(--cs-line);
+  background: rgba(21, 28, 37, 0.7);
+  border-left: 3px solid var(--cs-line-strong);
+}
+.hx-row.win {
+  border-left-color: var(--cs-ok);
+}
+.hx-row.loss,
+.hx-row.red-light {
+  border-left-color: var(--cs-bad);
+}
+.hx-head {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto 20px;
+  gap: 14px;
+  align-items: center;
+  width: 100%;
+  padding: 10px 14px;
+  text-align: left;
+  color: var(--cs-text);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.hx-head:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: -2px;
+}
+.hx-main small {
+  display: block;
+  color: var(--cs-muted);
+  font-size: 12px;
+}
+.hx-nums {
+  display: flex;
+  flex-direction: column;
+  font: 12px var(--cs-font-data);
+  color: var(--cs-muted);
+  text-align: right;
+}
+.hx-prize {
+  font: 700 13px var(--cs-font-data);
+  color: var(--cs-gold);
+}
+.hx-detail {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px 16px;
+  padding: 4px 14px 14px;
+  border-top: 1px solid var(--cs-line);
+  padding-top: 12px;
+}
+@media (max-width: 700px) {
+  .hx-head {
+    grid-template-columns: 1fr auto;
+  }
+  .hx-head > .cs-badge {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+  .hx-nums {
+    display: none;
+  }
+}

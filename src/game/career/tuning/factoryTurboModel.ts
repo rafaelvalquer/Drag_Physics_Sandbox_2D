@@ -2,7 +2,7 @@ import type { EngineConfig } from '../../../data/schema';
 import { ATMOSPHERIC_PRESSURE, STANDARD_TEMPERATURE_K } from '../../../core/units';
 import { EngineModel, WILLANS_OFFSET } from '../../../physics/engine/EngineModel';
 import { engineGeometry } from '../../../physics/engine/EngineGeometry';
-import { extendCurve, gridFor, ottoEfficiency, powerPeakRpm } from './breathingModel';
+import { extendCurve, ottoEfficiency, powerPeakRpm } from './breathingModel';
 import type { EngineFamilyDef } from './chapter2Parts';
 import type { BoostControlPart, EcuPart, ExhaustPart, FilterPart, IntercoolerPart, PistonPart, TurboUpgradePart } from './parts';
 
@@ -84,7 +84,7 @@ export function applyFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboP
 
   // ---- calibration and hardware ----
   const wgMax = wastegateMaxBar(stock, parts.boostControl);
-  const target = Math.min(ecuBoostTarget(stock, parts.ecu, parts.boostBar), wgMax);
+  const target = Math.min(ecuBoostTarget(stock, parts.ecu, parts.boostBar) + (parts.boostBar === undefined ? parts.boostControl?.holdAddBar ?? 0 : 0), wgMax);
   const up = parts.turbo;
   const turboCfg = {
     ...t0,
@@ -103,16 +103,22 @@ export function applyFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboP
   const limitNm = parts.ecu ? internals * parts.ecu.torqueLimitFraction : Infinity;
   const revAdd = Math.min(parts.ecu?.revLimitAddRpm ?? 0, fam.valvetrainRevAddRpm) + (parts.pistons?.revLimitAddRpm ?? 0);
   const revLimit = stock.revLimitRpm + revAdd;
-  const filterDrop = parts.filter?.airFilterDropKPa ?? b0.airFilterDropKPa;
-  const backRef = parts.exhaust?.backPressureKPa ?? b0.exhaustBackPressureKPa;
+  // a free-flow part never restricts more than the factory part it replaces
+  const filterDrop = Math.min(b0.airFilterDropKPa, parts.filter?.airFilterDropKPa ?? b0.airFilterDropKPa);
+  const backRef = Math.max(0.5, Math.min(b0.exhaustBackPressureKPa, parts.exhaust?.backPressureKPa ?? b0.exhaustBackPressureKPa) - (up?.backPressureReductionKPa ?? 0));
 
   // ---- stock operating points (same EngineModel the race uses) ----
   const curveTop = Math.max(stock.torqueCurve.rpm[stock.torqueCurve.rpm.length - 1]!, revLimit + 300);
   const stockExt = extendCurve(stock, curveTop);
   const stockModel = new EngineModel(stockExt);
-  const grid = gridFor(stockExt, curveTop);
+  // the stock nodes (plus the extension): a modified curve keeps the factory shape between nodes,
+  // so an unchanged point stays exactly the factory value
+  const grid = stockExt.torqueCurve.rpm.filter((r) => r <= curveTop);
   const ops0 = grid.map((r) => stockModel.wotOperatingPoint(r));
-  const stockCurve = grid.map((r) => stockModel.wotOperatingPoint(r).brakeNm);
+  // the factory curve at its own nodes (the configured values, not the model's re-evaluation of
+  // them, so an unchanged point stays exactly the factory torque)
+  const stockCurve = stockExt.torqueCurve.torqueNm.slice(0, grid.length);
+  const stockPeakNm = Math.max(...stockCurve);
   const flowRated = stockModel.wotOperatingPoint(ratedRpm).flow;
   const flowCap = flowRated * FACTORY_COMPRESSOR_MARGIN * (fam.compressorMarginScale ?? 1) * (up?.flowScale ?? 1);
   const chargeT = (pr: number, eff: number): number => {
@@ -150,9 +156,16 @@ export function applyFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboP
       const map = op0.map * pressureRatio;
       const back = op0.back + 0.85 * (boostPa - op0.boost) + (backRef - b0.exhaustBackPressureKPa) * 1000 * r * r;
       const pumping = (back - map) * vdOver4pi;
-      let brake = indicated - op0.frictionNm - pumping;
-      // torque limiter of the ECU: the factory map holds the stock curve; a remap the mechanical limit
-      brake = Math.min(brake, parts.ecu ? limitNm : stockCurve[i]!);
+      let brake = indicated - op0.frictionNm * (parts.pistons?.frictionScale ?? 1) - pumping;
+      // torque limiter of the ECU: the factory map holds the factory plateau (the stock peak torque);
+      // above it, where the factory curve falls with the air flow, freer breathing still gains.
+      // A remap moves the limit to the mechanical one.
+      brake = Math.min(brake, parts.ecu ? limitNm : Math.max(stockCurve[i]!, Math.min(brake, stockPeakNm)));
+      // freer breathing, a remap, a bigger intercooler or a hybrid turbine that fills at the same
+      // exhaust flow never lose steady full-load torque against the factory engine (off-boost
+      // points stay the factory ones)
+      const sameSpool = !up || up.spoolFlowScale <= 1;
+      if (sameSpool && !(parts.pistons?.compressionAdd && parts.pistons.compressionAdd < 0)) brake = Math.max(brake, Math.min(stockCurve[i]!, parts.ecu ? limitNm : Infinity));
       next.push(round1(Math.max(brake, 1)));
       boosts.push(boostPa / 1e5);
     }
@@ -167,7 +180,10 @@ export function applyFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboP
     redlineRpm: stock.redlineRpm + revAdd,
     maxSafeRpm: Math.max(stock.maxSafeRpm, revLimit + (stock.maxSafeRpm - stock.revLimitRpm)),
     intake: { ...stock.intake, manifoldVolumeL: stock.intake.manifoldVolumeL + (parts.intercooler?.volumeAddL ?? 0) },
-    breathing: { ...b0, airFilterDropKPa: filterDrop, exhaustBackPressureKPa: backRef },
+    // the steady curve above already carries the lower pumping loss of a freer exhaust; the live
+    // model keeps the factory back pressure, which there drives the turbine (a freer system after
+    // the turbine raises its pressure ratio, never slows the spool)
+    breathing: { ...b0, airFilterDropKPa: filterDrop },
     turbo: turboCfg,
     torqueCurve: { rpm: grid, torqueNm: curve },
   };

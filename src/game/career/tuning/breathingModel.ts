@@ -173,8 +173,9 @@ export function applyEngineParts(stock: EngineConfig, parts: EngineParts): Breat
   const headGain = parts.head?.flowGain ?? 0;
   const revLimit = stock.revLimitRpm + revAdd;
   const curveTop = Math.max(stock.torqueCurve.rpm[stock.torqueCurve.rpm.length - 1]!, revLimit + 300);
-  const filterDrop = Math.max(0.15, (mod.filterDropKPa ?? parts.filter?.airFilterDropKPa ?? b0.airFilterDropKPa) - (mod.filterDropReductionKPa ?? 0));
-  const backRef = Math.max(0.5, (mod.backPressureKPa ?? parts.exhaust?.backPressureKPa ?? b0.exhaustBackPressureKPa) - (mod.backPressureReductionKPa ?? 0));
+  // a free-flow part never restricts more than the factory part it replaces
+  const filterDrop = Math.max(0.15, Math.min(b0.airFilterDropKPa, mod.filterDropKPa ?? parts.filter?.airFilterDropKPa ?? b0.airFilterDropKPa) - (mod.filterDropReductionKPa ?? 0));
+  const backRef = Math.max(0.5, Math.min(b0.exhaustBackPressureKPa, mod.backPressureKPa ?? parts.exhaust?.backPressureKPa ?? b0.exhaustBackPressureKPa) - (mod.backPressureReductionKPa ?? 0));
   const m = parts.manifold;
   const runnerL = stock.intake.runnerLengthM * (m?.runnerLengthScale ?? mod.runnerLengthScale ?? 1);
   const runnerD = stock.intake.runnerDiameterMm + (m?.runnerDiameterAddMm ?? mod.runnerDiameterAddMm ?? 0);
@@ -280,7 +281,8 @@ export function applyEngineParts(stock: EngineConfig, parts: EngineParts): Breat
   if (!turbo) return { engine: base, steadyBoostBar: [], knockLoss: 0 };
   const turboCfg = {
     ...turbo.turbo,
-    maxBoostBar: parts.boostBar ?? mod.boostTargetBar ?? turbo.turbo.maxBoostBar,
+    // a better wastegate holds the target up to the rev limit instead of tapering (hold add)
+    maxBoostBar: (parts.boostBar ?? mod.boostTargetBar ?? turbo.turbo.maxBoostBar) + (parts.boostBar === undefined ? mod.wastegateHoldAddBar ?? 0 : 0),
     spoolTimeS: turbo.turbo.spoolTimeS * (mod.turboSpoolScale ?? 1),
     fullBoostFlowFraction: turbo.turbo.fullBoostFlowFraction * (mod.turboFlowScale ?? 1),
   };

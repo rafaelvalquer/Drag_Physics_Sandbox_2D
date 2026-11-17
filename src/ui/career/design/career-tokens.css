@@ -1,0 +1,26 @@
+/* Career UI design tokens (campaign only). System font stacks: no external or unlicensed files. */
+.career {
+  --cs-bg: #080c12;
+  --cs-surface: #151c25;
+  --cs-surface-2: #1c2531;
+  --cs-amber: #d9a45f;
+  --cs-gold: #e7be78;
+  --cs-blue: #528cbf;
+  --cs-text: #f2f4f7;
+  --cs-muted: #a2adbc;
+  --cs-ok: #5acb93;
+  --cs-bad: #d95a5e;
+  --cs-line: rgba(255, 255, 255, 0.09);
+  --cs-line-strong: rgba(255, 255, 255, 0.18);
+  --cs-accent: var(--cs-amber);
+  --cs-accent-soft: rgba(217, 164, 95, 0.16);
+  --cs-font-display: 'Bahnschift', 'Segoe UI Variable Display', 'Arial Narrow', 'Helvetica Neue', system-ui, sans-serif;
+  --cs-font-ui: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --cs-font-data: ui-monospace, 'Cascadia Mono', 'SF Mono', Consolas, monospace;
+  --cs-shadow: 0 10px 30px rgba(0, 0, 0, 0.38);
+  --cs-radius: 12px;
+}
+.career[data-theme='blue'] {
+  --cs-accent: var(--cs-blue);
+  --cs-accent-soft: rgba(82, 140, 191, 0.18);
+}

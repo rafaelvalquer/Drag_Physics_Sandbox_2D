@@ -29,6 +29,8 @@ export interface Mode {
   readonly label: string;
   /** False for modes that render their own view instead of the track (dyno). */
   readonly usesTrack: boolean;
+  /** True for modes that do not use the side panel (it is hidden while the mode is active). */
+  readonly noPanel?: boolean;
   mount(ctx: AppContext): void;
   unmount(): void;
   /** Real frame time step (s). Called once per rendered frame by the scene. */

@@ -254,6 +254,14 @@
 .ws-compare table {
   width: 100%;
 }
+.ws-compare .delta {
+  font-size: 0.95em;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.ws-compare .delta-up { color: var(--ok); }
+.ws-compare .delta-down { color: var(--bad); }
+.ws-compare .delta-neutral { color: #8a96a3; }
 /* dyno */
 .career-dyno-chart {
   width: 100%;

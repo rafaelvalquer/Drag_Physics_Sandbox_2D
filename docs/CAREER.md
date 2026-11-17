@@ -49,11 +49,11 @@ Uma peça nunca soma potência: ela muda um parâmetro físico e a curva nova sa
 | Filtro esportivo | 250 CR | perda de carga do filtro 1,0 kPa | noite 1 |
 | Escape dimensionado | 450 CR | contrapressão 7 kPa, coletor de escape ×1,08 | noite 1 |
 | Coletor de admissão | 650 CR | dutos ×0,82 de comprimento, +4 mm de diâmetro, plenum ×1,3 | noite 2 |
-| Pneus esportivos | 1000 CR | μ 1,13, B 11, C 1,5, E 0,35 | noite 2 |
+| Pneus esportivos | 1000 CR | μ 1,13 (no mínimo +6 % sobre o original já na largada), B 11, C 1,5, E 0,35, mesma roda | noite 2 |
 | Comando esportivo | 900 CR | admissão −6°/+12°, escape −8°/+8°, +1,3 mm de levante, corte +400 rpm | noite 3 |
-| Embreagem reforçada | 900 CR | capacidade ×1,5, engate ×1,3, rotação de largada +200 | noite 4 |
-| Diferencial curto | 1200 CR | relação final ×1,12 | noite 4 |
-| Pneus semislick | 1600 CR | μ 1,32, B 10, C 1,55, E 0,2, mais sensível à temperatura | noite 5 |
+| Embreagem reforçada | 900 CR | capacidade ×1,5, engate ×1,3, largada +100 rpm, inércia do câmbio −15 % e do motor −4 % | noite 4 |
+| Diferencial alternativo | 1200 CR | relação final escolhida para o carro entre ×0,97 e ×1,12; eficiência +1 ponto | noite 4 |
+| Pneus semislick | 1600 CR | μ 1,32 (no mínimo +16 % sobre o original já na largada, frio), roda forjada −0,03 kg·m² | noite 5 |
 | Kit turbo básico | 4000 CR | turbina 0,6 bar (0,4–1,0 nos preparadores), intercooler, +18 kg | noite 6 |
 
 Cada item da oficina tem também a **peça original de fábrica**: grátis, sempre disponível. Instalar a original
@@ -66,7 +66,26 @@ original sozinha é recusada.
 O `BuildResolver` é puro e determinístico: a ordem de instalação não importa, peças repetidas são ignoradas, só
 cabe uma peça por categoria, o carro base nunca é alterado e o resultado é congelado e guardado em cache pela
 chave do build (`BUILD_RESOLVER_VERSION` = 1). A oficina mostra antes/depois (potência, torque, faixa útil,
-embreagem, aderência, relação) e 0–100 km/h e 402 m **simulados** e rotulados como estimativa.
+embreagem, aderência, relação) e 0–100 km/h e 402 m **simulados** e rotulados como estimativa. Cada valor que
+muda ganha um marcador: **▲ verde** quando melhora (mais potência, torque, faixa, embreagem ou aderência; menos
+tempo), **▼ vermelho** quando piora e **◆ cinza** na relação final, que só muda.
+
+**Toda peça ganha.** Cada peça, instalada sozinha (ou sobre o mínimo que ela exige, como o kit turbo para a
+turbina), deixa o carro mais rápido nos 402 m ou aumenta a potência ou a capacidade da embreagem sem perder
+tempo, em todos os carros em que cabe. O ganho é sempre físico:
+
+- **Escape, admissão, ignição, combustível e internos:** menos perda de carga, combustão mais rápida e menos atrito.
+- **Wastegates:** seguram a pressão no alto giro.
+- **Turbinas maiores:** aliviam a contrapressão.
+- **Diferencial e câmbio:** a relação é escolhida pela oficina para o carro, com uma estimativa de 402 m, e as
+  engrenagens novas perdem menos.
+- **Pneus:** são dimensionados para aderir mais que o original já frios na largada.
+
+Os textos de vitrine e de "Efeito físico" são diferentes. O efeito físico das peças do catálogo ampliado é gerado
+dos próprios números aplicados pelo resolvedor (`describeMods`).
+
+O relatório completo, com todas as peças em todos os carros, sai com `npx tsx scripts/parts-gain-report.ts`. O
+teste `tests/unit/career/parts-gain.test.ts` confere uma amostra.
 
 ## Economia e progressão
 
