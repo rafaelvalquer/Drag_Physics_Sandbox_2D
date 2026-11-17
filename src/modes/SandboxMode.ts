@@ -247,10 +247,27 @@ export class SandboxMode implements Mode {
   private buildPanel(): void {
     const panel = this.ctx.panel;
     clear(panel);
+    // The main selector exposes BOTH stock cars and resolver-built presets. Keeping prepared
+    // vehicles in a separate selector alone made them appear unavailable to players.
     const carSel = h(
       'select',
-      { 'data-testid': 'car-select', onchange: (e: Event) => this.selectCar((e.target as HTMLSelectElement).value) },
-      CAR_GROUPS.map((g) => h('optgroup', { label: g.label }, g.cars.map((c) => h('option', { value: c.id, selected: c.id === this.car.id }, c.name)))),
+      {
+        'data-testid': 'car-select',
+        'aria-label': 'Selecionar veículo ou preparação',
+        onchange: (e: Event) => {
+          const id = (e.target as HTMLSelectElement).value;
+          if (findSandboxPreset(id)) this.selectPreparedPreset(id);
+          else this.selectCar(id);
+        },
+      },
+      CAR_GROUPS.map((g) => h(
+        'optgroup', { label: `${g.label} (${g.cars.length})` },
+        g.cars.map((c) => h('option', { value: c.id, selected: c.id === this.car.id }, c.name)),
+      )),
+      h(
+        'optgroup', { label: `Preparações prontas (${BUILT_IN_SANDBOX_PRESETS.length})` },
+        BUILT_IN_SANDBOX_PRESETS.map((p) => h('option', { value: p.id }, p.label)),
+      ),
     );
     const trackSel = h(
       'select',
@@ -322,7 +339,11 @@ export class SandboxMode implements Mode {
 
     panel.append(
       h('h2', {}, 'Sandbox'),
-      h('div', { class: 'row' }, h('label', {}, 'Veículo'), carSel),
+      h('div', { class: 'row' }, h('label', {}, 'Veículo / preparação'), carSel),
+      h(
+        'p', { class: 'hint', 'data-testid': 'sandbox-catalog-count' },
+        `${LAB_CARS.length} carros originais + ${BUILT_IN_SANDBOX_PRESETS.length} preparações disponíveis. Abra a lista e role para ver todas as categorias.`,
+      ),
       h('div', { class: 'row' }, h('label', {}, 'Preparação de teste'),
         h('select', { 'data-testid': 'prepared-select', onchange: (e: Event) => {
           const id = (e.target as HTMLSelectElement).value;
@@ -421,7 +442,7 @@ export class SandboxMode implements Mode {
     this.editor?.setBase(this.car);
     this.replacePlayer();
     const stock = this.ctx.panel.querySelector<HTMLSelectElement>('[data-testid=car-select]');
-    if (stock) stock.value = p.baseCarId;
+    if (stock) stock.value = p.id;
     const prepared = this.ctx.panel.querySelector<HTMLSelectElement>('[data-testid=prepared-select]');
     if (prepared) prepared.value = p.id;
     return true;
@@ -433,6 +454,14 @@ export class SandboxMode implements Mode {
 
   private applyCar(car: CarConfig, physicsChanged: boolean): void {
     this.car = car;
+    // Restoring a factory configuration must not leave a prepared preset selected in the UI.
+    const stock = LAB_CARS.find((c) => c.id === car.id);
+    if (stock && car.name === stock.name) {
+      const selected = this.ctx.panel.querySelector<HTMLSelectElement>('[data-testid=car-select]');
+      if (selected) selected.value = stock.id;
+      const prepared = this.ctx.panel.querySelector<HTMLSelectElement>('[data-testid=prepared-select]');
+      if (prepared) prepared.value = '';
+    }
     const p = this.runner.player;
     if (!physicsChanged && p) {
       // acoustic / visual only: keep the run going, rebuild the sound model (cross-faded)
