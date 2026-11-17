@@ -27,6 +27,7 @@ export interface FleetCar {
   value: number;
   paid: number | null;
   parts: number;
+  trophy?: boolean;
   active: boolean;
   cfg: CarConfig | null;
 }
@@ -133,7 +134,7 @@ export function buildMarket(d: MarketDeps): HTMLElement {
           'div',
           { class: 'mk-fleet-row' },
           c.cfg ? d.makePreview(c.cfg, 150, 66) : icon('car'),
-          h('div', { class: 'mk-fleet-info' }, h('b', {}, c.nickname), h('small', {}, `${c.parts} ${c.parts === 1 ? 'peça instalada' : 'peças instaladas'}${c.paid !== null ? ` · comprado por ${nf(c.paid)} CR` : ''}`)),
+          h('div', { class: 'mk-fleet-info' }, h('b', {}, c.nickname), h('small', {}, `${c.parts} ${c.parts === 1 ? 'peça instalada' : 'peças instaladas'}${c.trophy ? ' · troféu da final' : c.paid !== null ? ` · comprado por ${nf(c.paid)} CR` : ''}`)),
           h('span', { class: 'price' }, `${nf(c.value)} CR`),
           h('button', { class: 'cs-btn', 'data-testid': `market-sell-${c.id}`, disabled: d.fleet.length < 2, title: d.fleet.length < 2 ? 'O último carro não pode ser vendido' : 'Vender (pede confirmação)', onclick: () => d.sell(c.id) }, icon('coin'), h('span', {}, 'Vender')),
         ),

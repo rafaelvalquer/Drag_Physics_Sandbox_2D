@@ -9,6 +9,8 @@ export interface EndingDeps {
   title: string;
   cfg: CarConfig;
   carLine: string;
+  /** Car won from the loser of the final, in the garage. */
+  prizeLine: string | null;
   powerCv: number | null;
   torqueNm: number | null;
   credits: number;
@@ -41,6 +43,7 @@ export function buildEnding(d: EndingDeps): HTMLElement {
       'section',
       { class: 'en-stats cs-panel', 'data-reveal': '' },
       stat('Carro', d.carLine, { size: 'md' }),
+      d.prizeLine ? stat('Prêmio da final', d.prizeLine, { size: 'md' }) : null,
       d.powerCv !== null ? stat('Potência', nf(Math.round(d.powerCv)), { unit: 'cv', size: 'lg' }) : null,
       d.torqueNm !== null ? stat('Torque', nf(Math.round(d.torqueNm)), { unit: 'N·m', size: 'lg' }) : null,
       stat('Corridas registradas', `${d.races} (${d.wins} vitórias)`, { size: 'md' }),

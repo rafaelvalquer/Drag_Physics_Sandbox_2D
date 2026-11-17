@@ -32,7 +32,9 @@ export interface GarageStats {
 }
 
 export interface GarageDeps {
-  car: { nickname: string; baseName: string; year: string | null };
+  car: { nickname: string; baseName: string; year: string | null; trophy?: boolean };
+  /** A prize car is waiting because the garage is full. */
+  prizeNotice?: string | null;
   cfg: CarConfig;
   stats: GarageStats | null;
   buildError: string | null;
@@ -40,7 +42,7 @@ export interface GarageDeps {
   next: { order: number; total: number; title: string; rival: string; nickname: string; distance: string; region: string; reward: number; word: string } | null;
   chapterDone: number;
   chapterTotal: number;
-  others: { id: string; nickname: string; cfg: CarConfig | null }[];
+  others: { id: string; nickname: string; cfg: CarConfig | null; trophy?: boolean }[];
   flags: { workshopOpen: boolean; chapter2: boolean; chapterComplete: boolean; canSell: boolean; sellLabel: string };
   makePreview(car: CarConfig, w: number, h: number, studio: boolean): HTMLCanvasElement;
   on: {
@@ -71,6 +73,8 @@ export function buildGarage(d: GarageDeps): HTMLElement {
       h('small', {}, d.car.year ? `${d.car.baseName} · ${d.car.year}` : d.car.baseName),
       h('h2', { 'data-testid': 'garage-car-name' }, d.car.nickname),
       badge(stage, d.installed.length ? 'amber' : 'neutral', d.installed.length ? 'workshop' : undefined),
+      d.car.trophy ? h('span', { 'data-testid': 'garage-trophy' }, badge('Troféu', 'amber', 'trophy')) : null,
+      d.prizeNotice ? h('p', { class: 'hint', 'data-testid': 'garage-prize-notice' }, d.prizeNotice) : null,
     ),
     h('div', { class: 'gx-car', 'data-reveal': '' }, d.makePreview(d.cfg, 900, 380, true)),
     s
@@ -157,7 +161,7 @@ export function buildGarage(d: GarageDeps): HTMLElement {
               'button',
               { class: 'gx-fleet-car', 'data-testid': `garage-pick-${o.id}`, onclick: () => d.on.pick(o.id) },
               o.cfg && i < 6 ? d.makePreview(o.cfg, 150, 66, false) : icon('car'),
-              h('span', {}, o.nickname),
+              h('span', {}, o.trophy ? `${o.nickname} · troféu` : o.nickname),
             ),
           ),
         ),

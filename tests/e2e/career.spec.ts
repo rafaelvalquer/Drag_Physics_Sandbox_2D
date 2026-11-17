@@ -235,6 +235,9 @@ test('campanha: escolha do carro, introdução, corrida visível, oficina, dinam
   const outro = await readDialogue(page);
   expect(outro.length).toBeGreaterThan(0);
   await expect(page.getByTestId('ending-title')).toHaveText('Rei da Madrugada');
+  // the loser of the final handed the car over: Marcos' Saveiro, with his parts, in the garage
+  expect(await mode<boolean>(page, `m.controller.save.ownedCars.some((c) => c.prizeEventId === 'e7-rei-da-madrugada' && c.baseCarId === 'vw-saveiro-gl-1994' && c.installedParts.includes('turbo-basic'))`)).toBe(true);
+  await expect(page.locator('.enx')).toContainText('Saveiro do Marcos');
   await shot(page, '15-final');
   const s = await mode<{ rep: number; credits: number; results: number }>(page, '({ rep: m.controller.save.reputation, credits: m.controller.save.credits, results: m.controller.save.results.length })');
   expect(s.rep).toBeLessThanOrEqual(250);

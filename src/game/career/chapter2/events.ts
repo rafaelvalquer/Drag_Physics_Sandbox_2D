@@ -187,6 +187,15 @@ export const CHAPTER2_RIVALS: readonly RivalDef[] = [
       win: 'Você não venceu por sorte. Esse carro foi construído para chegar até aqui.',
       lose: 'Chegou perto. Perto não é o bastante na última etapa.',
     },
+    prize: {
+      nickname: '335i do Victor',
+      value: 55000, // the dealer's list price of the 335i: resale 33.000 CR
+      lines: [
+        { speaker: 'victor', text: 'Regra da liga: quem perde a última etapa entrega a chave. A 335i é sua.' },
+        { speaker: 'victor', text: 'Stage 1, câmbio reforçado e o acerto de arrancada. Está tudo como eu corri. O N55 aguenta, mas não perdoa.' },
+        { speaker: 'caio', text: 'Agora você tem o carro dele e o mapa dele. O resto é com você e o dinamômetro.' },
+      ],
+    },
   },
 ];
 

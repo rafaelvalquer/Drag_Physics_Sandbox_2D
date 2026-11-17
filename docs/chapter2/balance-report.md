@@ -102,3 +102,17 @@ O jogador simulado:
 - **A reputação abre a revenda na hora certa.**
   - Ao fim da etapa 4, o jogador tem ~290 de reputação: C200 (260) e 320i (280) liberadas, Jetta (320) ainda não.
   - Depois da etapa 8, tem ~460: o Evo (400) está liberado para Bianca e Victor.
+
+## Prêmio da final: o carro do adversário
+
+Quem perde a última etapa de cada capítulo entrega o carro, uma única vez, com a pintura, as peças e o ajuste que correram contra o jogador:
+
+| Final | Carro entregue | Valor para revenda (60 %) |
+|---|---|---|
+| Cap. 1, Marcos | Saveiro GL turbo (3.500 CR de base) | 2.100 CR |
+| Cap. 2, Victor | 335i Stage 1 (55.000 CR, preço da revenda) | 33.000 CR |
+
+- O carro é uma cópia da receita do rival, resolvida pelo mesmo `resolveBuild`, sem bônus. O teste `tests/unit/career/prizeCars.test.ts` confere que a chave do build e a potência de pico são idênticas às do rival.
+- **A Saveiro não desequilibra o capítulo 2.** Ela está na matriz como "Saveiro do Marcos" e fica **abaixo** do Gol turbo do capítulo 1 (≈ 16,3 s contra ≈ 15,5 s nas etapas de 402 m). Com piloto avançado vence só as etapas 1 e 2. Quem quiser seguir no capítulo 2 ainda precisa comprar e preparar um carro da revenda.
+- A 335i chega depois da última etapa do capítulo 2, então não muda o equilíbrio da campanha. Vendê-la rende 33.000 CR, mas a entrega não se repete: a reivindicação fica no save.
+- Garagem cheia (16 carros) não perde o prêmio: ele espera e chega quando houver vaga. Saves que já venceram a final antes do prêmio existir recebem o carro ao abrir a garagem.

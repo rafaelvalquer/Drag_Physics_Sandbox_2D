@@ -6,6 +6,7 @@ import { CAREER_TRACKS, findCareerTrack } from '../data/tracks/career';
 import { AI_PROFILES, DragAI } from '../game/ai/DragAI';
 import { CareerController, buildVersionFor, parseInventoryEntry } from '../game/career/CareerController';
 import { REGIONS, eventsOf, findEvent, rivalOf, type CareerEventDef, type RivalDef } from '../game/career/CareerEvents';
+import { prizeEvents, prizeState } from '../game/career/PrizeCars';
 import {
   eventLabel,
   eventStatus,
@@ -363,7 +364,7 @@ export class CareerMode implements Mode {
       callbacks: {
         continueCareer: () => this.continueCareer(),
         newCampaign: () => this.confirmNew(),
-        garage: () => this.show('garage'),
+        garage: () => void this.deliverPrizes(() => this.show('garage')),
         chapters: () => this.show('chapters'),
         history: () => this.show('history'),
         exportSave: () => this.exportSave(),
@@ -380,6 +381,10 @@ export class CareerMode implements Mode {
   }
 
   private continueCareer(): void {
+    void this.deliverPrizes(() => this.continueCareerNow());
+  }
+
+  private continueCareerNow(): void {
     const s = this.controller.save!;
     const ch = this.chapter;
     const completionScene = ch === CHAPTER_1_ID ? 'completion' : 'c2-completion';
@@ -392,6 +397,43 @@ export class CareerMode implements Mode {
       this.endingChapter = ch;
       this.show('ending');
     } else this.show('garage');
+  }
+
+  /** Prize car of a won final that waits for room in the garage (a full garage never loses it). */
+  private prizeNotice(): string | null {
+    const s = this.controller.save!;
+    const waiting = prizeEvents().filter((e) => prizeState(s, e) === 'garage-full');
+    return waiting.length ? `${rivalOf(waiting[0]!).prize!.nickname} está esperando vaga: venda um carro para receber o prêmio da final.` : null;
+  }
+
+  /**
+   * Delivers the prize cars of finals already won and not yet claimed (saves that won the final
+   * before the prize existed, or that had a full garage), with the hand-over scene of each. A
+   * second call finds nothing to deliver.
+   */
+  private async deliverPrizes(then: () => void): Promise<void> {
+    const s = this.controller.save;
+    if (!s || this.readOnly || !prizeEvents().some((e) => prizeState(s, e) === 'ready')) {
+      then();
+      return;
+    }
+    const r = await this.controller.claimPendingPrizes();
+    if (!r.ok || !r.value.length) {
+      if (!r.ok) toast(`O prêmio da final não foi entregue: ${r.error}`, 'error');
+      then();
+      return;
+    }
+    const cars = r.value;
+    const next = (i: number): void => {
+      const car = cars[i];
+      if (!car) {
+        then();
+        return;
+      }
+      toast(`${car.nickname} entregue na sua garagem.`);
+      this.playScenes('prize', car.prizeEventId, () => next(i + 1));
+    };
+    next(0);
   }
 
   /** Chapter selector: chapter 2 opens after chapter 1; progress of both is kept. */
@@ -556,7 +598,8 @@ export class CareerMode implements Mode {
       : null;
     const goWorkshop = (): void => this.playScenes('workshop', undefined, () => this.show('workshop'));
     const body = buildGarage({
-      car: { nickname: car.nickname, baseName: base.name, year: null },
+      car: { nickname: car.nickname, baseName: base.name, year: null, trophy: !!car.prizeEventId },
+      prizeNotice: this.prizeNotice(),
       cfg,
       stats,
       buildError: b.ok ? null : b.errors.join('; '),
@@ -564,7 +607,7 @@ export class CareerMode implements Mode {
       next: nxt ? { order: nxt.order, total: evs.length, title: nxt.title, rival: rivalOf(nxt).name, nickname: rivalOf(nxt).nickname, distance: RACE_DISTANCES[nxt.distance].label, region: nxt.regionLabel, reward: nxt.rewardCr, word: ch === CHAPTER_1_ID ? 'noite' : 'etapa' } : null,
       chapterDone: evs.filter((e) => s.completedEventIds.includes(e.id)).length,
       chapterTotal: evs.length,
-      others: s.ownedCars.filter((c) => c.id !== car.id).map((c) => ({ id: c.id, nickname: c.nickname, cfg: ownedCarBuild(c).ok ? ownedCarConfig(c) : null })),
+      others: s.ownedCars.filter((c) => c.id !== car.id).map((c) => ({ id: c.id, nickname: c.nickname, trophy: !!c.prizeEventId, cfg: ownedCarBuild(c).ok ? ownedCarConfig(c) : null })),
       flags: { workshopOpen, chapter2: isChapterUnlocked(s, CHAPTER_2_ID), chapterComplete: isChapterComplete(s, ch), canSell: s.ownedCars.length > 1, sellLabel: `Vender este carro (${cr(resaleValue(car))})` },
       makePreview: (c, w, hh, studio) => this.preview(c, w, hh, studio ? 'studio' : 'plain', studio ? 0.8 : 0.86),
       on: {
@@ -595,7 +638,7 @@ export class CareerMode implements Mode {
     const r = await this.controller.sellCar(car.id);
     if (!r.ok) toast(r.error, 'error');
     else toast(`${car.nickname} vendido por ${cr(r.value.credits)}.`);
-    this.show(back);
+    void this.deliverPrizes(() => this.show(back));
   }
 
   private async buyCarConfirmed(baseCarId: string, price: number): Promise<void> {
@@ -644,7 +687,7 @@ export class CareerMode implements Mode {
       offers,
       credits: s.credits,
       leagueOpen,
-      fleet: s.ownedCars.map((c) => ({ id: c.id, nickname: c.nickname, value: resaleValue(c), paid: c.purchasePrice ?? null, parts: c.installedParts.length, active: c.id === s.activeCarId, cfg: ownedCarBuild(c).ok ? ownedCarConfig(c) : null })),
+      fleet: s.ownedCars.map((c) => ({ id: c.id, nickname: c.nickname, value: resaleValue(c), paid: c.purchasePrice ?? null, parts: c.installedParts.length, trophy: !!c.prizeEventId, active: c.id === s.activeCarId, cfg: ownedCarBuild(c).ok ? ownedCarConfig(c) : null })),
       makePreview: (c, w, hh) => this.preview(c, w, hh, 'plain', 0.86),
       buy: (o) => {
         if (o.source === 'league') void this.buyCarConfirmed(o.id, o.price);
@@ -1124,7 +1167,7 @@ export class CareerMode implements Mode {
         parts: rv.parts.length ? rv.parts.map((id) => findPart(id)!.name).join(', ') : '',
         skill: rv.skillLabel,
       },
-      event: { title: ev.title, distance: RACE_DISTANCES[ev.distance].label, region: ev.regionLabel, prize: firstWin ? `${cr(ev.rewardCr)} + ${ev.reputation} de reputação` : `revanche: ${cr(Math.round((ev.rewardCr * 0.35) / 10) * 10)}`, finale: !!ev.finale },
+      event: { title: ev.title, distance: RACE_DISTANCES[ev.distance].label, region: ev.regionLabel, prize: firstWin ? `${cr(ev.rewardCr)} + ${ev.reputation} de reputação${rv.prize && prizeState(s, ev) !== 'delivered' ? ` + ${rv.prize.nickname} (quem perde entrega o carro)` : ''}` : `revanche: ${cr(Math.round((ev.rewardCr * 0.35) / 10) * 10)}`, finale: !!ev.finale },
       makePreview: (c, w, hh) => this.preview(c, w, hh, 'plain', 0.86),
       onStart: () => (ev.finale ? this.playScenes('final-challenge', undefined, () => this.startRace(ev)) : this.startRace(ev)),
       onBack: () => this.show('events'),
@@ -1289,8 +1332,12 @@ export class CareerMode implements Mode {
     // result first, then the scenes on top of it
     this.show('result');
     this.playScenes(trigger, ev.id, () => {
-      if (r.value.newUnlocks.length) this.playScenes('unlock', ev.id, after);
-      else after();
+      const next = (): void => {
+        if (r.value.newUnlocks.length) this.playScenes('unlock', ev.id, after);
+        else after();
+      };
+      if (r.value.prizeCar) this.playScenes('prize', ev.id, next);
+      else next();
     });
   }
 
@@ -1357,6 +1404,11 @@ export class CareerMode implements Mode {
       reputation: r.reputationAwarded,
       applied: rec.applied,
       unlocks: rec.newUnlocks.map((u) => UNLOCK_LABEL[u]),
+      prize: rec.prizeCar
+        ? { text: `Novo carro na garagem: ${rec.prizeCar.nickname}. ${rv.name} perdeu a final e entregou a chave.`, waiting: false }
+        : rec.prizeGarageFull && rv.prize
+          ? { text: `${rv.prize.nickname} está esperando: sua garagem está cheia. Venda um carro e abra a garagem para receber.`, waiting: true }
+          : null,
       rivalQuote: (won ? rv.lines.win : rv.lines.lose) ?? null,
       rivalPortrait: portraitEl(rv.portrait),
       ninaPortrait: portraitEl('nina'),
@@ -1388,6 +1440,11 @@ export class CareerMode implements Mode {
       title: titleText,
       cfg: ownedCarConfig(car),
       carLine: `${car.nickname}, ${car.installedParts.length} peças`,
+      prizeLine: ((): string | null => {
+        const won = s.ownedCars.find((c) => c.prizeEventId === finale.id);
+        if (won) return `${won.nickname}, na garagem`;
+        return rivalOf(finale).prize && prizeState(s, finale) === 'garage-full' ? `${rivalOf(finale).prize!.nickname} (espera vaga na garagem)` : null;
+      })(),
       powerCv: b.ok ? b.peakPowerCv : null,
       torqueNm: b.ok ? b.peakTorqueNm : null,
       credits: s.credits,

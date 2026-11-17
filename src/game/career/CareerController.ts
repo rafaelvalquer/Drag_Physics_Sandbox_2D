@@ -5,6 +5,7 @@ import { isChapterComplete, isChapterUnlocked, isPartUnlocked, canTuneBoost, unl
 import { CHAPTER_1_ID, CHAPTER_2_ID, findChapter, type ChapterId } from './chapters';
 import { DEALER_CARS, offerAvailability, resaleValue } from './chapter2/dealer';
 import { CareerRepository } from './CareerRepository';
+import { grantPrizeCar, prizeEvents, prizeState } from './PrizeCars';
 import { computeReward, type Reward } from './CareerRewards';
 import {
   MAX_GARAGE,
@@ -76,6 +77,10 @@ export interface RaceRecord {
   applied: boolean;
   newUnlocks: UnlockId[];
   chapterCompleted: boolean;
+  /** Car handed over by the loser of a chapter's final (first win only). */
+  prizeCar?: OwnedCar;
+  /** The prize is waiting: the garage is full. */
+  prizeGarageFull?: boolean;
 }
 
 /** Inventory entries are bound to the car model they were bought for: `<part>@<baseCarId>`. */
@@ -464,6 +469,8 @@ export class CareerController {
     let reward: Reward = { credits: 0, reputation: 0, claimId: null, kind: 'none' };
     let stored: CareerRaceResult | null = null;
     let applied = true;
+    let prizeCar: OwnedCar | undefined;
+    let prizeGarageFull = false;
     try {
       await this.commit((n) => {
         if (n.results.some((x) => x.attemptId === r.attemptId)) {
@@ -475,6 +482,11 @@ export class CareerController {
         n.reputation = Math.max(0, n.reputation + reward.reputation);
         if (reward.claimId && !n.claimedRewardIds.includes(reward.claimId)) n.claimedRewardIds.push(reward.claimId);
         if (r.outcome === 'win' && !n.completedEventIds.includes(ev.id)) n.completedEventIds.push(ev.id);
+        if (r.outcome === 'win') {
+          const g = grantPrizeCar(n, ev, newCarId, r.completedAt);
+          prizeCar = g.car ?? undefined;
+          prizeGarageFull = g.state === 'garage-full';
+        }
         stored = { ...r, creditsAwarded: reward.credits, reputationAwarded: reward.reputation };
         n.results.push(stored);
         if (n.results.length > MAX_RESULTS) n.results.splice(0, n.results.length - MAX_RESULTS);
@@ -500,8 +512,34 @@ export class CareerController {
         applied,
         newUnlocks,
         chapterCompleted: !wasComplete && isChapterComplete(this.save!, ev.chapter),
+        prizeCar,
+        prizeGarageFull,
       },
     };
+  }
+
+  /**
+   * Delivers the prize cars of the finals already won and not yet claimed (saves that won the final
+   * before the prize existed, or whose garage was full). Idempotent: a second call changes nothing.
+   */
+  async claimPendingPrizes(): Promise<OpResult<OwnedCar[]>> {
+    const s = this.save;
+    if (!s) return fail('nenhuma campanha carregada');
+    const events = prizeEvents().filter((e) => prizeState(s, e) === 'ready');
+    if (!events.length) return { ok: true, value: [] };
+    const given: OwnedCar[] = [];
+    try {
+      await this.commit((n) => {
+        given.length = 0;
+        for (const e of events) {
+          const g = grantPrizeCar(n, e, newCarId, new Date().toISOString());
+          if (g.car) given.push(g.car);
+        }
+      });
+    } catch (e) {
+      return fail((e as Error).message);
+    }
+    return { ok: true, value: given };
   }
 
   exportJson(): string {

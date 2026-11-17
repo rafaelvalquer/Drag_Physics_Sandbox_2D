@@ -196,4 +196,36 @@ test('capítulo 2: liberação, Caio, cenários, rivais, revenda, oficina compat
   await mode(page, `m.show('garage')`);
   await expect(page.getByTestId('stat-gearbox')).toContainText('manual, 5 marchas');
   await expect(page.getByTestId('garage-sell')).toBeVisible();
+
+  // prize of the chapter 1 final: Marcos' Saveiro came with the win (trophy badge, his parts and paint)
+  const prize = await mode<{ id: string; installedParts: string[]; paint: { color: string }; nickname: string; purchasePrice: number }>(
+    page,
+    `m.controller.save.ownedCars.find((c) => c.prizeEventId === 'e7-rei-da-madrugada')`,
+  );
+  expect(prize.nickname).toBe('Saveiro do Marcos');
+  expect(prize.installedParts).toContain('turbo-basic');
+  expect(prize.paint.color).toBe('#0d0f12');
+  await mode(page, `m.controller.setActiveCar('${prize.id}').then(() => m.show('garage'))`);
+  await expect(page.getByTestId('garage-trophy')).toBeVisible();
+  await shot(page, '12-saveiro-do-marcos');
+
+  // a save that won the final before the prize existed: the garage delivers it with the hand-over scene
+  await mode(
+    page,
+    `m.controller.commit((s) => { s.ownedCars = s.ownedCars.filter((c) => !c.prizeEventId); s.activeCarId = s.ownedCars[0].id; s.claimedRewardIds = s.claimedRewardIds.filter((x) => !x.endsWith(':prize-car')); s.seenStorySceneIds = s.seenStorySceneIds.filter((x) => !x.startsWith('prize-')); })`,
+  );
+  await boot(page); // navigates again: a fresh load of the app and of the save
+  await openCareer(page);
+  expect(await mode<number>(page, `m.controller.save.ownedCars.filter((c) => c.prizeEventId).length`)).toBe(0);
+  await page.getByTestId('career-garage').click();
+  await expect(page.getByTestId('career-dialogue')).toBeVisible();
+  const handover = await readDialogue(page);
+  expect(handover.join(' ')).toContain('quem perde o último desafio entrega a chave');
+  await expect(page.getByTestId('career-garage-screen')).toBeVisible();
+  expect(await mode<number>(page, `m.controller.save.ownedCars.filter((c) => c.prizeEventId).length`)).toBe(1);
+  // and only once: opening the garage again changes nothing
+  await mode(page, `m.show('menu')`);
+  await page.getByTestId('career-garage').click();
+  await expect(page.getByTestId('career-garage-screen')).toBeVisible();
+  expect(await mode<number>(page, `m.controller.save.ownedCars.filter((c) => c.prizeEventId).length`)).toBe(1);
 });

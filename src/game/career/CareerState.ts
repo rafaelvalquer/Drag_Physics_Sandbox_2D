@@ -57,6 +57,8 @@ export const OwnedCarSchema = z.object({
   buildVersion: z.union([z.literal(1), z.literal(2)]).default(1),
   /** Price paid (CR); resale value derives from it. */
   purchasePrice: z.number().int().min(0).optional(),
+  /** Set on a car won as the prize of a chapter's final (the event it came from): the trophy badge. */
+  prizeEventId: z.string().min(1).max(64).optional(),
   acquiredAt: iso,
 });
 export type OwnedCar = z.infer<typeof OwnedCarSchema>;

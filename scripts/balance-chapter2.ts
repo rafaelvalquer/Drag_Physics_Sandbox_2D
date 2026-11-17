@@ -23,7 +23,7 @@ import { TRACKS } from '../src/data/tracks/index';
 import type { CarConfig } from '../src/data/schema';
 import { AI_PROFILES, type AiLevel } from '../src/game/ai/DragAI';
 import { runAccelerationTest } from '../src/game/race/accelerationTest';
-import { CHAPTER2_EVENTS, EVENTS, rivalOf } from '../src/game/career/CareerEvents';
+import { CHAPTER2_EVENTS, EVENTS, findRival, rivalOf } from '../src/game/career/CareerEvents';
 import { isChapterComplete, isPartUnlocked, nextEvent } from '../src/game/career/CareerProgression';
 import { computeReward } from '../src/game/career/CareerRewards';
 import { newCareerSave, type CareerSave } from '../src/game/career/CareerState';
@@ -127,7 +127,11 @@ if (want('--matrix')) {
   say(`| ${header.join(' | ')} |`);
   say(`|${header.map(() => '---').join('|')}|`);
   let i = 0;
-  const rows: { id: string; name: string; car: CarConfig }[] = [{ id: 'vw-gol-gts-1988 (cap. 1)', name: 'turbo do cap. 1', car: golCar() }];
+  // the prize of chapter 1 (Marcos' Saveiro, handed over after the final) is a car of chapter 2 too
+  const rows: { id: string; name: string; car: CarConfig }[] = [
+    { id: 'vw-gol-gts-1988 (cap. 1)', name: 'turbo do cap. 1', car: golCar() },
+    { id: 'vw-saveiro-gl-1994 (prêmio do cap. 1)', name: 'Saveiro do Marcos', car: rivalBuild(findRival('marcos')!).car },
+  ];
   for (const car of CHAPTER2_CARS) {
     const lv = BUILDS[car.id]!;
     rows.push({ id: car.id, name: 'original', car: build(car.id, []).car });

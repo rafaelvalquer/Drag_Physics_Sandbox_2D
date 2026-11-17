@@ -18,6 +18,18 @@ export type PortraitId =
   // chapter 2
   | 'caio' | 'guga' | 'camila' | 'ricardo' | 'andre' | 'helena' | 'daniel' | 'lucas' | 'felipe' | 'bianca' | 'victor';
 
+/**
+ * Prize of a chapter's final: the loser hands the car over. The player gets a copy of the rival's
+ * build (same paint, parts and tune); `value` is what the car counts as "paid" for the resale.
+ */
+export interface PrizeDef {
+  /** Garage name of the car (max 32 characters). */
+  nickname: string;
+  value: number;
+  /** Delivery scene (after the victory line). */
+  lines: { speaker: PortraitId; text: string }[];
+}
+
 export interface RivalDef {
   id: string;
   name: string;
@@ -36,6 +48,8 @@ export interface RivalDef {
   skill: AiProfile;
   skillLabel: string;
   lines: { before: string; win: string; lose?: string };
+  /** Only the rival of a chapter's final: the car the player wins. */
+  prize?: PrizeDef;
 }
 
 export type CareerTrackId = 'distrito-industrial' | 'baixada' | 'avenida-norte' | 'patio-das-torres' | 'distrito-financeiro' | 'corredor-da-liga';
@@ -172,6 +186,15 @@ export const RIVALS: readonly RivalDef[] = [
       before: 'Ouvi falar de você. Sete noites atrás ninguém sabia seu nome. Vamos ver o que esse carro consegue fazer.',
       win: 'Seu carro não é o mais caro daqui. Mas você soube preparar e pilotar. O título é seu.',
       lose: 'Ainda falta acerto nesse projeto. Quando estiver pronto, eu vou estar aqui.',
+    },
+    prize: {
+      nickname: 'Saveiro do Marcos',
+      value: 3500,
+      lines: [
+        { speaker: 'marcos', text: 'Regra velha da madrugada: quem perde o último desafio entrega a chave. A Saveiro é sua.' },
+        { speaker: 'marcos', text: 'A turbina, a embreagem, o acerto para segurar a patinação: está tudo como eu deixei. Só não judia do disco.' },
+        { speaker: 'nina', text: 'Ele nunca emprestou essa Saveiro para ninguém. Isso, aqui, é respeito.' },
+      ],
     },
   },
 ];

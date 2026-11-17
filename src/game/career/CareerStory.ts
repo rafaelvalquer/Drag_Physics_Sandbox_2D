@@ -8,7 +8,7 @@ import { UNLOCK_LABEL, type UnlockId } from './tuning/parts';
  * Story scenes as data. A scene plays once (its id goes to `seenStorySceneIds`); every scene can
  * be skipped. Triggers name the moment of the career they belong to.
  */
-export type StoryTrigger = 'start' | 'workshop' | 'pre-race' | 'victory' | 'defeat' | 'unlock' | 'final-challenge' | 'completion';
+export type StoryTrigger = 'start' | 'workshop' | 'pre-race' | 'victory' | 'defeat' | 'unlock' | 'final-challenge' | 'completion' | 'prize';
 
 export interface StoryLine {
   speaker: PortraitId;
@@ -90,7 +90,7 @@ const UNLOCK_INTRO: Partial<Record<UnlockId, string>> = {
   'c2-stage2': 'Stage 2: downpipe sem catalisador, admissão direta e o meu mapa com mais pressão. Precisa de intercooler maior, e se o torque subir demais, de forjados e câmbio reforçado.',
   'c2-awd': 'Acerto do diferencial central: o acoplamento passa torque para o outro eixo mais cedo. Só para tração integral.',
   'c2-final-challenge': 'O Victor aceitou correr com você. Corredor da Liga, quatrocentos metros.',
-  'c2-dealer-335i': 'O Victor disse que, se você quiser, a revenda libera uma 335i igual à dele.',
+  'c2-dealer-335i': 'A revenda passou a vender a 335i de série. A do Victor, essa já é sua.',
   // ---- chapter 1
   'workshop-basic': 'A oficina está aberta para você. Começa pelo que deixa o motor respirar: filtro e escape.',
   'part-manifold': 'Chegou um coletor de dutos mais curtos. Ganha em cima, perde um pouco embaixo: pensa no seu câmbio antes de comprar.',
@@ -126,6 +126,7 @@ function buildScenes(): StoryScene[] {
       lines: [
         { speaker: 'nina', text: 'O Marcos aceitou. A Saveiro dele é turbo, e não saiu assim da fábrica. Ela patina, mas quando engata, some.' },
         { speaker: 'nina', text: 'Confere a embreagem e os pneus. Contra ele, quem larga mal não tem segunda chance.' },
+        { speaker: 'nina', text: 'E tem a regra do último desafio: quem perde entrega o carro. Ele sabe. Você também.' },
       ],
     },
     {
@@ -143,6 +144,8 @@ function buildScenes(): StoryScene[] {
     s.push({ id: `pre-${e.id}`, chapter, trigger: 'pre-race', eventId: e.id, lines: [{ speaker: r.portrait, text: r.lines.before }] });
     s.push({ id: `win-${e.id}`, chapter, trigger: 'victory', eventId: e.id, lines: [{ speaker: r.portrait, text: r.lines.win }] });
     if (r.lines.lose) s.push({ id: `lose-${e.id}`, chapter, trigger: 'defeat', eventId: e.id, lines: [{ speaker: r.portrait, text: r.lines.lose }] });
+    // the loser of a final hands the car over (also played when a save claims it afterwards)
+    if (r.prize) s.push({ id: `prize-${e.id}`, chapter, trigger: 'prize', eventId: e.id, lines: r.prize.lines });
     const unl = e.unlocks.filter((u) => UNLOCK_INTRO[u]);
     if (unl.length)
       s.push({
@@ -184,6 +187,7 @@ function chapter2Scenes(): StoryScene[] {
       lines: [
         { speaker: 'nina', text: 'Victor. Seis cilindros turbo, câmbio automático de oito marchas, tudo acertado com calma. Ele não erra.' },
         { speaker: 'caio', text: 'O carro dele está no limite do que o motor aguenta com segurança. Se você quer passar, tem que ser no acerto e na largada.' },
+        { speaker: 'nina', text: 'E vale a regra da liga: quem perde a última etapa entrega o carro. Ele sabe. Você também.' },
       ],
     },
     {

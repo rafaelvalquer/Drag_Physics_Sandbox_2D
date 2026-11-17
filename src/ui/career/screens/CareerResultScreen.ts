@@ -22,6 +22,8 @@ export interface ResultDeps {
   reputation: number;
   applied: boolean;
   unlocks: string[];
+  /** Car handed over by the loser of the final (or why it is waiting). */
+  prize: { text: string; waiting: boolean } | null;
   rivalQuote: string | null;
   rivalPortrait: HTMLElement;
   ninaPortrait: HTMLElement;
@@ -78,6 +80,7 @@ export function buildResult(d: ResultDeps): HTMLElement {
     'rs-rewards',
     sectionHeader('Recompensas'),
     h('div', { class: 'rs-award', 'data-testid': 'result-award' }, `+${nf(d.credits)} CR · +${d.reputation} de reputação${d.applied ? '' : ' (já registrado)'}`),
+    d.prize ? h('div', { class: `rs-unlocks rs-prize${d.prize.waiting ? ' waiting' : ''}`, 'data-testid': 'result-prize' }, icon('trophy'), d.prize.text) : null,
     d.unlocks.length ? h('div', { class: 'rs-unlocks', 'data-testid': 'result-unlocks' }, icon('lock'), `Liberado: ${d.unlocks.join(', ')}`) : null,
     h('p', { class: 'hint' }, d.next),
   );
