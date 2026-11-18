@@ -102,6 +102,37 @@ export class CareerController {
 
   async load(): Promise<CareerSave | null> {
     this.save = await this.repo.load();
+    return this.save && (await this.dropUnknownParts());
+  }
+
+  /**
+   * A save can name parts that no longer exist in the catalogue (a removed feature): they are dropped
+   * from the installed list and from the stock, and the settings of the car are kept only if its
+   * build is still valid, so the garage always opens.
+   */
+  private async dropUnknownParts(): Promise<CareerSave> {
+    const s = this.save!;
+    const known = (id: string): boolean => !!findPart(id);
+    const dirty = s.ownedCars.some((c) => c.installedParts.some((id) => !known(id))) || s.inventoryPartIds.some((e) => !known(parseInventoryEntry(e).partId));
+    if (!dirty) return s;
+    this.save = await this.commit((n) => {
+      n.inventoryPartIds = n.inventoryPartIds.filter((e) => known(parseInventoryEntry(e).partId));
+      for (const c of n.ownedCars) {
+        if (!c.installedParts.some((id) => !known(id))) continue;
+        c.installedParts = c.installedParts.filter(known);
+        const base = findCampaignCar(c.baseCarId);
+        const v = buildVersionFor(c, c.installedParts);
+        c.buildVersion = v;
+        if (base && !resolveBuild(base, c.installedParts, c.tune ?? {}, v).ok) c.tune = {};
+        // what is left may have depended on a dropped part: keep the parts that still make a valid car
+        if (base && !resolveBuild(base, c.installedParts, {}, v).ok) {
+          const keep: string[] = [];
+          for (const id of c.installedParts) if (resolveBuild(base, [...keep, id], {}, v).ok) keep.push(id);
+          for (const id of c.installedParts) if (!keep.includes(id)) n.inventoryPartIds.push(inventoryEntry(id, c.baseCarId));
+          c.installedParts = keep;
+        }
+      }
+    });
     return this.save;
   }
 
