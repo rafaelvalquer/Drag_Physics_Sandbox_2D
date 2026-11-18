@@ -1,0 +1,43 @@
+name: Procedural free events validation
+
+on:
+  push:
+    branches:
+      - feature/procedural-free-events
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  typecheck-and-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+  free-events-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test tests/e2e/free-events.spec.ts
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: free-events-browser-results
+          path: test-results/
+          if-no-files-found: ignore
