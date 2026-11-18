@@ -282,6 +282,13 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   }
   const ic = get('intercooler');
   if (ic) car.massKg += ic.massAddKg;
+  // procedural audio follows the hardware, the engine keeps its signature (firing order, banks, exhaust layout):
+  // freer intake/exhaust and higher cut open the intake/exhaust voice; a conversion adds the turbo (twin: two rotors, already in the config)
+  if (fam !== LEGACY_FAMILY) {
+    const open = (get('intake-filter') ? 0.06 : 0) + (get('intake-manifold') ? 0.04 : 0) + (get('exhaust') ? 0.06 : 0) + (car.engine.revLimitRpm > base.engine.revLimitRpm + 250 ? 0.05 : 0);
+    if (open > 0) car.acoustic = { ...car.acoustic, intakeGain: Math.min(2, car.acoustic.intakeGain * (1 + open)), exhaustGain: Math.min(2, car.acoustic.exhaustGain * (1 + open)) };
+    if (turboKit?.conversion) car.acoustic = { ...car.acoustic, turboGain: Math.max(car.acoustic.turboGain, turboKit.conversion.layout === 'twin-parallel' ? 0.9 : turboKit.conversion.profile === 'street' ? 0.6 : 0.8) };
+  }
   const exhaust = get('exhaust');
   if (exhaust) {
     car.exhaust = {

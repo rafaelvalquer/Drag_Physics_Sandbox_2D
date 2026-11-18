@@ -544,6 +544,13 @@ export class CareerController {
     return { ok: true, value: await this.commit((n) => void (n.ownedCars.find((x) => x.id === car.id)!.paint.color = color)) };
   }
 
+  /** Livery accent colour: purely visual, the physics never reads it. */
+  async setAccent(color: string): Promise<OpResult> {
+    const car = this.activeCar;
+    if (!car || !/^#[0-9a-fA-F]{6}$/.test(color)) return fail('cor inválida');
+    return { ok: true, value: await this.commit((n) => void (n.ownedCars.find((x) => x.id === car.id)!.paint.accent = color)) };
+  }
+
   async markScenesSeen(ids: string[]): Promise<void> {
     const s = this.save;
     if (!s) return;

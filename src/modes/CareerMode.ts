@@ -112,7 +112,9 @@ function resolveOwned(car: OwnedCar, parts: readonly string[], tune = keptTune(c
 
 interface Estimate {
   t100: number | null;
+  t201: number | null;
   t402: number | null;
+  t1000: number | null;
 }
 
 /**
@@ -726,8 +728,8 @@ export class CareerMode implements Mode {
     const hit = this.estimates.get(b.key);
     if (hit) return hit;
     const track = findCareerTrack('avenida-norte');
-    const r = runAccelerationTest(b.car, track, { speedsKmh: [100], distancesM: [402], maxS: 30 });
-    const e = { t100: r.speedTimes.get(100) ?? null, t402: r.distanceTimes.get(402) ?? null };
+    const r = runAccelerationTest(b.car, track, { speedsKmh: [100], distancesM: [201, 402, 1000], maxS: 45 });
+    const e = { t100: r.speedTimes.get(100) ?? null, t201: r.distanceTimes.get(201) ?? null, t402: r.distanceTimes.get(402) ?? null, t1000: r.distanceTimes.get(1000) ?? null };
     this.estimates.set(b.key, e);
     return e;
   }
@@ -837,6 +839,7 @@ export class CareerMode implements Mode {
         h('div', {}, h('span', { class: 'ws-kicker' }, 'CATÁLOGO DE COMPONENTES'),
           h('h2', {}, tab.label), h('p', {}, tab.description)),
         h('span', { class: 'ws-count' }, `${tab.categories.length} grupos · ${allInTab.length} upgrades`)),
+      this.aestheticsPanel(car),
       this.projectPanel(car, before),
       ...groups,
     );
@@ -858,6 +861,18 @@ export class CareerMode implements Mode {
         ['Voltar à garagem', 'ws-back', () => this.show('garage'), true],
       ),
     );
+  }
+
+  /** Aesthetics: colours only. They are drawn on every silhouette and never reach the physics. */
+  private aestheticsPanel(car: OwnedCar): HTMLElement {
+    const pick = (label: string, id: string, value: string, apply: (c: string) => Promise<{ ok: boolean }>): HTMLElement =>
+      h('label', { class: 'ws-part-meta' }, `${label} `, h('input', {
+        type: 'color', value, 'data-testid': id,
+        onchange: (e: Event) => void (async () => { if (!this.guard()) return; await apply((e.target as HTMLInputElement).value); this.show('workshop'); })(),
+      }));
+    return h('section', { class: 'ws-extra', 'data-testid': 'ws-aesthetics', 'aria-label': 'Estética e personalização' },
+      h('div', { class: 'ws-group-header' }, h('div', {}, h('h3', {}, 'ESTÉTICA E PERSONALIZAÇÃO'), h('p', {}, 'Pintura e detalhes: só visual, valem na garagem, na oficina, na corrida, no Dyno e nos resultados. Não mudam a física.'))),
+      h('div', { class: 'row' }, pick('Cor da pintura', 'ws-paint', car.paint.color, (c) => this.controller.setPaint(c)), pick('Cor dos detalhes', 'ws-accent', car.paint.accent, (c) => this.controller.setAccent(c))));
   }
 
   /**
@@ -898,7 +913,7 @@ export class CareerMode implements Mode {
         }, current ? 'Projeto atual' : `Instalar projeto (${cr(cost)})`),
       );
     });
-    return h('section', { class: 'ws-group', 'data-testid': 'ws-projects', 'aria-label': 'Projetos do motor' },
+    return h('section', { class: 'ws-extra', 'data-testid': 'ws-projects', 'aria-label': 'Projetos do motor' },
       h('div', { class: 'ws-group-header' }, h('div', {},
         h('h3', {}, `PROJETOS DO MOTOR — ${proj.label}`),
         h('p', {}, `${proj.summary} Ficha: ${ind.factoryInduction === 'turbo' ? 'turbo' : 'aspirado'} · hardware agora: ${ind.currentInduction === 'turbo' ? (ind.turboLayout === 'twin' ? 'biturbo' : 'turbo') : 'aspirado'}. Trocar de projeto manda as peças que saem para o estoque; voltar é de graça.`))),
@@ -924,6 +939,27 @@ export class CareerMode implements Mode {
       if ((v2 || p.since === 2) && incompatibility(base, p, induction)) return false;
       return true;
     });
+  }
+
+  /** Dyno A/B of the projects of the same car, measured with the game's physics (201 / 402 / 1000 m). */
+  private projectComparison(car: OwnedCar): HTMLElement | null {
+    const presets = this.controller.presetsOf(car);
+    if (!presets.length) return null;
+    const host = h('div', { 'data-testid': 'dyno-ab' });
+    const btn = h('button', { 'data-testid': 'dyno-ab-run', onclick: () => {
+      btn.setAttribute('disabled', 'true');
+      host.textContent = 'Medindo…';
+      setTimeout(() => {
+        const rows = [{ label: 'Atual', parts: car.installedParts }, ...presets.map((p) => ({ label: p.label, parts: p.parts }))].map((x) => {
+          const b = resolveOwned(car, x.parts);
+          const e = b.ok ? this.computeEstimate(b) : null;
+          return h('tr', {}, h('td', {}, x.label), h('td', {}, b.ok ? `${f1(b.peakPowerCv)} cv` : 'recusado'), h('td', {}, e ? f2(e.t100) : '—'), h('td', {}, e ? f2(e.t201) : '—'), h('td', {}, e ? f2(e.t402) : '—'), h('td', {}, e ? f2(e.t1000) : '—'));
+        });
+        clear(host);
+        host.append(h('table', { class: 'results' }, h('tr', {}, ...['Projeto', 'Potência', '0–100', '201 m', '402 m', '1000 m'].map((t) => h('th', {}, t))), ...rows));
+      }, 30);
+    } }, 'Comparar projetos (A/B)');
+    return h('div', {}, btn, host);
   }
 
   private async restoreAll(n: number): Promise<void> {
@@ -1046,6 +1082,8 @@ export class CareerMode implements Mode {
           row('Aderência (μ pico)', f2(before.car.tires.muPeak), f2(after.car.tires.muPeak), before.car.tires.muPeak, after.car.tires.muPeak, 'higher', 0.005),
           row('Relação final', f3(before.car.transmission.finalDrive), f3(after.car.transmission.finalDrive), before.car.transmission.finalDrive, after.car.transmission.finalDrive, 'neutral', 0.0005),
           row('0–100 km/h (estimativa)', eb ? `${f2(eb.t100)} s` : '…', ea ? `${f2(ea.t100)} s` : '…', eb?.t100 ?? undefined, ea?.t100 ?? undefined, 'lower', 0.005),
+          row('201 m (estimativa)', eb ? `${f2(eb.t201)} s` : '…', ea ? `${f2(ea.t201)} s` : '…', eb?.t201 ?? undefined, ea?.t201 ?? undefined, 'lower', 0.005),
+          row('1000 m (estimativa)', eb ? `${f2(eb.t1000)} s` : '…', ea ? `${f2(ea.t1000)} s` : '…', eb?.t1000 ?? undefined, ea?.t1000 ?? undefined, 'lower', 0.005),
           row('402 m (estimativa)', eb ? `${f2(eb.t402)} s` : '…', ea ? `${f2(ea.t402)} s` : '…', eb?.t402 ?? undefined, ea?.t402 ?? undefined, 'lower', 0.005),
         ),
         h('div', { class: 'hint' }, 'Estimativas simuladas com a física do jogo e piloto ideal na Avenida Norte; a corrida real depende da sua largada e das trocas.'),
@@ -1157,7 +1195,8 @@ export class CareerMode implements Mode {
           h('h3', {}, 'LIMITAÇÕES DO PROJETO'),
           lims.length
             ? h('ul', {}, ...lims.map((l) => h('li', { 'data-testid': `limit-${l.id}` }, `${l.label}: ${l.detail}`)))
-            : h('p', {}, 'Nenhum gargalo medido: todas as margens estão acima de 110 %.'))
+            : h('p', {}, 'Nenhum gargalo medido: todas as margens estão acima de 110 %.'),
+          this.projectComparison(car))
       : null;
     return this.frame('Dyno Lab', 'career-dyno', h('p', { class: 'lead' }, `${car.nickname}: o dinamômetro mede o motor que está no carro, com as peças instaladas, e a pista de testes mede o carro. Os valores vêm da física, não da ficha.`), view.el, panel);
   }
