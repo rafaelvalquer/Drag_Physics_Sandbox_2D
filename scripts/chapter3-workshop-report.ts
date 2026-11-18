@@ -7,7 +7,7 @@ import { presetsFor } from '../src/game/career/tuning/ProjectRequirements';
 import { reliabilityLimits } from '../src/game/career/tuning/EngineReliability';
 
 const track = TRACKS.find((t) => t.id === 'test-track')!;
-const f = (x: number | undefined, d = 2): string => (x === undefined ? '—' : x.toFixed(d).replace('.', ','));
+const f = (x: number | null | undefined, d = 2): string => (x == null ? '—' : x.toFixed(d).replace('.', ','));
 console.log('| Carro | Projeto | cv | N·m | 0–100 s | 201 m s | 402 m s | km/h 402 | combustível | óleo | vida no limite s |');
 console.log('|---|---|---|---|---|---|---|---|---|---|---|');
 for (const c of CHAPTER3_CARS) {
