@@ -9,7 +9,7 @@
 import { CAREER_CARS } from '../src/data/cars/campaign';
 import { CHAPTER2_CARS } from '../src/data/cars/chapter2/index';
 import { TRACKS } from '../src/data/tracks/index';
-import { GAIN_EXEMPT, isGain, measurePartGain } from '../src/game/career/tuning/partGain';
+import { isGain, measurePartGain } from '../src/game/career/tuning/partGain';
 import { ALL_PARTS } from '../src/game/career/tuning/parts';
 
 const args = process.argv.slice(2);
@@ -20,12 +20,12 @@ const c2 = new Set(CHAPTER2_CARS.map((c) => c.id));
 let bad = 0;
 for (const car of CAREER_CARS) {
   if (only && car.id !== only) continue;
-  const version = c2.has(car.id) || car.engine.family ? 2 : 1;
+  const version = c2.has(car.id) ? 2 : 1;
   for (const p of ALL_PARTS) {
     if (version === 1 && p.since === 2) continue;
     const g = measurePartGain(car, p, track, version);
     if (!g) continue;
-    const ok = isGain(g) || p.id in GAIN_EXEMPT;
+    const ok = isGain(g);
     if (!ok) bad++;
     if (failOnly && ok) continue;
     const dEt = g.etAfter - g.etBefore;

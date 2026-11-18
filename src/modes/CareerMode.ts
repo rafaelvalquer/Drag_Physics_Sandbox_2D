@@ -33,9 +33,6 @@ import { BUILD_RESOLVER_VERSION, resolveBuild, type BuildResult } from '../game/
 import type { BuildTune } from '../game/career/tuning/buildCommon';
 import { failureSpecFor, reconcileTune, tuneReliability } from '../game/career/tuning/TuningCapabilities';
 import { playBlownEngine, playRiskWarning } from '../audio/core/blownEngineSound';
-import { effectiveInduction } from '../game/career/tuning/ConvertedTurboModel';
-import { isBottleneck, projectLimitations } from '../game/career/tuning/ProjectLimitations';
-import { classifyProject } from '../game/career/tuning/EngineProjectClassifier';
 import { ALL_PARTS, CATEGORY_DESCRIPTION, CATEGORY_LABEL, CATEGORY_ORDER_V1, UNLOCK_LABEL, WORKSHOP_TABS, findPart, type PartCategory, type PartDef } from '../game/career/tuning/parts';
 import { RACE_DISTANCES, RaceController, type LaneResult, type RaceLane } from '../game/race/RaceController';
 import { runAccelerationTest } from '../game/race/accelerationTest';
@@ -112,9 +109,7 @@ function resolveOwned(car: OwnedCar, parts: readonly string[], tune = keptTune(c
 
 interface Estimate {
   t100: number | null;
-  t201: number | null;
   t402: number | null;
-  t1000: number | null;
 }
 
 /**
@@ -728,8 +723,8 @@ export class CareerMode implements Mode {
     const hit = this.estimates.get(b.key);
     if (hit) return hit;
     const track = findCareerTrack('avenida-norte');
-    const r = runAccelerationTest(b.car, track, { speedsKmh: [100], distancesM: [201, 402, 1000], maxS: 45 });
-    const e = { t100: r.speedTimes.get(100) ?? null, t201: r.distanceTimes.get(201) ?? null, t402: r.distanceTimes.get(402) ?? null, t1000: r.distanceTimes.get(1000) ?? null };
+    const r = runAccelerationTest(b.car, track, { speedsKmh: [100], distancesM: [402], maxS: 30 });
+    const e = { t100: r.speedTimes.get(100) ?? null, t402: r.distanceTimes.get(402) ?? null };
     this.estimates.set(b.key, e);
     return e;
   }
@@ -839,8 +834,6 @@ export class CareerMode implements Mode {
         h('div', {}, h('span', { class: 'ws-kicker' }, 'CATÁLOGO DE COMPONENTES'),
           h('h2', {}, tab.label), h('p', {}, tab.description)),
         h('span', { class: 'ws-count' }, `${tab.categories.length} grupos · ${allInTab.length} upgrades`)),
-      this.aestheticsPanel(car),
-      this.projectPanel(car, before),
       ...groups,
     );
     const detail = h(
@@ -863,64 +856,6 @@ export class CareerMode implements Mode {
     );
   }
 
-  /** Aesthetics: colours only. They are drawn on every silhouette and never reach the physics. */
-  private aestheticsPanel(car: OwnedCar): HTMLElement {
-    const pick = (label: string, id: string, value: string, apply: (c: string) => Promise<{ ok: boolean }>): HTMLElement =>
-      h('label', { class: 'ws-part-meta' }, `${label} `, h('input', {
-        type: 'color', value, 'data-testid': id,
-        onchange: (e: Event) => void (async () => { if (!this.guard()) return; await apply((e.target as HTMLInputElement).value); this.show('workshop'); })(),
-      }));
-    return h('section', { class: 'ws-extra', 'data-testid': 'ws-aesthetics', 'aria-label': 'Estética e personalização' },
-      h('div', { class: 'ws-group-header' }, h('div', {}, h('h3', {}, 'ESTÉTICA E PERSONALIZAÇÃO'), h('p', {}, 'Pintura e detalhes: só visual, valem na garagem, na oficina, na corrida, no Dyno e nos resultados. Não mudam a física.'))),
-      h('div', { class: 'row' }, pick('Cor da pintura', 'ws-paint', car.paint.color, (c) => this.controller.setPaint(c)), pick('Cor dos detalhes', 'ws-accent', car.paint.accent, (c) => this.controller.setAccent(c))));
-  }
-
-  /**
-   * Engine projects (Chapter 3): the project the hardware makes today (derived from the parts), the
-   * factory vs current induction, and the presets with before/after, requirements and atomic purchase.
-   */
-  private projectPanel(car: OwnedCar, before: BuildResult): HTMLElement | null {
-    const presets = this.controller.presetsOf(car);
-    if (!presets.length) return null;
-    const base = findCampaignCar(car.baseCarId)!;
-    const proj = classifyProject(base, car.installedParts);
-    const ind = proj.induction;
-    const rows = presets.map((pr) => {
-      const plan = this.controller.planBundle(car, pr.parts, { dropIncompatible: true, replaceProject: true });
-      const after = 'error' in plan ? null : resolveOwned(car, plan.parts);
-      const current = proj.id === pr.id;
-      const reason = 'error' in plan ? plan.error : after && !after.ok ? after.errors.join('; ') : null;
-      const delta = after && after.ok && before.ok ? `${f1(before.peakPowerCv)} → ${f1(after.peakPowerCv)} cv · ${f1(before.peakTorqueNm)} → ${f1(after.peakTorqueNm)} N·m` : '—';
-      const lim = after && after.ok ? after.diagnostics : undefined;
-      const limits = lim ? [lim.fuel ? `combustível ${Math.round(lim.fuel.margin * 100)} %` : '', lim.oil ? `óleo ${Math.round(lim.oil.margin * 100)} %` : ''].filter(Boolean).join(' · ') : '';
-      const cost = 'error' in plan ? 0 : plan.cost;
-      return h('li', { class: `ws-part-card ${current ? 'sel' : ''}`, 'data-testid': `ws-preset-${pr.id}`, 'data-school': pr.school },
-        h('div', { class: 'ws-part-head' }, h('span', { class: 'ws-part-name' }, pr.label), h('span', { class: 'pill' }, current ? 'Em uso' : cr(cost))),
-        h('small', { class: 'ws-part-meta' }, pr.summary),
-        h('small', { class: 'ws-part-meta' }, reason ? `Bloqueado: ${reason}` : `Antes/depois: ${delta}${limits ? ` · margens: ${limits}` : ''}`),
-        'error' in plan ? null : h('small', { class: 'ws-part-meta' }, `Peças: ${pr.parts.map((id) => findPart(id)?.name ?? id).join(', ')}`),
-        'error' in plan || plan.removed.length ? h('small', { class: 'ws-part-meta' }, `Vão para o estoque: ${'error' in plan ? '' : plan.removed.map((id) => findPart(id)?.name ?? id).join(', ')}`) : null,
-        h('button', {
-          class: 'primary', 'data-testid': `ws-preset-buy-${pr.id}`, disabled: current || !!reason || this.controller.save!.credits < cost,
-          onclick: () => void (async () => {
-            if (!this.guard()) return;
-            const r = await this.controller.applyPreset(pr.id);
-            if (!r.ok) toast(r.error, 'error');
-            else { toast(`${pr.label} instalado.`); if (r.notice) toast(r.notice); }
-            this.selectedPart = null;
-            this.show('workshop');
-          })(),
-        }, current ? 'Projeto atual' : `Instalar projeto (${cr(cost)})`),
-      );
-    });
-    return h('section', { class: 'ws-extra', 'data-testid': 'ws-projects', 'aria-label': 'Projetos do motor' },
-      h('div', { class: 'ws-group-header' }, h('div', {},
-        h('h3', {}, `PROJETOS DO MOTOR — ${proj.label}`),
-        h('p', {}, `${proj.summary} Ficha: ${ind.factoryInduction === 'turbo' ? 'turbo' : 'aspirado'} · hardware agora: ${ind.currentInduction === 'turbo' ? (ind.turboLayout === 'twin' ? 'biturbo' : 'turbo') : 'aspirado'}. Trocar de projeto manda as peças que saem para o estoque; voltar é de graça.`))),
-      h('ul', { class: 'ws-parts', 'data-testid': 'ws-preset-list' }, ...rows),
-    );
-  }
-
   /**
    * Parts the shop offers for this car: parts of resolver version 2 appear once chapter 2 is open,
    * and only those that fit the car (engine family, induction, gearbox, driven axles). An AP part
@@ -931,35 +866,13 @@ export class CareerMode implements Mode {
     const base = findCampaignCar(car.baseCarId)!;
     const c2 = isChapterUnlocked(s, CHAPTER_2_ID);
     const v2 = buildVersionFor(car, car.installedParts) === 2;
-    const induction = effectiveInduction(base, car.installedParts.map((id) => findPart(id)).filter((p): p is PartDef => !!p));
     return ALL_PARTS.filter((p) => {
       if (car.installedParts.includes(p.id)) return true;
       if (p.since === 2 && !c2) return false;
       // version 2 compatibility rules apply to the cars resolved by version 2 and to v2 parts
-      if ((v2 || p.since === 2) && incompatibility(base, p, induction)) return false;
+      if ((v2 || p.since === 2) && incompatibility(base, p)) return false;
       return true;
     });
-  }
-
-  /** Dyno A/B of the projects of the same car, measured with the game's physics (201 / 402 / 1000 m). */
-  private projectComparison(car: OwnedCar): HTMLElement | null {
-    const presets = this.controller.presetsOf(car);
-    if (!presets.length) return null;
-    const host = h('div', { 'data-testid': 'dyno-ab' });
-    const btn = h('button', { 'data-testid': 'dyno-ab-run', onclick: () => {
-      btn.setAttribute('disabled', 'true');
-      host.textContent = 'Medindo…';
-      setTimeout(() => {
-        const rows = [{ label: 'Atual', parts: car.installedParts }, ...presets.map((p) => ({ label: p.label, parts: p.parts }))].map((x) => {
-          const b = resolveOwned(car, x.parts);
-          const e = b.ok ? this.computeEstimate(b) : null;
-          return h('tr', {}, h('td', {}, x.label), h('td', {}, b.ok ? `${f1(b.peakPowerCv)} cv` : 'recusado'), h('td', {}, e ? f2(e.t100) : '—'), h('td', {}, e ? f2(e.t201) : '—'), h('td', {}, e ? f2(e.t402) : '—'), h('td', {}, e ? f2(e.t1000) : '—'));
-        });
-        clear(host);
-        host.append(h('table', { class: 'results' }, h('tr', {}, ...['Projeto', 'Potência', '0–100', '201 m', '402 m', '1000 m'].map((t) => h('th', {}, t))), ...rows));
-      }, 30);
-    } }, 'Comparar projetos (A/B)');
-    return h('div', {}, btn, host);
   }
 
   private async restoreAll(n: number): Promise<void> {
@@ -1082,8 +995,6 @@ export class CareerMode implements Mode {
           row('Aderência (μ pico)', f2(before.car.tires.muPeak), f2(after.car.tires.muPeak), before.car.tires.muPeak, after.car.tires.muPeak, 'higher', 0.005),
           row('Relação final', f3(before.car.transmission.finalDrive), f3(after.car.transmission.finalDrive), before.car.transmission.finalDrive, after.car.transmission.finalDrive, 'neutral', 0.0005),
           row('0–100 km/h (estimativa)', eb ? `${f2(eb.t100)} s` : '…', ea ? `${f2(ea.t100)} s` : '…', eb?.t100 ?? undefined, ea?.t100 ?? undefined, 'lower', 0.005),
-          row('201 m (estimativa)', eb ? `${f2(eb.t201)} s` : '…', ea ? `${f2(ea.t201)} s` : '…', eb?.t201 ?? undefined, ea?.t201 ?? undefined, 'lower', 0.005),
-          row('1000 m (estimativa)', eb ? `${f2(eb.t1000)} s` : '…', ea ? `${f2(ea.t1000)} s` : '…', eb?.t1000 ?? undefined, ea?.t1000 ?? undefined, 'lower', 0.005),
           row('402 m (estimativa)', eb ? `${f2(eb.t402)} s` : '…', ea ? `${f2(ea.t402)} s` : '…', eb?.t402 ?? undefined, ea?.t402 ?? undefined, 'lower', 0.005),
         ),
         h('div', { class: 'hint' }, 'Estimativas simuladas com a física do jogo e piloto ideal na Avenida Norte; a corrida real depende da sua largada e das trocas.'),
@@ -1188,17 +1099,7 @@ export class CareerMode implements Mode {
       onBack: () => this.show('garage'),
     });
     this.dynoLab = view;
-    // Chapter 3: bottlenecks measured on the resolved build
-    const lims = projectLimitations(b, caps.limits).filter(isBottleneck);
-    const panel = base.engine.family
-      ? h('section', { class: 'ws-group', 'data-testid': 'dyno-limitations' },
-          h('h3', {}, 'LIMITAÇÕES DO PROJETO'),
-          lims.length
-            ? h('ul', {}, ...lims.map((l) => h('li', { 'data-testid': `limit-${l.id}` }, `${l.label}: ${l.detail}`)))
-            : h('p', {}, 'Nenhum gargalo medido: todas as margens estão acima de 110 %.'),
-          this.projectComparison(car))
-      : null;
-    return this.frame('Dyno Lab', 'career-dyno', h('p', { class: 'lead' }, `${car.nickname}: o dinamômetro mede o motor que está no carro, com as peças instaladas, e a pista de testes mede o carro. Os valores vêm da física, não da ficha.`), view.el, panel);
+    return this.frame('Dyno Lab', 'career-dyno', h('p', { class: 'lead' }, `${car.nickname}: o dinamômetro mede o motor que está no carro, com as peças instaladas, e a pista de testes mede o carro. Os valores vêm da física, não da ficha.`), view.el);
   }
 
   // ------------------------------------------------------------------ events
@@ -1265,7 +1166,7 @@ export class CareerMode implements Mode {
         nm: rb.peakTorqueNm,
         massKg: rb.car.massKg,
         drive: driveLabel(rb.car),
-        note: rivalNote(rv.parts, rb.car, findCampaignCar(rv.baseCarId)!),
+        note: rb.car.engine.induction === 'turbo' && findCampaignCar(rv.baseCarId)!.engine.induction !== 'turbo' ? 'turbo (não original)' : undefined,
         parts: rv.parts.length ? rv.parts.map((id) => findPart(id)!.name).join(', ') : '',
         skill: rv.skillLabel,
       },
@@ -1371,8 +1272,6 @@ export class CareerMode implements Mode {
       dnf: r.dnf,
       ...(r.dnfReason ? { dnfReason: r.dnfReason } : {}),
       ...(r.dnfReason === 'engine-blown' && r.blownAtRpm !== undefined ? { blownAtRpm: Math.round(r.blownAtRpm) } : {}),
-      ...(Object.keys(r.splits).length ? { splitsS: { ...r.splits } } : {}),
-      ...(r.finished ? { maxRpm: Math.round(r.maxRpm ?? 0), gearsUsed: [...(r.gearsUsed ?? [])] } : {}),
       launchRpm: t.launchRpm,
       maxSlipRatio: t.maxSlipRatio,
       wheelspinS: t.wheelspinS,
@@ -1503,22 +1402,9 @@ export class CareerMode implements Mode {
       rows: [
         { label: 'Reação (RT)', player: p.rt, rival: o.rt, better: 'low', format: sec },
         { label: 'ET', player: p.dnf ? null : p.et, rival: o.dnf ? null : o.et, better: 'low', format: (v) => (v === null ? 'DNF' : f3(v)) },
-        ...(ev.distance === 'km'
-          ? [
-              { label: '201 m', player: p.splitsS?.eighth ?? null, rival: o.splitsS?.eighth ?? null, better: 'low' as const, format: (v: number | null) => (v === null ? '—' : f3(v)) },
-              { label: '402 m', player: p.splitsS?.quarter ?? null, rival: o.splitsS?.quarter ?? null, better: 'low' as const, format: (v: number | null) => (v === null ? '—' : f3(v)) },
-              { label: '1.000 m', player: p.dnf ? null : p.et, rival: o.dnf ? null : o.et, better: 'low' as const, format: (v: number | null) => (v === null ? 'DNF' : f3(v)) },
-            ]
-          : []),
         { label: 'Tempo desde o verde', player: p.total, rival: o.total, better: 'low', format: sec },
-        { label: ev.distance === 'km' ? 'Velocidade na linha de chegada' : 'Velocidade final', player: p.trapKmh, rival: o.trapKmh, better: 'high', format: (v) => (v === null ? '—' : `${f1(v)} km/h`) },
+        { label: 'Velocidade final', player: p.trapKmh, rival: o.trapKmh, better: 'high', format: (v) => (v === null ? '—' : `${f1(v)} km/h`) },
         { label: 'Patinagem', player: p.wheelspinS ?? 0, rival: o.wheelspinS ?? 0, better: 'low', format: (v) => `${f2(v)} s` },
-        ...(ev.distance === 'km'
-          ? [
-              { label: 'Rotação máxima', player: p.maxRpm ?? null, rival: o.maxRpm ?? null, better: 'low' as const, format: (v: number | null) => (v === null ? '—' : `${Math.round(v)} rpm`) },
-              { label: 'Marchas usadas', player: p.gearsUsed?.length ?? null, rival: o.gearsUsed?.length ?? null, better: 'high' as const, format: (v: number | null) => (v === null ? '—' : `${v}`) },
-            ]
-          : []),
       ],
       credits: r.creditsAwarded,
       reputation: r.reputationAwarded,
@@ -1645,14 +1531,13 @@ export class CareerMode implements Mode {
       const sinceGreen = race.elapsedSinceGreen(0);
       this.hud?.update(p.sim, this.ctx.settings.units, this.runner.paused ? 'PAUSADO' : '', {
         distanceM: p.sim.x,
-        ...(race.distanceId === 'km' ? { totalM: race.distanceM, partial: { label: 'parcial 402 m', timeS: r0?.splits.quarter ?? null } } : {}),
         timeS: sinceGreen,
         timeLabel: done ? 'TEMPO TOTAL' : sinceGreen === null ? 'preparação' : 'TEMPO DESDE O VERDE',
         etS: sinceGreen === null ? undefined : race.elapsed(0),
         alert: r0?.redLight ?? false,
         gapM: opp ? opp.sim.x - p.sim.x : null,
       });
-      if (this.banner) this.banner.textContent = `${race.distanceId === 'km' ? 'ELITE DA MADRUGADA — 1.000 M · ' : ''}${this.current.event.title} · Você × ${this.current.rival.name} "${this.current.rival.nickname}" · ${race.status}`;
+      if (this.banner) this.banner.textContent = `${this.current.event.title} · Você × ${this.current.rival.name} "${this.current.rival.nickname}" · ${race.status}`;
       if (race.phase === 'finished' && !this.current.recorded) {
         this.banner && (this.banner.textContent = race.status);
         void this.finishRace();
@@ -1683,14 +1568,6 @@ export class CareerMode implements Mode {
     if (!this.race || !p || this.race.phase === 'finished') return null;
     return p.sim.x < 5.5 ? TREE_X_M : null;
   }
-}
-
-/** Aspiration and preparation level of a rival, read from its resolved build (never from a label). */
-function rivalNote(parts: readonly string[], car: CarConfig, base: CarConfig): string {
-  const turbo = car.engine.induction === 'turbo';
-  const aspiration = !turbo ? 'aspirado' : car.engine.turbo?.layout === 'parallel-twin' ? 'biturbo' : 'turbo';
-  const stage = parts.includes('ecu-stage3') ? 'Stage 3' : parts.includes('ecu-stage2') ? 'Stage 2' : parts.includes('ecu-stage1') ? 'Stage 1' : parts.length ? 'preparado' : 'de fábrica';
-  return `${aspiration} · ${stage}${turbo && base.engine.induction !== 'turbo' ? ' (turbo não original)' : ''}`;
 }
 
 function portraitEl(id: Parameters<typeof portraitSvg>[0]): HTMLElement {

@@ -1,8 +1,6 @@
 import type { CarConfig } from '../../../data/schema';
 import { LIMITER_SAG_RPM, type OverrevSpec } from '../../../physics/engine/EngineOverrevFailure';
-import { findCampaignCar } from '../../../data/cars/campaign';
-import { oilCheck } from './LubricationModel';
-import { findPart, type OilSystemPart } from './parts';
+import { findPart } from './parts';
 
 /**
  * Engine reliability of a build: three speeds that are kept apart on purpose.
@@ -115,17 +113,6 @@ export function reliabilityLimits(hw: CarConfig, partIds: readonly string[]): Re
       add += h.safeRpmAdd;
       endurance *= h.enduranceScale;
     }
-    // Chapter 3 hardware declares its own mechanical headroom (pistons, rods, balanced crank)
-    if (p?.reliability) {
-      add += p.reliability.safeRpmAdd ?? 0;
-      endurance *= p.reliability.enduranceScale ?? 1;
-    }
-  }
-  // lubrication: a build whose torque and heat outgrew the factory oil system lasts less at the limit
-  const base = hw.engine.family ? findCampaignCar(hw.id) : undefined;
-  if (base && base.engine.family === hw.engine.family) {
-    const oil = partIds.map(findPart).find((p): p is OilSystemPart => p?.category === 'oil-system');
-    endurance *= oilCheck(base, hw, oil).enduranceScale;
   }
   const cut = hw.engine.revLimitRpm;
   const recommended = cut + LIMITER_MARGIN_RPM + add;

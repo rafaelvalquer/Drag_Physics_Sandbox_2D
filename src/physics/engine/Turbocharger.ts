@@ -31,8 +31,6 @@ export class Turbocharger {
   bovFlow = 0; // 0..1
   private bovOpen = false;
   private readonly overspeedFactor = 1.3;
-  /** Fraction of the boost target the ECU allows now (boost by gear; 1 = the full target). */
-  boostLimit = 1;
 
   constructor(
     public cfg: TurboConfig,
@@ -101,8 +99,6 @@ export class Turbocharger {
       this.shaftB = firstOrder(this.shaftB, targetB, dt, tauB);
       compressorBoost = 0.5 * potential * (this.shaft * this.shaft + this.shaftB * this.shaftB);
     }
-    // boost by gear: the wastegate opens earlier, so the compressor cannot hold more than the limit
-    compressorBoost = Math.min(compressorBoost, maxBoost * this.boostLimit);
     // BOV logic: opens when throttle snaps shut with boost present, closes when throttle reopens.
     if (cfg.bovEnabled) {
       if (!this.bovOpen && throttleOpening < 0.12 && this.boostPa > 0.25e5) this.bovOpen = true;

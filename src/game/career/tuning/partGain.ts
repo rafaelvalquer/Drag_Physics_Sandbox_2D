@@ -3,8 +3,6 @@ import { runAccelerationTest } from '../../race/accelerationTest';
 import { resolveBuild, type ResolverVersion } from './BuildResolver';
 import { findPart, type PartDef } from './parts';
 import { reliabilityLimits } from './EngineReliability';
-import { presetsFor } from './ProjectRequirements';
-import { fuelCapacity, BSFC_KG_KWH } from './FuelSystemModel';
 
 /**
  * Workshop audit: the gain of one part on one car, measured with the real physics (factory-style
@@ -30,24 +28,6 @@ export interface PartGain {
   /** Launch speed of the clutch logic before / after (rpm). */
   launchRpmBefore: number;
   launchRpmAfter: number;
-  /** Seconds the engine lasts at its mechanical limit (EngineReliability) before / after. */
-  enduranceBefore: number;
-  enduranceAfter: number;
-  /** Peak power the fuel supply sustains on a boosted engine (cv) before / after. */
-  fuelSupportBeforeCv: number;
-  fuelSupportAfterCv: number;
-}
-
-/** Peak power (cv) the fuel supply of `ids` sustains on `car` with a boosted mixture. */
-function fuelSupportCv(car: CarConfig, ids: readonly string[]): number {
-  const parts = ids.map(findPart);
-  // the link a part does not touch is assumed generous, so each part is measured on its own link
-  const open = { injectorScale: 3, pumpScale: 3, hpPumpScale: 3 } as never;
-  const cap = fuelCapacity(car, {
-    injectors: (parts.find((p) => p?.category === 'fuel-system') as never) ?? open,
-    hpPump: (parts.find((p) => p?.category === 'fuel-hp-pump') as never) ?? open,
-  });
-  return (cap.capacityGs * 3.6) / BSFC_KG_KWH.boosted / 0.73549875;
 }
 
 /** Smallest supporting builds tried in order until the part fits. */
@@ -93,23 +73,8 @@ function measure(key: string, car: CarConfig, track: TrackConfig): { et: number;
 }
 
 /** Gain of `part` on `car`, or null when no supporting build accepts it (incompatible). */
-/**
- * Chapter 3 supporting builds: the parts of each project preset of the car (and its prefixes), so a
- * part is measured inside the project it belongs to (a fuel system on top of the turbo kit it feeds).
- */
-function chapter3Contexts(car: CarConfig, version: ResolverVersion): string[][] {
-  if (version !== 2) return [];
-  const out: string[][] = [];
-  for (const p of presetsFor(car)) for (let n = p.parts.length; n >= 1; n--) out.push(p.parts.slice(0, n));
-  return out;
-}
-
 export function measurePartGain(car: CarConfig, part: PartDef, track: TrackConfig, version: ResolverVersion): PartGain | null {
-  // Chapter 3 hardware is measured inside the project it belongs to: the first supporting build that
-  // shows a gain counts (a lubrication system only gains where the oil demand outgrew the factory one)
-  const everyContext = part.chapter === 3;
-  let first: PartGain | null = null;
-  for (const ctx0 of [...CONTEXTS, ...chapter3Contexts(car, version)]) {
+  for (const ctx0 of CONTEXTS) {
     const ctx = ctx0.filter((id) => findPart(id)?.category !== part.category);
     const withPart = build(car, [...ctx, part.id], version);
     if (!withPart) continue;
@@ -119,7 +84,7 @@ export function measurePartGain(car: CarConfig, part: PartDef, track: TrackConfi
     if (!base) continue;
     const a = measure(base.key, base.car, track);
     const b = measure(withPart.key, withPart.car, track);
-    const g: PartGain = {
+    return {
       partId: part.id,
       carId: car.id,
       context: baseIds,
@@ -135,16 +100,9 @@ export function measurePartGain(car: CarConfig, part: PartDef, track: TrackConfi
       safeRpmAfter: reliabilityLimits(base.car, [...ctx, part.id]).recommendedSafeRpm,
       launchRpmBefore: base.car.transmission.clutch.launchRpm,
       launchRpmAfter: withPart.car.transmission.clutch.launchRpm,
-      enduranceBefore: reliabilityLimits(base.car, baseIds).enduranceS,
-      enduranceAfter: reliabilityLimits(base.car, [...ctx, part.id]).enduranceS,
-      fuelSupportBeforeCv: fuelSupportCv(car, baseIds),
-      fuelSupportAfterCv: fuelSupportCv(car, [...ctx, part.id]),
     };
-    if (!everyContext) return g;
-    first ??= g;
-    if (isGain(g)) return g;
   }
-  return first;
+  return null;
 }
 
 /** Tolerances of the gain check (s, cv). NOT_WORSE_S is the run-to-run resolution of the test. */
@@ -154,17 +112,6 @@ export const GAIN_CV = 0.3;
 export const GAIN_CLUTCH_NM = 1;
 export const GAIN_SAFE_RPM = 100;
 export const GAIN_LAUNCH_RPM = 100;
-export const GAIN_ENDURANCE_S = 0.1;
-export const GAIN_FUEL_CV = 5;
-/**
- * Parts whose benefit the straight-line test cannot show, with the reason (printed by the report).
- * forged-v6-turbo: lowers compression (slower as a bolt-on); it exists to take boost and lasts longer.
- * boost-by-gear: trades low-gear boost for traction; the test track shows the lost torque, not the spin avoided.
- */
-export const GAIN_EXEMPT: Readonly<Record<string, string>> = {
-  'forged-v6-turbo': 'peça de durabilidade: baixa a compressão para aceitar pressão; vida no limite +50 %',
-  'boost-by-gear': 'troca pressão nas marchas baixas por tração; a pista de testes não mede a patinação evitada',
-};
 
 /**
  * A part gains when it makes the car quicker over 402 m, or when it raises one of the car's
@@ -178,8 +125,6 @@ export function isGain(g: PartGain): boolean {
     g.cvAfter - g.cvBefore >= GAIN_CV ||
     g.clutchAfterNm - g.clutchBeforeNm >= GAIN_CLUTCH_NM ||
     g.safeRpmAfter - g.safeRpmBefore >= GAIN_SAFE_RPM ||
-    g.launchRpmAfter - g.launchRpmBefore >= GAIN_LAUNCH_RPM ||
-    g.enduranceAfter - g.enduranceBefore >= GAIN_ENDURANCE_S ||
-    g.fuelSupportAfterCv - g.fuelSupportBeforeCv >= GAIN_FUEL_CV
+    g.launchRpmAfter - g.launchRpmBefore >= GAIN_LAUNCH_RPM
   );
 }

@@ -4,7 +4,7 @@ import { EngineModel, WILLANS_OFFSET } from '../../../physics/engine/EngineModel
 import { engineGeometry } from '../../../physics/engine/EngineGeometry';
 import { extendCurve, ottoEfficiency, powerPeakRpm } from './breathingModel';
 import type { EngineFamilyDef } from './chapter2Parts';
-import type { BoostControlPart, EcuPart, ExhaustPart, FilterPart, IntercoolerPart, MechanicalMods, PistonPart, TurboManifoldPart, TurboUpgradePart } from './parts';
+import type { BoostControlPart, EcuPart, ExhaustPart, FilterPart, IntercoolerPart, MechanicalMods, PistonPart, TurboUpgradePart } from './parts';
 
 /**
  * Tuning of a FACTORY turbocharged engine (resolver v2). The stock WOT curve is the brake torque
@@ -47,8 +47,6 @@ export interface FactoryTurboParts {
   intercooler?: IntercoolerPart;
   boostControl?: BoostControlPart;
   pistons?: PistonPart;
-  /** High-flow exhaust manifold: less back pressure ahead of the turbine, faster filling. */
-  manifold?: TurboManifoldPart;
   /** Boost target set on the dyno (programmable ECU only), bar gauge. */
   boostBar?: number;
   /** Generic car hardware (cooling): internal friction and knock margin. */
@@ -94,7 +92,7 @@ export function applyFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboP
     ...t0,
     maxBoostBar: target,
     fullBoostFlowFraction: t0.fullBoostFlowFraction * (up?.spoolFlowScale ?? 1),
-    spoolTimeS: t0.spoolTimeS * (up?.spoolTimeScale ?? 1) * (parts.boostControl?.spoolTimeScale ?? 1) * (parts.exhaust?.spoolTimeScale ?? 1) * (parts.manifold?.spoolTimeScale ?? 1),
+    spoolTimeS: t0.spoolTimeS * (up?.spoolTimeScale ?? 1) * (parts.boostControl?.spoolTimeScale ?? 1) * (parts.exhaust?.spoolTimeScale ?? 1),
     compressorBlades: up?.compressorBlades ?? t0.compressorBlades,
   };
   const icEff = parts.intercooler?.effectiveness ?? FACTORY_INTERCOOLER;
@@ -112,7 +110,7 @@ export function applyFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboP
   const revLimit = stock.revLimitRpm + revAdd;
   // a free-flow part never restricts more than the factory part it replaces
   const filterDrop = Math.min(b0.airFilterDropKPa, parts.filter?.airFilterDropKPa ?? b0.airFilterDropKPa);
-  const backRef = Math.max(0.5, Math.min(b0.exhaustBackPressureKPa, parts.exhaust?.backPressureKPa ?? b0.exhaustBackPressureKPa) - (up?.backPressureReductionKPa ?? 0) - (parts.manifold?.backPressureReductionKPa ?? 0));
+  const backRef = Math.max(0.5, Math.min(b0.exhaustBackPressureKPa, parts.exhaust?.backPressureKPa ?? b0.exhaustBackPressureKPa) - (up?.backPressureReductionKPa ?? 0));
 
   // ---- stock operating points (same EngineModel the race uses) ----
   const curveTop = Math.max(stock.torqueCurve.rpm[stock.torqueCurve.rpm.length - 1]!, revLimit + 300);

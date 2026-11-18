@@ -20,10 +20,8 @@ import {
   type OwnedCar,
 } from './CareerState';
 import { resolveBuild, type ResolverVersion } from './tuning/BuildResolver';
-import { findPart, type PartCategory, type PartDef, type UnlockId } from './tuning/parts';
-import { familyOf, incompatibility } from './tuning/BuildResolverV2';
-import { effectiveInduction } from './tuning/ConvertedTurboModel';
-import { presetsFor, PROJECT_CATEGORIES, type ProjectPreset } from './tuning/ProjectRequirements';
+import { findPart, type PartCategory, type UnlockId } from './tuning/parts';
+import { familyOf } from './tuning/BuildResolverV2';
 import type { BuildTune } from './tuning/buildCommon';
 import { droppedNotice, reconcileTune, tuningCapabilities, validateTune, type TuneContext, type TuningCapabilities } from './tuning/TuningCapabilities';
 
@@ -248,110 +246,6 @@ export class CareerController {
   }
 
   /**
-   * Plans a bundle of parts on a car: the parts list after installing all of them (each replaces the
-   * part of its slot), the parts that leave (replaced ones, plus the installed parts the new hardware
-   * no longer accepts when `dropIncompatible` is set: an NA manifold when a turbo kit goes in) and what
-   * it costs (parts already installed or in this car's stock are free). Pure: nothing is saved.
-   */
-  planBundle(car: OwnedCar, partIds: readonly string[], opts: { dropIncompatible?: boolean; replaceProject?: boolean } = {}): { parts: string[]; removed: string[]; fromStock: string[]; toBuy: string[]; cost: number } | { error: string } {
-    const s = this.save;
-    const base = findCampaignCar(car.baseCarId);
-    if (!s || !base) return { error: 'nenhum carro ativo' };
-    let parts = [...car.installedParts];
-    const removed = new Set<string>();
-    if (opts.replaceProject) {
-      // a project preset IS the engine project: what it does not carry leaves (to the stock)
-      const keep = new Set(partIds);
-      for (const id of car.installedParts) if (!keep.has(id) && PROJECT_CATEGORIES.has(findPart(id)?.category ?? '')) removed.add(id);
-      parts = parts.filter((id) => !removed.has(id));
-    }
-    for (const id of new Set(partIds)) {
-      const p = findPart(id);
-      if (!p) return { error: `peça desconhecida: ${id}` };
-      if (parts.includes(id)) continue;
-      const w = CareerController.withPart(parts, id);
-      if (w.replaced) removed.add(w.replaced);
-      parts = w.parts;
-    }
-    if (opts.dropIncompatible) {
-      const keep = new Set(partIds);
-      for (let pass = 0; pass < 4; pass++) {
-        const hw = parts.map(findPart).filter((p): p is PartDef => !!p);
-        const induction = effectiveInduction(base, hw);
-        const out = hw.filter((p) => !keep.has(p.id) && incompatibility(base, p, induction));
-        if (!out.length) break;
-        for (const p of out) removed.add(p.id);
-        parts = parts.filter((id) => !out.some((p) => p.id === id));
-      }
-    }
-    const fromStock: string[] = [];
-    const toBuy: string[] = [];
-    for (const id of parts) {
-      if (car.installedParts.includes(id)) continue;
-      if (s.inventoryPartIds.includes(inventoryEntry(id, car.baseCarId))) fromStock.push(id);
-      else toBuy.push(id);
-    }
-    for (const id of toBuy) {
-      const p = findPart(id)!;
-      if (!isPartUnlocked(s, p, familyOf(base))) return { error: `${p.name} ainda não está liberada` };
-    }
-    const cost = toBuy.reduce((sum, id) => sum + findPart(id)!.price, 0);
-    return { parts, removed: [...removed].filter((id) => !parts.includes(id)), fromStock, toBuy, cost };
-  }
-
-  /**
-   * Atomic purchase of a whole project: every part is checked together (the build only has to be
-   * valid with ALL of them, so a part that needs another one can be bought in the same transaction),
-   * the credits are debited once, stock parts are used for free and the parts that leave go to stock.
-   * Either everything is delivered or nothing changes.
-   */
-  async buyBundle(partIds: readonly string[], opts: { dropIncompatible?: boolean; replaceProject?: boolean } = {}): Promise<OpResult> {
-    const s = this.save;
-    const car = this.activeCar;
-    if (!s || !car) return fail('nenhum carro ativo');
-    const plan = this.planBundle(car, partIds, opts);
-    if ('error' in plan) return fail(plan.error);
-    if (s.credits < plan.cost) return fail(`créditos insuficientes: o projeto custa ${plan.cost.toLocaleString('pt-BR')} CR, você tem ${s.credits.toLocaleString('pt-BR')} CR`);
-    const rt = this.reconciledTune(car, plan.parts);
-    const chk = this.checkBuild(car, plan.parts, rt.tune);
-    if (!chk.ok) return fail(`incompatível: ${chk.error}`);
-    try {
-      const v = await this.commit((n) => {
-        if (n.credits < plan.cost) throw new Error('créditos insuficientes');
-        const c = n.ownedCars.find((x) => x.id === car.id)!;
-        n.credits -= plan.cost;
-        for (const id of plan.fromStock) n.inventoryPartIds.splice(n.inventoryPartIds.indexOf(inventoryEntry(id, c.baseCarId)), 1);
-        for (const id of plan.removed) n.inventoryPartIds.push(inventoryEntry(id, c.baseCarId));
-        c.installedParts = plan.parts;
-        c.tune = rt.tune;
-        c.buildVersion = buildVersionFor(c, plan.parts);
-      });
-      const moved = plan.removed.length ? ` ${plan.removed.map((id) => findPart(id)?.name ?? id).join(', ')} ${plan.removed.length === 1 ? 'foi' : 'foram'} para o estoque.` : '';
-      return { ok: true, value: v, notice: [rt.notice, moved.trim()].filter(Boolean).join(' ') || undefined };
-    } catch (e) {
-      return fail((e as Error).message);
-    }
-  }
-
-  /** Project presets of the active car (see ProjectRequirements.ts). */
-  presetsOf(car: OwnedCar | null = this.activeCar): ProjectPreset[] {
-    const base = car ? findCampaignCar(car.baseCarId) : undefined;
-    return base ? presetsFor(base) : [];
-  }
-
-  /**
-   * Installs a project preset. Changing school (aspirated <-> turbo) puts the parts the new hardware
-   * does not take in the stock instead of losing them, and installing the school back reuses them for free.
-   */
-  async applyPreset(presetId: string): Promise<OpResult> {
-    const car = this.activeCar;
-    if (!this.save || !car) return fail('nenhum carro ativo');
-    const preset = this.presetsOf(car).find((p) => p.id === presetId);
-    if (!preset) return fail('projeto desconhecido para este carro');
-    return this.buyBundle(preset.parts, { dropIncompatible: true, replaceProject: true });
-  }
-
-  /**
    * Puts the factory part back in one slot (category), or in every slot when `category` is omitted.
    * The factory part is free and always available: it is simply the absence of a modification, so
    * the resolver returns the factory physics for that slot. The removed parts go to the stock of
@@ -542,13 +436,6 @@ export class CareerController {
     const car = this.activeCar;
     if (!car || !/^#[0-9a-fA-F]{6}$/.test(color)) return fail('cor inválida');
     return { ok: true, value: await this.commit((n) => void (n.ownedCars.find((x) => x.id === car.id)!.paint.color = color)) };
-  }
-
-  /** Livery accent colour: purely visual, the physics never reads it. */
-  async setAccent(color: string): Promise<OpResult> {
-    const car = this.activeCar;
-    if (!car || !/^#[0-9a-fA-F]{6}$/.test(color)) return fail('cor inválida');
-    return { ok: true, value: await this.commit((n) => void (n.ownedCars.find((x) => x.id === car.id)!.paint.accent = color)) };
   }
 
   async markScenesSeen(ids: string[]): Promise<void> {

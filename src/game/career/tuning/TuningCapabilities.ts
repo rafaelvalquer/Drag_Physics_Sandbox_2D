@@ -1,6 +1,5 @@
 import { validateCar, type CarConfig } from '../../../data/schema';
 import { boostRangeForParts, resolveHardware, type ResolverVersion } from './BuildResolver';
-import { isConversionKit } from './ConvertedTurboModel';
 import { curvePeakCv } from './breathingModel';
 import {
   deepFreeze,
@@ -90,15 +89,12 @@ export const FINAL_DRIVE_OPTIONS: readonly { value: FinalDrivePreset; label: str
   { value: 'long', label: 'Longa (−5 %)' },
 ];
 
-/** ECUs that move the ignition cut (programmable, or an aspirated remap). */
+/** ECUs that move the ignition cut (programmable, or the NA remap). */
 const REV_ECUS = new Set(['ecu-programmable', 'ecu-stage1-na', 'ecu-street', 'ecu-race']);
-const movesCut = (p: PartDef): boolean => REV_ECUS.has(p.id) || (p.category === 'ecu' && (p.level === 'programmable' || p.compat?.induction === 'NA'));
-/** Programmable central (boost and cut are set on the dyno). */
-const isProgrammable = (p: PartDef): p is EcuPart => p.category === 'ecu' && p.level === 'programmable';
 const CLASSIC_THROTTLES = new Set(['throttle-rework', 'throttle-large']);
-const GEARBOX_TCU = new Set(['dct-upgrade', 'at-upgrade', 'dct-upgrade-s2', 'at-upgrade-s2']);
+const GEARBOX_TCU = new Set(['dct-upgrade', 'at-upgrade']);
 /** Parts whose effect is applied by the overlay (no resolver knows them). */
-export const OVERLAY_PARTS = new Set(['valve-springs', 'valve-springs-v6-comp', 'launch-control']);
+export const OVERLAY_PARTS = new Set(['valve-springs', 'launch-control']);
 
 const off = (reason: string, def = 0): RangeControl => ({ enabled: false, reason, min: def, max: def, step: 1, default: def });
 const round = (v: number, step: number): number => Math.round(v / step) * step;
@@ -127,18 +123,10 @@ export function tuningCapabilities(base: CarConfig, partIds: readonly string[], 
 
   // ---- boost ----
   let boost: RangeControl;
-  const programmable = parts.find(isProgrammable);
+  const programmable = parts.find((p) => p.id === 'ecu-programmable') as EcuPart | undefined;
   const factoryBoost = base.engine.induction === 'turbo' ? base.engine.turbo?.maxBoostBar : undefined;
   const classicRange = boostRangeForParts(partIds.filter((id) => (findPart(id)?.since ?? 1) === 1));
-  const conversion = parts.find(isConversionKit);
-  if (conversion && modern) {
-    // aspirated engine converted with a workshop kit: the boost is set in a programmable central
-    // within the range the kit's turbine, compressor and wastegate take
-    const def = conversion.turbo.maxBoostBar;
-    boost = programmable
-      ? { enabled: true, reason: null, min: conversion.boostRangeBar[0], max: conversion.boostRangeBar[1], step: 0.05, default: round(def, 0.01) }
-      : off('Exige ECU programável (Competition).', def);
-  } else if (factoryBoost !== undefined && modern) {
+  if (factoryBoost !== undefined && modern) {
     if (!programmable) boost = off('Exige ECU programável.', factoryBoost);
     else {
       const [lo, hi] = programmable.boostRangeAddBar ?? [0.1, 0.8];
@@ -158,7 +146,7 @@ export function tuningCapabilities(base: CarConfig, partIds: readonly string[], 
   else boost = off('Exige kit turbo compatível.');
 
   // ---- rev limit ----
-  const revLimit: RangeControl = has(movesCut)
+  const revLimit: RangeControl = has((p) => REV_ECUS.has(p.id))
     ? { enabled: true, reason: null, min: round(Math.max(e.idleRpm * 3, e.revLimitRpm - 600), 50), max: Math.floor(limits.maxSafeRpm / 50) * 50, step: 50, default: e.revLimitRpm }
     : off('Exige ECU programável.', e.revLimitRpm);
 
@@ -278,7 +266,7 @@ function withOverlayParts(hw: CarConfig, partIds: readonly string[]): CarConfig 
   if (!partIds.some((id) => OVERLAY_PARTS.has(id))) return hw;
   const car = structuredClone(hw);
   const limits = reliabilityLimits(hw, partIds);
-  if (partIds.some((id) => id === 'valve-springs' || id === 'valve-springs-v6-comp')) car.engine.maxSafeRpm = Math.max(car.engine.maxSafeRpm, limits.maxSafeRpm);
+  if (partIds.includes('valve-springs')) car.engine.maxSafeRpm = Math.max(car.engine.maxSafeRpm, limits.maxSafeRpm);
   const lc = findPart('launch-control');
   if (partIds.includes('launch-control') && lc && 'launchRpmAdd' in lc)
     car.transmission.clutch.launchRpm = Math.min(car.transmission.clutch.launchRpm + (lc.launchRpmAdd ?? 0), car.engine.redlineRpm - 800);
