@@ -54,7 +54,7 @@ Uma peça nunca soma potência: ela muda um parâmetro físico e a curva nova sa
 | Embreagem reforçada | 900 CR | capacidade ×1,5, engate ×1,3, largada +100 rpm, inércia do câmbio −15 % e do motor −4 % | noite 4 |
 | Diferencial alternativo | 1200 CR | relação final escolhida para o carro entre ×0,97 e ×1,12; eficiência +1 ponto | noite 4 |
 | Pneus semislick | 1600 CR | μ 1,32 (no mínimo +16 % sobre o original já na largada, frio), roda forjada −0,03 kg·m² | noite 5 |
-| Kit turbo básico | 4000 CR | turbina 0,6 bar (0,4–1,0 nos preparadores), intercooler, +18 kg | noite 6 |
+| Kit turbo básico | 4000 CR | turbina 0,6 bar (0,4–1,0 nos preparadores), intercooler, +18 kg | noite 4 |
 
 Cada item da oficina tem também a **peça original de fábrica**: grátis, sempre disponível. Instalar a original
 retira a modificação daquele item (o resolvedor devolve exatamente a física de fábrica dele) e manda a peça
@@ -114,8 +114,8 @@ teste `tests/unit/career/parts-gain.test.ts` confere uma amostra.
 
 ## Economia e progressão
 
-- Começo: 4.500 CR para comprar o primeiro carro — Gol GTS 1988 (800 CR), Chevette SL 1988 (1.400 CR) ou Uno
-  Mille 1995 (2.200 CR). O resto vai para a oficina.
+- Começo: 4.500 CR para comprar o primeiro carro — Uno Mille 1995 (800 CR), Chevette SL 1988 (1.400 CR)
+  ou Gol GTS 1988 (2.200 CR). O resto vai para a oficina.
 - Primeira vitória de uma noite: prêmio completo e a reputação da noite, uma única vez (`<evento>:first`).
 - Revanche vencida: 35 % do prêmio e 1 de reputação, até 5 vezes por noite.
 - Derrota: 10 % do prêmio, no máximo 100 CR. Queima de largada ou DNF: nada.
@@ -128,9 +128,9 @@ teste `tests/unit/career/parts-gain.test.ts` confere uma amostra.
 | 1. Primeira Noite | Lara "Faísca" | Celta 1.0 2003 original | 201 m | 300 | 10 | oficina, filtro, escape |
 | 2. O Pequeno Valente | Eduardo "Duda Mille" | Uno Mille 1995 original | 201 m | 400 | 15 | coletor, pneus esportivos |
 | 3. Acerto de Contas | Roberto "Beto Relógio" | Corsa GL 1996 (filtro, escape) | 201 m | 600 | 20 | comando, transmissão |
-| 4. Tração Traseira | Fernando "Nando" | Chevette 1988 (filtro, escape, coletor, pneus) | 402 m | 800 | 25 | embreagem, diferencial |
-| 5. Respeita o AP | Leonardo "Léo AP" | Gol GTS 1988 (filtro, escape, pneus) | 402 m | 1.000 | 30 | semislick, preparadores |
-| 6. O Aspirado | Paula "Giro" | Kadett SL 1992 (aspirado completo) | 402 m | 1.300 | 40 | turbo, desafio final |
+| 4. Tração Traseira | Fernando "Nando" | Chevette 1988 (filtro, escape, coletor, pneus) | 402 m | 800 | 25 | embreagem, diferencial, kit turbo, preparadores |
+| 5. Respeita o AP | Leonardo "Léo AP" | Gol GTS 1988 (filtro, escape, pneus) | 402 m | 1.000 | 30 | pneus semi-slick |
+| 6. O Aspirado | Paula "Giro" | Kadett SL 1992 (aspirado completo) | 402 m | 1.300 | 40 | desafio final |
 | 7. Rei da Madrugada | Marcos | Saveiro GL 1994 turbo (`saveiro-marcos-chapter1`) | 402 m | 2.500 | 60 | — |
 
 A dificuldade de um rival vem só do carro, das peças (resolvidas pelo mesmo `BuildResolver`) e do piloto: tempo de

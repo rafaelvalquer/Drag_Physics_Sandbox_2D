@@ -32,6 +32,7 @@ const doMatrix = !args.has('--campaign');
 const doCampaign = !args.has('--matrix');
 const testTrack = TRACKS.find((t) => t.id === 'test-track')!;
 const SKILLS: AiLevel[] = ['beginner', 'intermediate', 'advanced'];
+const GOL_PRICE = STARTER_CARS.find((c) => c.baseCarId === 'vw-gol-gts-1988')!.price;
 
 /** Build levels and the purchase priority of each starter (what a sensible player buys first). */
 const LEVELS: Record<string, { basic: string[]; advanced: string[]; tune: BuildTune; priority: string[] }> = {
@@ -139,8 +140,8 @@ if (doCampaign) {
         const lvNow = LEVELS[baseId]!;
         const pending = lvNow.priority.filter((id) => !bought.has(id) && isPartUnlocked(save, findPart(id)!));
         // stuck with every unlocked part already on the car: buy the Gol from the classified ads
-        if (streak >= 3 && pending.length === 0 && baseId !== 'vw-gol-gts-1988' && save.credits >= 800) {
-          save.credits -= 800;
+        if (streak >= 3 && pending.length === 0 && baseId !== 'vw-gol-gts-1988' && save.credits >= GOL_PRICE) {
+          save.credits -= GOL_PRICE;
           baseId = 'vw-gol-gts-1988';
           installed = [];
           bought = new Set();

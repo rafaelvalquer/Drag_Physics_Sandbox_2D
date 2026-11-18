@@ -250,7 +250,7 @@ const CH1: readonly Omit<CareerEventDef, 'chapter'>[] = [
     distance: 'quarter',
     rewardCr: 800,
     reputation: 25,
-    unlocks: ['part-clutch', 'part-differential'],
+    unlocks: ['part-clutch', 'part-differential', 'part-turbo', 'engine-tuners'],
   },
   {
     id: 'e5-respeita-o-ap',
@@ -262,7 +262,7 @@ const CH1: readonly Omit<CareerEventDef, 'chapter'>[] = [
     distance: 'quarter',
     rewardCr: 1000,
     reputation: 30,
-    unlocks: ['part-tires-semislick', 'engine-tuners'],
+    unlocks: ['part-tires-semislick'],
   },
   {
     id: 'e6-o-aspirado',
@@ -274,7 +274,7 @@ const CH1: readonly Omit<CareerEventDef, 'chapter'>[] = [
     distance: 'quarter',
     rewardCr: 1300,
     reputation: 40,
-    unlocks: ['part-turbo', 'final-challenge'],
+    unlocks: ['final-challenge'],
   },
   {
     id: 'e7-rei-da-madrugada',

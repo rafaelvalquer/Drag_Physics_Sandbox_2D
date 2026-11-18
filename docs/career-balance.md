@@ -1,5 +1,14 @@
 # Balanceamento do Capítulo 1
 
+> **Relatório histórico (antes da mudança de 18/11/2026).** Esta matriz reflete os preços antigos
+> (Gol 800 CR, Chevette 1.400 CR, Uno 2.200 CR) e o kit turbo liberado somente após a noite 6.
+> Na configuração atual, os carros iniciais custam Uno 800 CR, Chevette 1.400 CR e Gol 2.200 CR;
+> o kit turbo e os preparadores são liberados após vencer a noite 4.
+> Os tempos físicos dos carros permanecem os mesmos sem alterações no motor, mas a campanha
+> simulada e suas conclusões sobre progresso/grind precisam ser recalculadas com
+> `npx tsx scripts/balance-career.ts` antes de serem tratadas como valores atuais.
+
+
 Saída de `npx tsx scripts/balance-career.ts` (sementes fixas: o resultado é repetível). Pilotos são perfis do
 DragAI (`beginner`, `intermediate`, `advanced`); rivais usam o perfil próprio de cada um. Tempo total = RT + ET.
 Na física do jogo o RT inclui o rollout até sair do feixe (≈ 0,5 s), por isso os tempos de reação ficam perto de

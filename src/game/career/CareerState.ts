@@ -21,9 +21,9 @@ export const START_CREDITS = 4500;
 export const MAX_RESULTS = 120;
 
 export const STARTER_CARS = [
-  { baseCarId: 'vw-gol-gts-1988', price: 800 },
+  { baseCarId: 'fiat-uno-mille-1995', price: 800 },
   { baseCarId: 'gm-chevette-sl-1988', price: 1400 },
-  { baseCarId: 'fiat-uno-mille-1995', price: 2200 },
+  { baseCarId: 'vw-gol-gts-1988', price: 2200 },
 ] as const;
 
 /** Most cars a garage holds. */

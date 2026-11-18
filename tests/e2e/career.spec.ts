@@ -72,7 +72,7 @@ test('campanha: escolha do carro, introdução, corrida visível, oficina, dinam
   const intro = await readDialogue(page);
   expect(intro.join(' ')).toContain('aprende a colocar essa potência no chão');
   await expect(page.getByTestId('career-garage-screen')).toBeVisible();
-  expect(await credits(page)).toBe(4500 - 800);
+  expect(await credits(page)).toBe(4500 - 2200);
   expect(await mode<string[]>(page, 'm.controller.save.seenStorySceneIds')).toContain('intro');
   await shot(page, '04-garagem');
 

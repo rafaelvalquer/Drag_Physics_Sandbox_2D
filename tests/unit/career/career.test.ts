@@ -5,7 +5,7 @@ import { findCampaignCar } from '../../../src/data/cars/campaign';
 import { CAR_VW_GOL_GTS_1988 } from '../../../src/data/cars/vwGolGts1988';
 import { EVENTS, RIVALS, findEvent } from '../../../src/game/career/CareerEvents';
 import { CareerController, inventoryEntry } from '../../../src/game/career/CareerController';
-import { eventStatus, isPartUnlocked, nextEvent, partStatus, stockStatus } from '../../../src/game/career/CareerProgression';
+import { canTuneBoost, eventStatus, isPartUnlocked, nextEvent, partStatus, stockStatus } from '../../../src/game/career/CareerProgression';
 import { CareerConflictError, CareerRepository } from '../../../src/game/career/CareerRepository';
 import { evaluateRace } from '../../../src/game/career/CareerResultEvaluator';
 import { CHAPTER_REPUTATION_CAP } from '../../../src/game/career/CareerRewards';
@@ -69,7 +69,9 @@ describe('chapter data', () => {
       ['Rei da Madrugada', 2500, 'quarter', 'avenida-norte'],
     ]);
     expect(EVENTS[0]!.unlocks).toEqual(['workshop-basic', 'part-filter', 'part-exhaust']);
-    expect(EVENTS[5]!.unlocks).toEqual(['part-turbo', 'final-challenge']);
+    expect(EVENTS[3]!.unlocks).toEqual(['part-clutch', 'part-differential', 'part-turbo', 'engine-tuners']);
+    expect(EVENTS[4]!.unlocks).toEqual(['part-tires-semislick']);
+    expect(EVENTS[5]!.unlocks).toEqual(['final-challenge']);
   });
 
   it('rivals are real cars built by the same resolver; Léo drives the existing Gol', () => {
@@ -94,6 +96,14 @@ describe('chapter data', () => {
 });
 
 describe('new career and starter cars', () => {
+  it('lists the starter cars from least to most expensive', () => {
+    expect(STARTER_CARS.map((s) => [s.baseCarId, s.price])).toEqual([
+      ['fiat-uno-mille-1995', 800],
+      ['gm-chevette-sl-1988', 1400],
+      ['vw-gol-gts-1988', 2200],
+    ]);
+  });
+
   it.each(STARTER_CARS.map((s) => [s.baseCarId, s.price]))('%s costs %i CR and comes in factory configuration', async (id, price) => {
     const c = await career(id as string);
     expect(c.save!.credits).toBe(START_CREDITS - (price as number));
@@ -111,6 +121,24 @@ describe('new career and starter cars', () => {
 });
 
 describe('workshop transactions', () => {
+  it('unlocks turbo and its Dyno tuning after race 4, allowing a Chevette turbo build', async () => {
+    const chevette = await career('gm-chevette-sl-1988');
+    await winUpTo(chevette, 3);
+    expect(isPartUnlocked(chevette.save!, findPart('turbo-basic')!)).toBe(false);
+    expect(canTuneBoost(chevette.save!)).toBe(false);
+    const win4 = await chevette.recordRace(result('e4-tracao-traseira', 'win'));
+    expect(win4.ok).toBe(true);
+    expect(isPartUnlocked(chevette.save!, findPart('turbo-basic')!)).toBe(true);
+    expect(isPartUnlocked(chevette.save!, findPart('clutch-reinforced')!)).toBe(true);
+    expect(canTuneBoost(chevette.save!)).toBe(true);
+    expect(isPartUnlocked(chevette.save!, findPart('tires-semislick')!)).toBe(false);
+    expect((await chevette.buyPart('clutch-reinforced')).ok).toBe(true);
+    expect((await chevette.buyPart('turbo-basic')).ok).toBe(true);
+    const prepared = ownedCarBuild(chevette.activeCar!);
+    expect(prepared.ok).toBe(true);
+    if (prepared.ok) expect(prepared.car.engine.induction).toBe('turbo');
+  });
+
   let c: CareerController;
   beforeEach(async () => {
     c = await career();
@@ -261,7 +289,7 @@ describe('economy and idempotency', () => {
     await winUpTo(c, 5);
     expect(eventStatus(c.save!, EVENTS[6]!)).toBe('locked');
     const w6 = await c.recordRace(result('e6-o-aspirado', 'win'));
-    expect(w6.ok && w6.value.newUnlocks).toEqual(['part-turbo', 'final-challenge']);
+    expect(w6.ok && w6.value.newUnlocks).toEqual(['final-challenge']);
     expect(eventStatus(c.save!, EVENTS[6]!)).toBe('final');
     const fin = await c.recordRace(result('e7-rei-da-madrugada', 'win'));
     expect(fin.ok && fin.value.chapterCompleted).toBe(true);
