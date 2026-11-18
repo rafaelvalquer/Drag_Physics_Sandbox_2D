@@ -36,6 +36,9 @@ export const SURFACES: Record<Theme, Surface> = {
   patioDasTorres: { asphalt: '#3c3f44', concrete: '#9a9da2', line: '#eef0f2', centre: '#e0b43a', shoulder: '#62656b', ground: '#53565c', dust: null, cover: 'apron' },
   distritoFinanceiro: { asphalt: '#34373d', concrete: '#a3a6ab', line: '#f2f3f5', centre: '#e8c04a', shoulder: '#5d6066', ground: '#4c4f55', dust: null, cover: 'apron' },
   corredorDaLiga: { asphalt: '#303236', concrete: '#a6a8ab', line: '#f6f6f2', centre: '#f0c43c', shoulder: '#5a5c60', ground: '#4a4c50', dust: null, cover: 'apron' },
+  marginalAlta: { asphalt: '#2e3034', concrete: '#a9acb0', line: '#f4f5f7', centre: '#ecc24a', shoulder: '#5c5f64', ground: '#464a50', dust: null, cover: 'apron' },
+  hangarExecutivo: { asphalt: '#33353a', concrete: '#b0b2b4', line: '#f6f6f0', centre: '#f0c43c', shoulder: '#6a6d72', ground: '#4b4f55', dust: null, cover: 'apron' },
+  pierElite: { asphalt: '#3a3c40', concrete: '#a39f98', line: '#f2efe6', centre: '#e8bc48', shoulder: '#66625c', ground: '#4a4743', dust: null, cover: 'apron' },
   avenidaNorte: { asphalt: '#3f4246', concrete: '#9a9a97', line: '#eeeee6', centre: '#e0b43a', shoulder: '#66686c', ground: '#55585c', dust: null, cover: 'apron' },
 };
 

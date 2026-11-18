@@ -2,8 +2,9 @@ import type { AiProfile } from '../ai/DragAI';
 import type { RaceDistanceId } from '../race/RaceController';
 import type { UnlockId } from './tuning/parts';
 import type { ResolverVersion } from './tuning/buildCommon';
-import { CHAPTER_1_ID, CHAPTER_1_TITLE, type ChapterId } from './chapters';
+import { CHAPTER_1_ID, CHAPTER_1_TITLE, CHAPTER_2_ID, type ChapterId } from './chapters';
 import { CHAPTER2_EVENTS, CHAPTER2_REGIONS, CHAPTER2_RIVALS } from './chapter2/events';
+import { CHAPTER3_EVENTS, CHAPTER3_REGIONS, CHAPTER3_RIVALS } from './chapter3/events';
 
 /**
  * Chapter 1 — "Madrugada Zero": rivals and events as structured data. The lines are the exact
@@ -16,7 +17,9 @@ export { CHAPTER_1_ID, CHAPTER_1_TITLE };
 export type PortraitId =
   | 'nina' | 'lara' | 'eduardo' | 'roberto' | 'fernando' | 'leonardo' | 'paula' | 'marcos'
   // chapter 2
-  | 'caio' | 'guga' | 'camila' | 'ricardo' | 'andre' | 'helena' | 'daniel' | 'lucas' | 'felipe' | 'bianca' | 'victor';
+  | 'caio' | 'guga' | 'camila' | 'ricardo' | 'andre' | 'helena' | 'daniel' | 'lucas' | 'felipe' | 'bianca' | 'victor'
+  // chapter 3
+  | 'hugo' | 'renata' | 'bruno' | 'maya' | 'davi' | 'valentina' | 'dante' | 'akira';
 
 /**
  * Prize of a chapter's final: the loser hands the car over. The player gets a copy of the rival's
@@ -52,7 +55,7 @@ export interface RivalDef {
   prize?: PrizeDef;
 }
 
-export type CareerTrackId = 'distrito-industrial' | 'baixada' | 'avenida-norte' | 'patio-das-torres' | 'distrito-financeiro' | 'corredor-da-liga';
+export type CareerTrackId = 'distrito-industrial' | 'baixada' | 'avenida-norte' | 'patio-das-torres' | 'distrito-financeiro' | 'corredor-da-liga' | 'marginal-alta' | 'hangar-executivo' | 'pier-elite';
 
 export interface CareerEventDef {
   id: string;
@@ -290,14 +293,14 @@ const CH1: readonly Omit<CareerEventDef, 'chapter'>[] = [
 
 /** Chapter 1 events (kept under this name: chapter 1 code and tests use it). */
 export const EVENTS: readonly CareerEventDef[] = CH1.map((e) => ({ ...e, chapter: CHAPTER_1_ID }));
-export { CHAPTER2_EVENTS, CHAPTER2_RIVALS };
+export { CHAPTER2_EVENTS, CHAPTER2_RIVALS, CHAPTER3_EVENTS, CHAPTER3_RIVALS };
 
 /** Every event of every chapter, in chapter order. */
-export const ALL_EVENTS: readonly CareerEventDef[] = [...EVENTS, ...CHAPTER2_EVENTS];
-export const ALL_RIVALS: readonly RivalDef[] = [...RIVALS, ...CHAPTER2_RIVALS];
+export const ALL_EVENTS: readonly CareerEventDef[] = [...EVENTS, ...CHAPTER2_EVENTS, ...CHAPTER3_EVENTS];
+export const ALL_RIVALS: readonly RivalDef[] = [...RIVALS, ...CHAPTER2_RIVALS, ...CHAPTER3_RIVALS];
 
 export function eventsOf(chapter: ChapterId): readonly CareerEventDef[] {
-  return chapter === CHAPTER_1_ID ? EVENTS : CHAPTER2_EVENTS;
+  return chapter === CHAPTER_1_ID ? EVENTS : chapter === CHAPTER_2_ID ? CHAPTER2_EVENTS : CHAPTER3_EVENTS;
 }
 
 export interface RegionDef {
@@ -314,7 +317,7 @@ const CH1_REGIONS: readonly Omit<RegionDef, 'chapter'>[] = [
 ];
 
 /** Regions of every chapter. */
-export const REGIONS: readonly RegionDef[] = [...CH1_REGIONS.map((r) => ({ ...r, chapter: CHAPTER_1_ID as ChapterId })), ...CHAPTER2_REGIONS];
+export const REGIONS: readonly RegionDef[] = [...CH1_REGIONS.map((r) => ({ ...r, chapter: CHAPTER_1_ID as ChapterId })), ...CHAPTER2_REGIONS, ...CHAPTER3_REGIONS];
 
 export function findEvent(id: string): CareerEventDef | undefined {
   return ALL_EVENTS.find((e) => e.id === id);

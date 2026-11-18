@@ -1,7 +1,7 @@
 import type { PortraitId } from './CareerEvents';
 import { ALL_EVENTS, rivalOf } from './CareerEvents';
 import { CAIO } from './chapter2/events';
-import { CHAPTER_1_ID, CHAPTER_2_ID, type ChapterId } from './chapters';
+import { CHAPTER_1_ID, CHAPTER_2_ID, CHAPTER_3_ID, type ChapterId } from './chapters';
 import { UNLOCK_LABEL, type UnlockId } from './tuning/parts';
 
 /**
@@ -44,6 +44,14 @@ export const SPEAKER_NAME: Record<PortraitId, string> = {
   felipe: 'Felipe "TSI"',
   bianca: 'Bianca "Evo"',
   victor: 'Victor "335"',
+  hugo: 'Hugo "Z"',
+  renata: 'Renata "Silêncio"',
+  bruno: 'Bruno "Zeta"',
+  maya: 'Maya "Três-Mais"',
+  davi: 'Davi "Stinger"',
+  valentina: 'Valentina "Salão"',
+  dante: 'Dante "Quadrifólio"',
+  akira: 'Akira "Godzilla"',
 };
 
 /** Nina's fixed lines of the script. */
@@ -61,6 +69,24 @@ export const NINA_C2 = {
   caio: 'Esse é o Caio. Eletrônica e turbo. Ele vai mexer onde a minha chave não alcança.',
 } as const;
 
+/** Nina's lines of chapter 3. */
+export const NINA_C3 = {
+  intro:
+    'Você derrubou a Liga. Agora quem quer te conhecer não anda de importado qualquer: é a elite. V6 em todo lugar, carro que custa mais que uma casa, e gente que nunca perdeu.',
+  intro2:
+    'Oito carros premium, dois velhos conhecidos que voltaram diferentes e um dono. Pode continuar com o carro que te trouxe até aqui: se ele estiver bem acertado, o preço do carro do rival não decide nada.',
+  caio: 'O Caio continua com você. Os motores aqui são outro mundo, e ele vai te dizer onde mexer.',
+  firstDefeat: 'Na elite, perto é o mesmo que longe. Olha a telemetria: o tempo foi perdido na largada, na troca ou na patinação?',
+} as const;
+
+/** Caio's lines of chapter 3. */
+export const CAIO_C3 = {
+  intro:
+    'Aqui os motores são V6, aspirados ou com dois turbos, um por bancada. Peça de AP, de K20 ou de N55 não cabe neles: a oficina só mostra o que serve no seu carro. Nos aspirados o ganho vem de pneu, peso e suspensão; nos biturbo, de ECU e pressão.',
+  workshop:
+    'Dois turbos, um de cada lado do motor: o torque chega pelos dois ao mesmo tempo. Se mexer na pressão, mexe nos dois. O dinamômetro mostra a faixa que a ECU deixa e o que o motor aguenta.',
+} as const;
+
 /** Speaker of each unlock line (Caio for electronics and turbo, Nina for the rest). */
 const UNLOCK_SPEAKER: Partial<Record<UnlockId, PortraitId>> = {
   'c2-ecu': 'caio',
@@ -70,6 +96,7 @@ const UNLOCK_SPEAKER: Partial<Record<UnlockId, PortraitId>> = {
   'c2-turbo-hybrid': 'caio',
   'c2-internals': 'caio',
   'c2-stage2': 'caio',
+  'c3-stage3': 'caio',
 };
 
 const UNLOCK_INTRO: Partial<Record<UnlockId, string>> = {
@@ -91,6 +118,10 @@ const UNLOCK_INTRO: Partial<Record<UnlockId, string>> = {
   'c2-awd': 'Acerto do diferencial central: o acoplamento passa torque para o outro eixo mais cedo. Só para tração integral.',
   'c2-final-challenge': 'O Victor aceitou correr com você. Corredor da Liga, quatrocentos metros.',
   'c2-dealer-335i': 'A revenda passou a vender a 335i de série. A do Victor, essa já é sua.',
+  // ---- chapter 3
+  'c3-stage3': 'Stage 3 de turbina de fábrica: mapa para motor forjado. Exige turbina de maior fluxo, downpipe, intercooler maior e pistões forjados; sem tudo isso a ECU recusa o mapa.',
+  'c3-dealer-gtr': 'A revenda Elite liberou o GT-R de série. O do Akira, esse você só ganha na pista.',
+  'c3-final-challenge': 'O Akira aceitou o duelo final. Pier Elite, quatrocentos metros.',
   // ---- chapter 1
   'workshop-basic': 'A oficina está aberta para você. Começa pelo que deixa o motor respirar: filtro e escape.',
   'part-manifold': 'Chegou um coletor de dutos mais curtos. Ganha em cima, perde um pouco embaixo: pensa no seu câmbio antes de comprar.',
@@ -107,6 +138,7 @@ const UNLOCK_INTRO: Partial<Record<UnlockId, string>> = {
 function buildScenes(): StoryScene[] {
   const s: StoryScene[] = [
     ...chapter2Scenes(),
+    ...chapter3Scenes(),
     { id: 'intro', trigger: 'start', lines: [{ speaker: 'nina', text: NINA.intro }] },
     {
       id: 'workshop-first',
@@ -197,6 +229,44 @@ function chapter2Scenes(): StoryScene[] {
       lines: [
         { speaker: 'nina', text: 'Dono da Liga. Você ganhou de carro mais caro, mais novo e mais forte. Ganhou porque entendeu cada um deles.' },
         { speaker: 'caio', text: 'E o dinamômetro guardou tudo. Quando quiser continuar mexendo, a oficina está aberta.' },
+      ],
+    },
+  ];
+}
+
+function chapter3Scenes(): StoryScene[] {
+  const c = CHAPTER_3_ID;
+  return [
+    {
+      id: 'c3-intro',
+      chapter: c,
+      trigger: 'start',
+      lines: [
+        { speaker: 'nina', text: NINA_C3.intro },
+        { speaker: 'nina', text: NINA_C3.intro2 },
+        { speaker: 'nina', text: NINA_C3.caio },
+        { speaker: 'caio', text: CAIO_C3.intro },
+      ],
+    },
+    { id: 'c3-workshop', chapter: c, trigger: 'workshop', lines: [{ speaker: 'caio', text: CAIO_C3.workshop }] },
+    { id: 'c3-first-defeat', chapter: c, trigger: 'defeat', lines: [{ speaker: 'nina', text: NINA_C3.firstDefeat }] },
+    {
+      id: 'c3-final-challenge',
+      chapter: c,
+      trigger: 'final-challenge',
+      lines: [
+        { speaker: 'nina', text: 'Akira. GT-R com dois turbos, dupla embreagem e tração integral, tudo de fábrica. Ele não precisa de peça: o carro já nasceu para isso.' },
+        { speaker: 'caio', text: 'O ponto fraco dele é você. Ele nunca correu contra alguém que soubesse o limite de cada peça.' },
+        { speaker: 'nina', text: 'E vale a regra da elite: quem perde o último duelo entrega o carro. Ele sabe. Você também.' },
+      ],
+    },
+    {
+      id: 'c3-completion',
+      chapter: c,
+      trigger: 'completion',
+      lines: [
+        { speaker: 'nina', text: 'Elite da Madrugada, campeão. Você começou com um Gol e uma chave de boca. Hoje tem o GT-R do Akira na garagem.' },
+        { speaker: 'caio', text: 'E o dinamômetro guardou cada curva. Quando quiser continuar mexendo, a oficina está aberta.' },
       ],
     },
   ];

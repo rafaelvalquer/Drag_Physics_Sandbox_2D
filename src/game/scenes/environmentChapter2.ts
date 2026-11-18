@@ -22,7 +22,7 @@ export function chapter2Layer(theme: Theme, p: Painter): void {
 const LED = '200,225,255';
 
 /** Office tower with a regular glass grid and a lit crown. */
-function tower(p: Painter, x: number, foot: number, w: number, h: number, wall: string, crown: string | null, lit: number): void {
+export function tower(p: Painter, x: number, foot: number, w: number, h: number, wall: string, crown: string | null, lit: number): void {
   const { ctx, rng, px, l } = p;
   const g = ctx.createLinearGradient(x, 0, x + w, 0);
   g.addColorStop(0, shade(wall, 0.1));
@@ -62,7 +62,7 @@ function parkLamp(p: Painter, x: number, foot: number, h: number): void {
   }
 }
 
-function crowd(p: Painter, foot: number, rows: number, density: number): void {
+export function crowd(p: Painter, foot: number, rows: number, density: number): void {
   const { ctx, rng, px, l, W } = p;
   const clothes = ['#3f6f9a', '#d9d4c7', '#1f2226', '#a3a7ad', '#5b5f66', '#2c4f7a', '#8a3c3c', '#c9a23f'];
   const skins = ['#e0b896', '#b9845c', '#8a5a3c', '#f0cdb0', '#6e4630'];

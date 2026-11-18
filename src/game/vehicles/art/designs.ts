@@ -13,6 +13,7 @@ import {
   mercedesC200W205,
   peugeot208Gt17,
 } from './designsChapter2';
+import { alfaGiuliaQv, amgC43, kiaStingerGt, lexusIs350, maseratiGhibli, nissan350z, nissan370z, nissanGtrR35 } from './designsChapter3';
 
 /**
  * Side-view design of each body style. Original artwork for the fictional cars of this game.
@@ -1136,6 +1137,14 @@ export const DESIGNS: Record<BodyStyle, VehicleDesign> = {
   jettaTsi12,
   lancerEvoX,
   bmw335iF30,
+  nissan350z,
+  lexusIs350,
+  nissan370z,
+  amgC43,
+  kiaStingerGt,
+  maseratiGhibli,
+  alfaGiuliaQv,
+  nissanGtrR35,
 };
 
 /** Height of the upper outline (v) at position u, measured on the roof side of the silhouette. */

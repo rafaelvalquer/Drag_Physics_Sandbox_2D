@@ -53,6 +53,14 @@ export const ENGINE_RELIABILITY: Record<string, EngineFamilyReliability> = {
   'vw-ea888': { label: 'VW EA888 2.0 TSI', enduranceS: 2.9, source: `${EST} curso longo de 92,8 mm.`, estimated: true },
   'mitsubishi-4b11': { label: 'Mitsubishi 4B11T', enduranceS: 3.4, source: `${EST} bloco de alumínio com internos de competição de fábrica (Evo).`, estimated: true },
   'bmw-n55': { label: 'BMW N55 3.0', enduranceS: 3.3, source: `${EST} seis em linha balanceado; curso de 89,6 mm.`, estimated: true },
+  'nissan-vq35de': { label: 'Nissan VQ35DE 3.5 V6', enduranceS: 2.6, source: `${EST} 19,3 m/s a 7.100 rpm; comando de corrente e injeção multiponto.`, estimated: true },
+  'toyota-2gr-fse': { label: 'Toyota 2GR-FSE 3.5 V6', enduranceS: 2.7, source: `${EST} 18,8 m/s a 6.800 rpm; reputação de durabilidade do projeto Toyota.`, estimated: true },
+  'nissan-vq37vhr': { label: 'Nissan VQ37VHR 3.7 V6', enduranceS: 2.4, source: `${EST} 21,5 m/s a 7.500 rpm; o corte mais alto do capítulo e curso de 86 mm.`, estimated: true },
+  'mercedes-m276': { label: 'Mercedes-AMG M276 3.0 V6 biturbo', enduranceS: 3.0, source: `${EST} 18,3 m/s a 6.700 rpm; internos forjados da versão AMG.`, estimated: true },
+  'kia-lambda33': { label: 'Kia Lambda II 3.3 V6 biturbo', enduranceS: 3.0, source: `${EST} 18,7 m/s a 6.700 rpm; bloco de alumínio com camisas de ferro.`, estimated: true },
+  'maserati-f160': { label: 'Maserati F160 3.0 V6 biturbo', enduranceS: 3.2, source: `${EST} 19,2 m/s a 6.800 rpm; projeto derivado de motores Ferrari.`, estimated: true },
+  'alfa-690t': { label: 'Alfa Romeo 690T 2.9 V6 biturbo', enduranceS: 3.3, source: `${EST} 19,8 m/s a 7.250 rpm; derivado Ferrari com 7.250 rpm de giro máximo de fábrica.`, estimated: true },
+  'nissan-vr38dett': { label: 'Nissan VR38DETT 3.8 V6 biturbo', enduranceS: 3.6, source: `${EST} 20,6 m/s a 7.000 rpm; bloco com cilindros por plasma e internos de competição de fábrica.`, estimated: true },
   default: { label: 'Motor genérico', enduranceS: 3, source: `${EST} valor médio para motores sem dados próprios (Sandbox).`, estimated: true },
 };
 

@@ -119,7 +119,7 @@ export function partStatus(
     const missing = partRequirements(p, family).find((r) => !have.has(r))!;
     const ev = eventUnlocking(missing);
     if (!ev) return { state: 'locked', label: 'Bloqueada', detail: 'Ainda bloqueada.' };
-    const what = ev.chapter === CHAPTER_1_ID ? 'a noite' : 'a etapa';
+    const what = chapterOf(ev.chapter).theLabel;
     return { state: 'locked', label: eventLabel(ev), detail: `Vença ${what} ${ev.order} (${ev.title}) para liberar.` };
   }
   const price = `${p.price.toLocaleString('pt-BR')} CR`;

@@ -5,6 +5,7 @@ import { litFar, type LightingState } from './LightingController';
 import { canvas, type Theme } from './trackArt';
 import { LAYER_H, LAYER_W } from './environmentArt';
 import { chapter2Layer } from './environmentChapter2';
+import { chapter3Layer } from './environmentChapter3';
 
 /**
  * Parallax scenery of the campaign's three night street venues. Same contract as the other
@@ -17,7 +18,7 @@ import { chapter2Layer } from './environmentChapter2';
  *   with graffiti, cold LED light.
  * - Avenida Norte: a closed avenue with light towers, shuttered shops and a crowd behind barriers.
  */
-export const CAMPAIGN_LAYER_THEMES: ReadonlySet<Theme> = new Set<Theme>(['distritoIndustrial', 'baixada', 'avenidaNorte', 'patioDasTorres', 'distritoFinanceiro', 'corredorDaLiga']);
+export const CAMPAIGN_LAYER_THEMES: ReadonlySet<Theme> = new Set<Theme>(['distritoIndustrial', 'baixada', 'avenidaNorte', 'patioDasTorres', 'distritoFinanceiro', 'corredorDaLiga', 'marginalAlta', 'hangarExecutivo', 'pierElite']);
 
 export interface Painter {
   ctx: Ctx;
@@ -49,6 +50,7 @@ export function buildCampaignLayer(theme: Theme, layer: 0 | 1 | 2, l: LightingSt
   if (theme === 'distritoIndustrial') distrito(p);
   else if (theme === 'baixada') baixada(p);
   else if (theme === 'avenidaNorte') avenida(p);
+  else if (theme === 'marginalAlta' || theme === 'hangarExecutivo' || theme === 'pierElite') chapter3Layer(theme, p);
   else chapter2Layer(theme, p);
   return c;
 }

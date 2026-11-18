@@ -57,6 +57,12 @@ export const TurboSchema = z.object({
    * intake duct). Absent = atmosphere (behaviour of the configurations before Chapter 2).
    */
   bovVent: z.enum(['atmosphere', 'recirculating']).optional(),
+  /**
+   * 'single' (absent) = one turbocharger; 'parallel-twin' = one turbocharger per bank, both feeding
+   * the same plenum (Chapter 3 V6 biturbo). Every value above is then per rotor: the exhaust flow
+   * of one bank drives one rotor, so the same flow fraction spools a smaller (lower inertia) rotor faster.
+   */
+  layout: z.enum(['single', 'parallel-twin']).optional(),
 });
 export type TurboConfig = z.infer<typeof TurboSchema>;
 
@@ -237,7 +243,7 @@ export const TorqueConverterSchema = z.object({
   lockup: z.object({
     maxTorqueNm: finite(100, 3000),
     /** Lowest gear in which the lock-up clutch may close. */
-    minGear: z.number().int().min(1).max(8),
+    minGear: z.number().int().min(1).max(9),
     engageRatePerS: finite(0.5, 30),
     /** Turbine speed below which the lock-up clutch opens. */
     minTurbineRpm: finite(600, 4000),
@@ -283,7 +289,7 @@ export type TransmissionKind = z.infer<typeof TransmissionKindSchema>;
 export const TransmissionSchema = z.object({
   /** Absent = 'manual' (sequential assisted shift + automatic clutch, the original model). */
   kind: TransmissionKindSchema.optional(),
-  gearRatios: z.array(finite(0.4, 6)).min(4).max(8),
+  gearRatios: z.array(finite(0.4, 6)).min(4).max(9),
   finalDrive: finite(1.5, 6.5),
   efficiency: finite(0.7, 0.99),
   inputInertiaKgM2: finite(0.001, 0.2),
@@ -380,6 +386,15 @@ export const BodyStyleSchema = z.enum([
   'jettaTsi12',
   'lancerEvoX',
   'bmw335iF30',
+  // chapter 3
+  'nissan350z',
+  'lexusIs350',
+  'nissan370z',
+  'amgC43',
+  'kiaStingerGt',
+  'maseratiGhibli',
+  'alfaGiuliaQv',
+  'nissanGtrR35',
 ]);
 export type BodyStyle = z.infer<typeof BodyStyleSchema>;
 
@@ -456,7 +471,7 @@ export type CarConfig = z.infer<typeof CarSchema>;
 export const TrackSchema = z.object({
   id: z.string(),
   name: z.string(),
-  theme: z.enum(['testTrack', 'desert', 'nightIndustrial', 'airfield', 'distritoIndustrial', 'baixada', 'avenidaNorte', 'patioDasTorres', 'distritoFinanceiro', 'corredorDaLiga']),
+  theme: z.enum(['testTrack', 'desert', 'nightIndustrial', 'airfield', 'distritoIndustrial', 'baixada', 'avenidaNorte', 'patioDasTorres', 'distritoFinanceiro', 'corredorDaLiga', 'marginalAlta', 'hangarExecutivo', 'pierElite']),
   surfaceGrip: finite(0.5, 1.3),
   rollingResistanceFactor: finite(0.5, 2),
   surfaceTempC: finite(-10, 70),

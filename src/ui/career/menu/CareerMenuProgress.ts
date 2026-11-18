@@ -4,7 +4,7 @@ import { eventsOf, rivalOf, type CareerEventDef, type PortraitId } from '../../.
 import { isChapterComplete, isChapterUnlocked, nextEvent } from '../../../game/career/CareerProgression';
 import { ownedCarBuild } from '../../../game/career/RivalBuildFactory';
 import type { CareerSave } from '../../../game/career/CareerState';
-import { CHAPTER_1_ID, CHAPTER_2_ID, chapterOf, type ChapterId } from '../../../game/career/chapters';
+import { CHAPTER_1_ID, CHAPTER_2_ID, CHAPTER_3_ID, chapterOf, type ChapterId } from '../../../game/career/chapters';
 import { RACE_DISTANCES } from '../../../game/race/RaceController';
 
 /** Everything the main menu shows, derived from the save only (pure: no DOM, nothing invented). */
@@ -41,6 +41,7 @@ export interface MenuViewModel {
 const TAGLINE: Record<ChapterId, string> = {
   [CHAPTER_1_ID]: 'Sete noites para conquistar seu nome.',
   [CHAPTER_2_ID]: 'Novos carros. Novos rivais. Outro nível.',
+  [CHAPTER_3_ID]: 'Oito V6 premium. Dez duelos. Uma elite.',
 };
 
 const fmtDrive = (c: CarConfig): string => (c.drivenAxle === 'awd' ? 'integral' : c.drivenAxle === 'rear' ? 'traseira' : 'dianteira');
@@ -85,10 +86,10 @@ export function menuViewModel(save: CareerSave | null, chapterId: ChapterId): Me
   }
   return {
     hasSave: !!save,
-    chapter: { id: chapterId, number: def.number, title: def.title, tagline: TAGLINE[chapterId], theme: chapterId === CHAPTER_2_ID ? 'blue' : 'amber' },
+    chapter: { id: chapterId, number: def.number, title: def.title, tagline: TAGLINE[chapterId], theme: chapterId === CHAPTER_3_ID ? 'blue' : chapterId === CHAPTER_2_ID ? 'blue' : 'amber' },
     credits: save ? save.credits : null,
     reputation: save ? save.reputation : null,
-    progress: { done, total: evs.length, percent: evs.length ? Math.round((done / evs.length) * 100) : 0, unit: chapterId === CHAPTER_1_ID ? 'noites' : 'etapas', complete },
+    progress: { done, total: evs.length, percent: evs.length ? Math.round((done / evs.length) * 100) : 0, unit: chapterId === CHAPTER_1_ID ? 'noites' : chapterId === CHAPTER_2_ID ? 'etapas' : 'duelos', complete },
     next,
     car,
     chapter2Open: save ? isChapterUnlocked(save, CHAPTER_2_ID) : false,

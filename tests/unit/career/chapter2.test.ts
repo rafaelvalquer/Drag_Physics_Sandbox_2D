@@ -12,7 +12,7 @@ import { CareerRepository } from '../../../src/game/career/CareerRepository';
 import { CAREER_SAVE_VERSION, parseCareerSave, type CareerRaceResult, type RunSummary } from '../../../src/game/career/CareerState';
 import { STORY_SCENES, pendingScenes } from '../../../src/game/career/CareerStory';
 import { CHAPTER_1_ID, CHAPTER_2_ID, chapterOf } from '../../../src/game/career/chapters';
-import { DEALER_CARS, RESALE_SHARE } from '../../../src/game/career/chapter2/dealer';
+import { LEAGUE_CARS, RESALE_SHARE } from '../../../src/game/career/chapter2/dealer';
 import { ownedCarBuild, rivalBuild } from '../../../src/game/career/RivalBuildFactory';
 import { clearBuildCache, resolveBuild } from '../../../src/game/career/tuning/BuildResolver';
 import { incompatibility } from '../../../src/game/career/tuning/BuildResolverV2';
@@ -166,7 +166,7 @@ describe('chapter 2 data', () => {
   });
 
   it('dealer prices are the balance prices of the plan', () => {
-    expect(DEALER_CARS.map((d) => [d.baseCarId, d.price])).toEqual([
+    expect(LEAGUE_CARS.map((d) => [d.baseCarId, d.price])).toEqual([
       ['gm-astra-2011', 6000],
       ['peugeot-208-gt-2017', 14000],
       ['vw-golf-gti-mk4-2003', 18000],

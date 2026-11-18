@@ -47,8 +47,9 @@ async function winUpToFinal(c: CareerController, events: readonly { id: string; 
 }
 
 describe('prize car of the final', () => {
-  it('both chapters hand a car over: the rival of each final has a prize', () => {
-    expect(prizeEvents().map((e) => e.id)).toEqual([FINAL_1.id, FINAL_2.id]);
+  it('every chapter hands a car over: the rival of each final has a prize', () => {
+    expect(prizeEvents().map((e) => e.id)).toEqual([FINAL_1.id, FINAL_2.id, 'c3e10-elite-da-madrugada']);
+    expect(rivalOf(prizeEvents()[2]!).prize!.nickname).toBe('GT-R do Akira');
     expect(rivalOf(FINAL_1).prize!.nickname).toBe('Saveiro do Marcos');
     expect(rivalOf(FINAL_2).prize!.nickname).toBe('335i do Victor');
     for (const e of prizeEvents()) expect(rivalOf(e).prize!.nickname.length).toBeLessThanOrEqual(32);

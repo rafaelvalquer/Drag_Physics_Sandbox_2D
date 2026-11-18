@@ -20,6 +20,7 @@ export function fillEngineAudioFrame(frame: Float64Array, e: EngineModel, simTim
   frame[AF.revLimiter] = e.ignition.limiterActive ? 1 : 0;
   frame[AF.exhaustTempK] = e.exhaustTempK;
   frame[AF.turboShaftRpm] = e.turbo ? e.turbo.shaftRpm : 0;
+  frame[AF.turboShaftRpm2] = e.turbo ? e.turbo.shaftRpm2 : 0;
   frame[AF.bovFlow] = e.turbo ? e.turbo.bovFlow : 0;
   frame[AF.torqueNet] = e.torqueNetLast;
   frame[AF.starterActive] = e.starterRow.enabled ? 1 : 0;

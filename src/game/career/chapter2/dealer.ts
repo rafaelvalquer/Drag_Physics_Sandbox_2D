@@ -1,7 +1,8 @@
 import type { CareerSave } from '../CareerState';
 import { STARTER_CARS } from '../CareerState';
 import { isChapterUnlocked, unlocksOf } from '../CareerProgression';
-import { CHAPTER_2_ID } from '../chapters';
+import { CHAPTER_2_ID, CHAPTER_3_ID } from '../chapters';
+import { ELITE_CARS } from '../chapter3/dealer';
 import type { UnlockId } from '../tuning/parts';
 
 /**
@@ -15,9 +16,12 @@ export interface DealerOffer {
   /** Total career reputation needed. */
   minReputation: number;
   requires?: UnlockId;
+  /** Chapter whose dealer sells it (absent = 2, the league). */
+  chapter?: 2 | 3;
 }
 
-export const DEALER_CARS: readonly DealerOffer[] = [
+/** The league dealer of chapter 2. */
+export const LEAGUE_CARS: readonly DealerOffer[] = [
   { baseCarId: 'gm-astra-2011', price: 6000, minReputation: 0 },
   { baseCarId: 'peugeot-208-gt-2017', price: 14000, minReputation: 0 },
   { baseCarId: 'vw-golf-gti-mk4-2003', price: 18000, minReputation: 220 },
@@ -30,6 +34,9 @@ export const DEALER_CARS: readonly DealerOffer[] = [
   { baseCarId: 'bmw-335i-f30-2013', price: 55000, minReputation: 500, requires: 'c2-dealer-335i' },
 ];
 
+/** Every dealer offer: the league (chapter 2) and the elite (chapter 3). */
+export const DEALER_CARS: readonly DealerOffer[] = [...LEAGUE_CARS, ...ELITE_CARS];
+
 /** Share of the price paid that a sale returns. */
 export const RESALE_SHARE = 0.6;
 
@@ -37,8 +44,9 @@ export type OfferState = { ok: true } | { ok: false; reason: string };
 
 /** Can this save buy the offer now (credits are checked by the purchase)? */
 export function offerAvailability(save: Pick<CareerSave, 'completedEventIds' | 'reputation'>, o: DealerOffer): OfferState {
-  if (!isChapterUnlocked(save, CHAPTER_2_ID)) return { ok: false, reason: 'Conclua o Capítulo 1 para entrar na Liga.' };
-  if (o.requires && !unlocksOf(save).has(o.requires)) return { ok: false, reason: 'Disponível depois do desafio final da Liga.' };
+  const elite = o.chapter === 3;
+  if (!isChapterUnlocked(save, elite ? CHAPTER_3_ID : CHAPTER_2_ID)) return { ok: false, reason: elite ? 'Conclua a Liga da Madrugada para entrar na Elite.' : 'Conclua o Capítulo 1 para entrar na Liga.' };
+  if (o.requires && !unlocksOf(save).has(o.requires)) return { ok: false, reason: elite ? 'Disponível depois do penúltimo duelo da Elite.' : 'Disponível depois do desafio final da Liga.' };
   if (save.reputation < o.minReputation) return { ok: false, reason: `Exige ${o.minReputation} de reputação (você tem ${save.reputation}).` };
   return { ok: true };
 }

@@ -13,8 +13,16 @@ export interface ModernEngineSpec {
   /** Workshop compatibility family (see EngineSchema.family). */
   family: string;
   name: string;
-  architecture: 'I4' | 'I6';
+  architecture: 'I4' | 'I6' | 'V6';
   firingOrder: number[];
+  /** V engines: angle between the banks (deg). Absent = 0 (inline). */
+  bankAngleDeg?: number;
+  /** Crankshaft layout. Absent = 'inline'. */
+  crankType?: EngineConfig['crankType'];
+  /** V engines: bank (0/1) of every cylinder, index = cylinder number − 1. */
+  bankOfCylinder?: number[];
+  /** Firing intervals (deg) between consecutive events of the firing order; absent = even (720/n). */
+  firingIntervalsDeg?: number | number[];
   boreMm: number;
   strokeMm: number;
   rodLengthMm: number;
@@ -52,11 +60,11 @@ export function modernEngine(s: ModernEngineSpec): EngineConfig {
     name: s.name,
     architecture: s.architecture,
     cylinders,
-    bankAngleDeg: 0,
-    crankType: 'inline',
+    bankAngleDeg: s.bankAngleDeg ?? 0,
+    crankType: s.crankType ?? 'inline',
     firingOrder: [...s.firingOrder],
-    firingAnglesDeg: firingAngles(s.firingOrder, 720 / n),
-    bankOfCylinder: new Array<number>(n).fill(0),
+    firingAnglesDeg: firingAngles(s.firingOrder, s.firingIntervalsDeg ?? 720 / n),
+    bankOfCylinder: s.bankOfCylinder ? [...s.bankOfCylinder] : new Array<number>(n).fill(0),
     boreMm: s.boreMm,
     strokeMm: s.strokeMm,
     rodLengthMm: s.rodLengthMm,
@@ -110,4 +118,6 @@ export interface EngineDoc {
   layout: string;
   firingOrder: readonly number[];
   sources: readonly string[];
+  /** As published in the source units (the figures above are converted: hp → cv, lb-ft → N·m). */
+  published?: { hp?: number; lbFt?: number; kw?: number; ps?: number };
 }

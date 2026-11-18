@@ -731,6 +731,7 @@ export class EngineModel {
     fr.sparkCut = clamp01(input.sparkCut);
     fr.exhaustTempK = this.exhaustTempK;
     fr.turboShaftRpm = this.turbo ? this.turbo.shaftRpm : 0;
+    fr.turboShaftRpm2 = this.turbo ? this.turbo.shaftRpm2 : 0;
     fr.bovFlow = this.turbo ? this.turbo.bovFlow : 0;
     fr.starterActive = this.starterRow.enabled;
   }

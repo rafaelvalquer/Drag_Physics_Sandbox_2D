@@ -22,7 +22,7 @@ export interface ChaptersDeps {
 
 /** Procedural night scenery (no external images): chapter 1 warm and industrial, chapter 2 cool and urban. */
 export function chapterArt(number: number): string {
-  const blue = number === 2;
+  const blue = number >= 2;
   const bg = blue ? ['#0a1626', '#142a44'] : ['#140d08', '#2a1a0d'];
   const lit = blue ? '#9fc8f0' : '#f0b867';
   const rects: string[] = [];
@@ -51,7 +51,7 @@ export function buildChapters(d: ChaptersDeps): HTMLElement {
         const status = !c.open ? badge('Bloqueado', 'neutral', 'lock') : c.active ? badge('Capítulo atual', 'amber', 'play') : c.done >= c.events ? badge('Concluído', 'ok', 'check') : badge(c.done ? 'Em andamento' : 'Disponível', 'blue');
         return h(
           'article',
-          { class: `chx-card ${c.number === 2 ? 'c2' : 'c1'} ${c.open ? '' : 'locked'} ${c.active ? 'active' : ''}`, 'data-testid': `chapter-${c.id}`, 'data-open': c.open ? '1' : '0', 'data-reveal': '' },
+          { class: `chx-card ${c.number >= 2 ? 'c2' : 'c1'} ${c.open ? '' : 'locked'} ${c.active ? 'active' : ''}`, 'data-testid': `chapter-${c.id}`, 'data-open': c.open ? '1' : '0', 'data-reveal': '' },
           h('div', { class: 'chx-art', html: chapterArt(c.number) }, !c.open ? h('div', { class: 'chx-lock' }, icon('lock')) : null),
           h(
             'div',

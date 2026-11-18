@@ -11,9 +11,22 @@ import { clamp, firstOrder } from '../../core/math';
  * - Boost in the charge pipe follows the compressor with a short pipe filling time constant.
  * - Blow-off valve: when the throttle closes while boost is present, the BOV opens and vents the
  *   charge pipe with time constant `bovVentTimeS`; its normalized vent flow drives the BOV sound.
+ *
+ * Parallel twin (`cfg.layout === 'parallel-twin'`, one turbo per bank): the bank flows are equal,
+ * so each rotor sees half of the engine flow against half of the reference flow and the target
+ * speed is the one of a single turbo; what the pair changes is the rotor — half the compressor
+ * means a lighter rotor, i.e. a shorter `spoolTimeS` (given per rotor in the configuration). The
+ * two compressors feed one plenum: the pressure they hold is the mean of the two (not their sum;
+ * parallel compressors add mass flow, not pressure ratio). The second rotor sees a slightly lower
+ * share of the exhaust energy (`ROTOR_MISMATCH`, an assumption: banks are never exactly equal), so
+ * the speeds differ by a few percent while spooling and the audio can render two beating whines.
  */
+export const ROTOR_MISMATCH = 0.015;
+
 export class Turbocharger {
-  shaft = 0; // 0..1
+  shaft = 0; // 0..1 (rotor A)
+  /** Rotor B of a parallel twin (0 on a single turbo). */
+  shaftB = 0;
   boostPa = 0; // charge pipe gauge pressure
   bovFlow = 0; // 0..1
   private bovOpen = false;
@@ -25,8 +38,18 @@ export class Turbocharger {
     public referenceFlow: number,
   ) {}
 
+  get twin(): boolean {
+    return this.cfg.layout === 'parallel-twin';
+  }
+
+  /** Number of turbochargers. */
+  get count(): number {
+    return this.twin ? 2 : 1;
+  }
+
   reset(): void {
     this.shaft = 0;
+    this.shaftB = 0;
     this.boostPa = 0;
     this.bovFlow = 0;
     this.bovOpen = false;
@@ -34,6 +57,11 @@ export class Turbocharger {
 
   get shaftRpm(): number {
     return this.shaft * this.cfg.maxShaftRpm;
+  }
+
+  /** Speed of the second rotor (rpm); 0 on a single turbo. */
+  get shaftRpm2(): number {
+    return this.twin ? this.shaftB * this.cfg.maxShaftRpm : 0;
   }
 
   /** Shaft speed target (0..1) for an exhaust flow and EGT ratio, wastegate included. */
@@ -64,8 +92,13 @@ export class Turbocharger {
     const target = this.shaftTarget(exhaustFlow, exhaustTempRatio);
     const tau = target > this.shaft ? cfg.spoolTimeS : cfg.spoolTimeS * 1.6;
     this.shaft = firstOrder(this.shaft, target, dt, tau);
-
-    const compressorBoost = potential * this.shaft * this.shaft;
+    let compressorBoost = potential * this.shaft * this.shaft;
+    if (this.twin) {
+      const targetB = this.shaftTarget(exhaustFlow * (1 - ROTOR_MISMATCH), exhaustTempRatio);
+      const tauB = (targetB > this.shaftB ? cfg.spoolTimeS : cfg.spoolTimeS * 1.6) * (1 + ROTOR_MISMATCH);
+      this.shaftB = firstOrder(this.shaftB, targetB, dt, tauB);
+      compressorBoost = 0.5 * potential * (this.shaft * this.shaft + this.shaftB * this.shaftB);
+    }
     // BOV logic: opens when throttle snaps shut with boost present, closes when throttle reopens.
     if (cfg.bovEnabled) {
       if (!this.bovOpen && throttleOpening < 0.12 && this.boostPa > 0.25e5) this.bovOpen = true;

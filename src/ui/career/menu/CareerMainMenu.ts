@@ -123,7 +123,7 @@ export function buildMainMenu(d: MenuDeps): HTMLElement {
     challenge = h(
       'section',
       { class: 'cm-card cm-next done', 'data-anim': 'next', 'data-testid': 'menu-chapter-done' },
-      h('small', { class: 'cm-label' }, ch.id === 'chapter-2' ? 'CAMPEÃO DA LIGA' : 'CAPÍTULO CONCLUÍDO'),
+      h('small', { class: 'cm-label' }, ch.id === 'chapter-3' ? 'CAMPEÃO DA ELITE' : ch.id === 'chapter-2' ? 'CAMPEÃO DA LIGA' : 'CAPÍTULO CONCLUÍDO'),
       h('h3', {}, 'Capítulo concluído'),
       h('p', {}, `${vm.progress.done} de ${vm.progress.total} ${vm.progress.unit} vencidas. Continue pela garagem, pelos capítulos ou pelo histórico.`),
       h('div', { class: 'cm-bar' }, h('i', { 'data-percent': '100', style: 'width:100%' })),

@@ -19,7 +19,8 @@ export interface EndingDeps {
   wins: number;
   bestEt: number | null;
   completedAt: string | null;
-  nextChapter: boolean;
+  /** The chapter this ending opens (already unlocked), if any. */
+  nextChapter: { number: number; title: string } | null;
   makePreview(car: CarConfig, w: number, h: number): HTMLCanvasElement;
   onChapters(): void;
   onGarage(): void;
@@ -55,7 +56,7 @@ export function buildEnding(d: EndingDeps): HTMLElement {
     h(
       'div',
       { class: 'rs-actions', 'data-reveal': '' },
-      d.nextChapter ? primaryButton('Capítulo 2: Liga da Madrugada', 'ending-chapter2', d.onChapters, { ico: 'chapters' }) : null,
+      d.nextChapter ? primaryButton(`Capítulo ${d.nextChapter.number}: ${d.nextChapter.title}`, `ending-chapter${d.nextChapter.number}`, d.onChapters, { ico: 'chapters' }) : null,
       d.nextChapter ? secondaryButton('Garagem', 'ending-garage', d.onGarage, { ico: 'garage' }) : primaryButton('Garagem', 'ending-garage', d.onGarage, { ico: 'garage' }),
       secondaryButton('Menu', 'ending-menu', d.onMenu, { ico: 'overview' }),
     ),

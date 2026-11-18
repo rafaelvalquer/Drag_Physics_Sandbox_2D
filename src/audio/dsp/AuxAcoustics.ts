@@ -10,6 +10,8 @@ export interface AuxControl {
   throttle: number;
   boostPa: number;
   turboShaftRpm: number;
+  /** Second rotor of a parallel-twin turbo (absent / 0: single turbo). */
+  turboShaftRpm2?: number;
   bovFlow: number;
   vehicleSpeed: number;
   wheelSlipSpeed: number;
@@ -113,6 +115,9 @@ export class AuxAcoustics {
   private readonly mech: number;
   private readonly gearRatios: number[];
   private turboPhase = 0;
+  private turboPhase2 = 0;
+  /** Parallel-twin turbo: two compressors, each with its own blade-pass whine. */
+  private readonly twinTurbo: boolean;
   private gearPhase = 0;
   private surgePhase = 0;
   private readonly hissBp: Biquad;
@@ -176,6 +181,7 @@ export class AuxAcoustics {
     this.noiseRng = new Prng(cfg.seed * 7919 + 11);
     this.hasTurbo = cfg.engine.induction === 'turbo' && !!cfg.engine.turbo;
     this.blades = cfg.engine.turbo?.compressorBlades ?? 6;
+    this.twinTurbo = cfg.engine.turbo?.layout === 'parallel-twin';
     this.bovFitted = cfg.engine.turbo?.bovEnabled ?? false;
     this.bovRecirculating = cfg.engine.turbo?.bovVent === 'recirculating';
     this.bovDuctLp = new OnePole(sampleRate, 1400);
@@ -245,7 +251,16 @@ export class AuxAcoustics {
       this.turboPhase += f * dt;
       this.turboPhase -= Math.floor(this.turboPhase);
       const boostBar = Math.max(0, c.boostPa) / 1e5;
-      const whine = Math.sin(TWO_PI * this.turboPhase) * smoothstep(1500, 6000, f) * nyqFade * (0.25 + boostBar);
+      let whine = Math.sin(TWO_PI * this.turboPhase) * smoothstep(1500, 6000, f) * nyqFade * (0.25 + boostBar);
+      if (this.twinTurbo) {
+        // two rotors that never turn at exactly the same speed: the whines beat against each other,
+        // and each carries half the level (the air flow is shared), instead of one doubled voice
+        const f2 = ((c.turboShaftRpm2 ?? c.turboShaftRpm) / 60) * this.blades;
+        const nyqFade2 = 1 - smoothstep(this.nyq * 0.8, this.nyq * 0.92, f2);
+        this.turboPhase2 += f2 * dt;
+        this.turboPhase2 -= Math.floor(this.turboPhase2);
+        whine = 0.6 * (whine + Math.sin(TWO_PI * this.turboPhase2) * smoothstep(1500, 6000, f2) * nyqFade2 * (0.25 + boostBar));
+      }
       const hiss = this.hissBp.process(rng.bipolar()) * boostBar * (0.4 + c.throttle);
       let bov = 0;
       if (c.bovFlow > 0.002) {

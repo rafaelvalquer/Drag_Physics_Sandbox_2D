@@ -40,6 +40,17 @@ export const ENGINE_FAMILIES: Record<string, EngineFamilyDef> = {
   'vw-ea888': { id: 'vw-ea888', label: 'VW EA888 2.0 TSI', induction: 'turbo', internalsTorqueNm: 420, knockFreeBoostBar: 1.25, valvetrainRevAddRpm: 300 },
   'mitsubishi-4b11': { id: 'mitsubishi-4b11', label: 'Mitsubishi 4B11T', induction: 'turbo', internalsTorqueNm: 520, knockFreeBoostBar: 1.5, valvetrainRevAddRpm: 300 },
   'bmw-n55': { id: 'bmw-n55', label: 'BMW N55 3.0 seis em linha', induction: 'turbo', internalsTorqueNm: 620, knockFreeBoostBar: 1.1, valvetrainRevAddRpm: 200 },
+  // ---- Chapter 3 (V6): mechanical data estimated from the engines' reputation and torque class.
+  // The aspirated V6 only take the generic parts (tyres, weight, suspension, cooling…): the
+  // family parts of the K20 / Família II are not made for them, and no turbo map exists for them.
+  'nissan-vq35de': { id: 'nissan-vq35de', label: 'Nissan VQ35DE 3.5 V6', induction: 'NA', internalsTorqueNm: 430, valvetrainRevAddRpm: 300 },
+  'toyota-2gr-fse': { id: 'toyota-2gr-fse', label: 'Toyota 2GR-FSE 3.5 V6', induction: 'NA', internalsTorqueNm: 420, valvetrainRevAddRpm: 200 },
+  'nissan-vq37vhr': { id: 'nissan-vq37vhr', label: 'Nissan VQ37VHR 3.7 V6', induction: 'NA', internalsTorqueNm: 450, valvetrainRevAddRpm: 300 },
+  'mercedes-m276': { id: 'mercedes-m276', label: 'Mercedes-AMG M276 3.0 V6 biturbo', induction: 'turbo', internalsTorqueNm: 680, knockFreeBoostBar: 1.1, valvetrainRevAddRpm: 200 },
+  'kia-lambda33': { id: 'kia-lambda33', label: 'Kia Lambda II 3.3 V6 biturbo', induction: 'turbo', internalsTorqueNm: 660, knockFreeBoostBar: 1.1, valvetrainRevAddRpm: 200 },
+  'maserati-f160': { id: 'maserati-f160', label: 'Maserati F160 3.0 V6 biturbo', induction: 'turbo', internalsTorqueNm: 720, knockFreeBoostBar: 1.15, valvetrainRevAddRpm: 250 },
+  'alfa-690t': { id: 'alfa-690t', label: 'Alfa Romeo 690T 2.9 V6 biturbo', induction: 'turbo', internalsTorqueNm: 820, knockFreeBoostBar: 1.35, valvetrainRevAddRpm: 250 },
+  'nissan-vr38dett': { id: 'nissan-vr38dett', label: 'Nissan VR38DETT 3.8 V6 biturbo', induction: 'turbo', internalsTorqueNm: 900, knockFreeBoostBar: 1.3, valvetrainRevAddRpm: 300 },
 };
 
 const NA_FAMILIES = ['gm-familia2', 'honda-k20'] as const;

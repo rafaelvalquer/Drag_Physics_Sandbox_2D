@@ -160,6 +160,7 @@ export class VehicleAcoustics {
       ac.throttle = ec.throttle;
       ac.boostPa = ec.boostPa;
       ac.turboShaftRpm = c[AF.turboShaftRpm]!;
+      ac.turboShaftRpm2 = c[AF.turboShaftRpm2]!;
       ac.bovFlow = c[AF.bovFlow]!;
       ac.vehicleSpeed = c[AF.vehicleSpeed]!;
       ac.wheelSlipSpeed = c[AF.wheelSlipSpeed]!;

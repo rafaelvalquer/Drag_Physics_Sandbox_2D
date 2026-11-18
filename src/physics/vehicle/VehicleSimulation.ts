@@ -783,6 +783,7 @@ export class VehicleSimulation {
     a[AF.revLimiter] = e.ignition.limiterActive ? 1 : 0;
     a[AF.exhaustTempK] = e.exhaustTempK;
     a[AF.turboShaftRpm] = e.turbo ? e.turbo.shaftRpm : 0;
+    a[AF.turboShaftRpm2] = e.turbo ? e.turbo.shaftRpm2 : 0;
     a[AF.bovFlow] = e.turbo ? e.turbo.bovFlow : 0;
     a[AF.vehicleSpeed] = this.body.v;
     a[AF.wheelSlipSpeed] = Math.abs(slipVel);

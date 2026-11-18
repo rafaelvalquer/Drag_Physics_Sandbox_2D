@@ -1,5 +1,6 @@
 import { findCampaignCar } from '../../data/cars/campaign';
 import { CHAPTER2_CARS } from '../../data/cars/chapter2/index';
+import { CHAPTER3_CARS } from '../../data/cars/chapter3/index';
 import { EVENTS, findEvent, type CareerEventDef } from './CareerEvents';
 import { isChapterComplete, isChapterUnlocked, isPartUnlocked, canTuneBoost, unlocksOf, unlockedChaptersOf } from './CareerProgression';
 import { CHAPTER_1_ID, CHAPTER_2_ID, findChapter, type ChapterId } from './chapters';
@@ -37,7 +38,7 @@ export function normalizeTune(t: BuildTune): BuildTune {
   return o;
 }
 
-const CHAPTER2_CAR_IDS = new Set(CHAPTER2_CARS.map((c) => c.id));
+const CHAPTER2_CAR_IDS = new Set([...CHAPTER2_CARS, ...CHAPTER3_CARS].map((c) => c.id));
 
 /**
  * Resolver version a car's build uses. Chapter 2 cars always use version 2 (their gearboxes,

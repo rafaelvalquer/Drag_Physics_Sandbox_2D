@@ -53,6 +53,8 @@ export interface EngineTelemetryFrame {
   /** Approximate exhaust gas temperature (K). */
   exhaustTempK: number;
   turboShaftRpm: number;
+  /** Second rotor of a parallel-twin turbo (0 on a single turbo). */
+  turboShaftRpm2?: number;
   /** Blow-off valve vent flow, normalized 0..1. */
   bovFlow: number;
   starterActive: boolean;
@@ -87,7 +89,8 @@ export const AF = {
   paused: 21,
   starterActive: 22,
   afterfire: 23, // 1 on the step an afterfire (unburnt fuel igniting in the hot exhaust) happens
-  length: 24,
+  turboShaftRpm2: 24, // second rotor of a parallel-twin turbo (0 otherwise)
+  length: 25,
 } as const;
 
 export interface VehicleTelemetry {

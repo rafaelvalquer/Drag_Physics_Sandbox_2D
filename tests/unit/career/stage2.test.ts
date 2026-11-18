@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { findCampaignCar } from '../../../src/data/cars/campaign';
 import { CHAPTER2_CARS } from '../../../src/data/cars/chapter2/index';
-import { CHAPTER2_EVENTS, EVENTS } from '../../../src/game/career/CareerEvents';
+import { CHAPTER2_EVENTS, CHAPTER3_EVENTS, EVENTS } from '../../../src/game/career/CareerEvents';
 import { isPartUnlocked, partStatus } from '../../../src/game/career/CareerProgression';
 import { resolveBuild } from '../../../src/game/career/tuning/BuildResolver';
 import { familyOf, incompatibility } from '../../../src/game/career/tuning/BuildResolverV2';
@@ -84,11 +84,18 @@ describe('Stage 2 of the factory turbo', () => {
     expect(resolveBuild(p208, [...s2, 'pistons-forged-modern', 'clutch-reinforced'], {}, 2).ok).toBe(true);
   });
 
-  it('opens at the 8th event; Stage 3 waits for chapter 3; never fits an NA engine', () => {
+  it('opens at the 8th event; Stage 3 opens at the 5th duel of chapter 3; never fits an NA engine', () => {
     expect(isPartUnlocked({ completedEventIds: upTo(7) }, findPart('ecu-stage2')!)).toBe(false);
     expect(isPartUnlocked({ completedEventIds: upTo(8) }, findPart('ecu-stage2')!)).toBe(true);
+    // chapter 2 complete: chapter 3 is open, but the map of Stage 3 waits for the 5th duel
+    const ch3 = (k: number) => [...upTo(10), ...CHAPTER3_EVENTS.filter((e) => e.order <= k).map((e) => e.id)];
     const st3 = partStatus({ completedEventIds: upTo(10), inventoryPartIds: [], credits: 1e6 }, { baseCarId: bmw.id, installedParts: [] }, findPart('ecu-stage3')!);
-    expect(st3.label).toBe('Capítulo 3');
+    expect(st3.state).toBe('locked');
+    expect(st3.label).toBe('Duelo 5');
+    expect(partStatus({ completedEventIds: ch3(4), inventoryPartIds: [], credits: 1e6 }, { baseCarId: bmw.id, installedParts: [] }, findPart('ecu-stage3')!).state).toBe('locked');
+    expect(partStatus({ completedEventIds: ch3(5), inventoryPartIds: [], credits: 1e6 }, { baseCarId: bmw.id, installedParts: [] }, findPart('ecu-stage3')!).state).toBe('available');
+    // chapter 2 not complete: chapter 3 is still closed
+    expect(partStatus({ completedEventIds: upTo(9), inventoryPartIds: [], credits: 1e6 }, { baseCarId: bmw.id, installedParts: [] }, findPart('ecu-stage3')!).label).toBe('Capítulo 3');
     expect(incompatibility(findCampaignCar('honda-civic-si-2008')!, findPart('ecu-stage2')!)).not.toBeNull();
   });
 });

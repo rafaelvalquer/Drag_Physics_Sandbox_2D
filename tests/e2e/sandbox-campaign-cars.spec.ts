@@ -11,12 +11,12 @@ test.afterEach(() => expect(errors, errors.join('\n')).toEqual([]));
 test('main Sandbox vehicle selector lists all factory and prepared cars', async ({ page }) => {
   await boot(page);
   const select = page.getByTestId('car-select');
-  await expect(select.locator('optgroup')).toHaveCount(5); // classic, Chapter 2, fictional, experimental, prepared
-  await expect(select.locator('option')).toHaveCount(32);
-  await expect(page.getByTestId('sandbox-catalog-count')).toContainText('24 carros originais + 8 preparações');
+  await expect(select.locator('optgroup')).toHaveCount(6); // classic, Chapter 2, Chapter 3, fictional, experimental, prepared
+  await expect(select.locator('option')).toHaveCount(40);
+  await expect(page.getByTestId('sandbox-catalog-count')).toContainText('32 carros originais + 8 preparações');
 
   // Factory cars are selectable directly, without career unlocks (Chapter 2 cars included).
-  for (const id of [...ids, 'mitsubishi-evo-x-2012', 'bmw-335i-f30-2013']) {
+  for (const id of [...ids, 'mitsubishi-evo-x-2012', 'bmw-335i-f30-2013', 'nissan-gtr-r35-2015', 'alfa-giulia-qv-2017']) {
     await expect(select.locator('option[value="' + id + '"]')).toHaveCount(1);
     await select.selectOption(id);
     await expect.poll(() => mode<string>(page, 'm.runner.player.sim.car.id')).toBe(id);

@@ -19,7 +19,7 @@ import {
   partRequirements,
   unlocksOf,
 } from '../game/career/CareerProgression';
-import { CHAPTER_1_ID, CHAPTER_2_ID, CHAPTERS, chapterOf, type ChapterId } from '../game/career/chapters';
+import { CHAPTER_1_ID, CHAPTER_2_ID, CHAPTER_3_ID, CHAPTERS, chapterOf, nextChapterOf, type ChapterId } from '../game/career/chapters';
 import { DEALER_CARS, offerAvailability, resaleValue } from '../game/career/chapter2/dealer';
 import { familyOf, incompatibility } from '../game/career/tuning/BuildResolverV2';
 import { CareerRepository, CareerTabLock } from '../game/career/CareerRepository';
@@ -309,7 +309,7 @@ export class CareerMode implements Mode {
       title,
       testid,
       chapterLabel: `Capítulo ${ch.number} · ${ch.title}`,
-      status: s ? { credits: cr(s.credits), reputation: `Reputação ${s.reputation}`, progress: `${done}/${evs.length} ${ch.id === CHAPTER_1_ID ? 'noites' : 'etapas'}` } : null,
+      status: s ? { credits: cr(s.credits), reputation: `Reputação ${s.reputation}`, progress: `${done}/${evs.length} ${ch.unit}` } : null,
       carName: car?.nickname ?? null,
       nav: s ? this.careerNav(s) : null,
       children: children.filter((c): c is HTMLElement | string => c !== null),
@@ -387,9 +387,10 @@ export class CareerMode implements Mode {
   private continueCareerNow(): void {
     const s = this.controller.save!;
     const ch = this.chapter;
-    const completionScene = ch === CHAPTER_1_ID ? 'completion' : 'c2-completion';
-    // chapter 1 done and chapter 2 never opened: offer the new chapter
-    if (ch === CHAPTER_1_ID && isChapterComplete(s) && s.seenStorySceneIds.includes('completion') && !s.storyMilestones.includes(`${CHAPTER_2_ID}-started`)) {
+    const completionScene = chapterOf(ch).completionScene;
+    // the chapter is done, its ending seen and the next chapter never opened: offer the new chapter
+    const nextCh = nextChapterOf(ch);
+    if (nextCh && isChapterComplete(s, ch) && s.seenStorySceneIds.includes(completionScene) && isChapterUnlocked(s, nextCh.id) && !s.storyMilestones.includes(`${nextCh.id}-started`)) {
       this.show('chapters');
       return;
     }
@@ -449,7 +450,7 @@ export class CareerMode implements Mode {
           blurb: c.blurb,
           events: evs.length,
           done: evs.filter((e) => s.completedEventIds.includes(e.id)).length,
-          unit: c.id === CHAPTER_1_ID ? 'noites' : 'etapas',
+          unit: c.unit,
           open: isChapterUnlocked(s, c.id),
           active: s.chapterId === c.id,
           lockedReason: 'Conclua o capítulo anterior para liberar.',
@@ -654,7 +655,8 @@ export class CareerMode implements Mode {
   private marketScreen(): HTMLElement {
     const s = this.controller.save!;
     const leagueOpen = isChapterUnlocked(s, CHAPTER_2_ID);
-    const mk = (id: string, price: number, source: 'street' | 'league', ok: boolean, reason: string | null, owned: boolean): Offer => {
+    const eliteOpen = isChapterUnlocked(s, CHAPTER_3_ID);
+    const mk = (id: string, price: number, source: 'street' | 'league' | 'elite', ok: boolean, reason: string | null, owned: boolean): Offer => {
       const car = findCampaignCar(id)!;
       return {
         id,
@@ -677,9 +679,9 @@ export class CareerMode implements Mode {
     const offers: Offer[] = [
       ...STARTER_CARS.map((o) => mk(o.baseCarId, o.price, 'street', true, null, false)),
       ...(leagueOpen
-        ? DEALER_CARS.map((o) => {
+        ? DEALER_CARS.filter((o) => o.chapter !== 3 || eliteOpen).map((o) => {
             const a = offerAvailability(s, o);
-            return mk(o.baseCarId, o.price, 'league', a.ok, a.ok ? null : a.reason, s.ownedCars.some((c) => c.baseCarId === o.baseCarId));
+            return mk(o.baseCarId, o.price, o.chapter === 3 ? 'elite' : 'league', a.ok, a.ok ? null : a.reason, s.ownedCars.some((c) => c.baseCarId === o.baseCarId));
           })
         : []),
     ];
@@ -687,10 +689,11 @@ export class CareerMode implements Mode {
       offers,
       credits: s.credits,
       leagueOpen,
+      eliteOpen,
       fleet: s.ownedCars.map((c) => ({ id: c.id, nickname: c.nickname, value: resaleValue(c), paid: c.purchasePrice ?? null, parts: c.installedParts.length, trophy: !!c.prizeEventId, active: c.id === s.activeCarId, cfg: ownedCarBuild(c).ok ? ownedCarConfig(c) : null })),
       makePreview: (c, w, hh) => this.preview(c, w, hh, 'plain', 0.86),
       buy: (o) => {
-        if (o.source === 'league') void this.buyCarConfirmed(o.id, o.price);
+        if (o.source !== 'street') void this.buyCarConfirmed(o.id, o.price);
         else
           void (async () => {
             if (!this.guard()) return;
@@ -1119,7 +1122,7 @@ export class CareerMode implements Mode {
           }),
       })),
       nextId: nxt?.id ?? null,
-      unit: ch === CHAPTER_1_ID ? 'noites' : 'etapas',
+      unit: chapterOf(ch).unit,
       done: evs.filter((e) => s.completedEventIds.includes(e.id)).length,
       total: evs.length,
       onPick: (id) => {
@@ -1128,7 +1131,7 @@ export class CareerMode implements Mode {
       },
       onBack: () => this.show('garage'),
     });
-    return this.frame(ch === CHAPTER_1_ID ? 'Noites' : 'Etapas da Liga', 'career-events', body);
+    return this.frame(chapterOf(ch).eventsTitle, 'career-events', body);
   }
 
   selectedEvent: string | null = null;
@@ -1417,7 +1420,7 @@ export class CareerMode implements Mode {
       ninaPortrait: portraitEl('nina'),
       ninaComments: this.lastComments.map((c) => ({ id: c.id, text: c.text })),
       next: nxt ? `Próximo desafio: ${nxt.order}. ${nxt.title} (${rivalOf(nxt).nickname})` : 'Capítulo concluído.',
-      chapterEvents: ev.chapter === CHAPTER_1_ID ? 'Noites' : 'Etapas',
+      chapterEvents: chapterOf(ev.chapter).eventsTab,
       won,
       onRetry: () => this.startRace(ev),
       blown: p.dnfReason === 'engine-blown' ? { rpm: p.blownAtRpm ?? 0, onDyno: () => this.show('dyno') } : null,
@@ -1434,7 +1437,8 @@ export class CareerMode implements Mode {
     const ch = this.endingChapter;
     const def = chapterOf(ch);
     const finale = eventsOf(ch).find((e) => e.finale)!;
-    const titleText = ch === CHAPTER_1_ID ? 'Rei da Madrugada' : 'Dono da Liga';
+    const titleText = def.championTitle;
+    const nextCh = nextChapterOf(ch);
     const best = s.results.filter((r) => r.playerResult.et !== null && r.eventId === finale.id && r.outcome === 'win').map((r) => r.playerResult.et!);
     const b = ownedCarBuild(car);
     const body = buildEnding({
@@ -1456,7 +1460,7 @@ export class CareerMode implements Mode {
       wins,
       bestEt: best.length ? Math.min(...best) : null,
       completedAt: (s.chapterCompletions[ch] ?? (ch === CHAPTER_1_ID ? s.chapterCompletedAt : null))?.slice(0, 10) ?? null,
-      nextChapter: ch === CHAPTER_1_ID && isChapterUnlocked(s, CHAPTER_2_ID),
+      nextChapter: nextCh && isChapterUnlocked(s, nextCh.id) ? { number: nextCh.number, title: nextCh.title } : null,
       makePreview: (c, w, hh) => this.preview(c, w, hh, 'plain', 0.86),
       onChapters: () => this.show('chapters'),
       onGarage: () => this.show('garage'),

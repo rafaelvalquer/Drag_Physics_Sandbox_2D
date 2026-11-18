@@ -6,8 +6,8 @@ export interface Offer {
   id: string;
   name: string;
   price: number;
-  /** 'street' = classifieds of the region, 'league' = chapter 2 dealer. */
-  source: 'street' | 'league';
+  /** 'street' = classifieds of the region, 'league' = chapter 2 dealer, 'elite' = chapter 3 dealer. */
+  source: 'street' | 'league' | 'elite';
   ok: boolean;
   reason: string | null;
   owned: boolean;
@@ -37,17 +37,20 @@ export interface MarketDeps {
   fleet: FleetCar[];
   credits: number;
   leagueOpen: boolean;
+  /** The chapter 3 dealer ("ELITE — CAPÍTULO 3") is open. */
+  eliteOpen?: boolean;
   makePreview(car: CarConfig, w: number, h: number): HTMLCanvasElement;
   buy(o: Offer): void;
   sell(id: string): void;
   onBack(): void;
 }
 
-type Filter = 'all' | 'street' | 'league' | 'available' | 'owned';
+type Filter = 'all' | 'street' | 'league' | 'elite' | 'available' | 'owned';
 const FILTERS: [Filter, string][] = [
   ['all', 'Todos'],
   ['street', 'Populares'],
   ['league', 'Liga'],
+  ['elite', 'Elite — Cap. 3'],
   ['available', 'Disponíveis'],
   ['owned', 'Na garagem'],
 ];
@@ -62,7 +65,7 @@ export function buildMarket(d: MarketDeps): HTMLElement {
   const chips = h('div', { class: 'mk-filters', role: 'tablist' });
 
   const visible = (): Offer[] =>
-    d.offers.filter((o) => (filter === 'street' ? o.source === 'street' : filter === 'league' ? o.source === 'league' : filter === 'available' ? o.ok && !o.owned && o.affordable : filter === 'owned' ? o.owned : true));
+    d.offers.filter((o) => (filter === 'street' ? o.source === 'street' : filter === 'league' ? o.source === 'league' : filter === 'elite' ? o.source === 'elite' : filter === 'available' ? o.ok && !o.owned && o.affordable : filter === 'owned' ? o.owned : true));
 
   const buyButton = (o: Offer, testid: string): HTMLElement =>
     h('button', { class: 'cs-btn primary', 'data-testid': testid, disabled: !o.ok || o.owned || !o.affordable, onclick: () => d.buy(o) }, icon(o.owned ? 'check' : 'coin'), h('span', {}, o.owned ? 'Na garagem' : 'Comprar'));
@@ -70,12 +73,12 @@ export function buildMarket(d: MarketDeps): HTMLElement {
   const card = (o: Offer): HTMLElement =>
     h(
       'article',
-      { class: `mk-card ${o.ok ? '' : 'locked'} ${selected === o.id ? 'selected' : ''}`, 'data-testid': o.source === 'league' ? `dealer-${o.id}` : `market-card-${o.id}` },
+      { class: `mk-card ${o.ok ? '' : 'locked'} ${selected === o.id ? 'selected' : ''}`, 'data-testid': o.source !== 'street' ? `dealer-${o.id}` : `market-card-${o.id}` },
       h('button', { class: 'mk-view', 'aria-label': `Ver detalhes de ${o.name}`, onclick: () => ((selected = o.id), render()) }, d.makePreview(o.cfg, 320, 150)),
       h(
         'div',
         { class: 'mk-info' },
-        h('div', { class: 'mk-name' }, h('h3', {}, o.name), o.owned ? badge('Na garagem', 'ok', 'check') : !o.ok ? badge('Bloqueado', 'neutral', 'lock') : o.source === 'league' ? badge('Liga', 'blue') : badge('Popular', 'amber')),
+        h('div', { class: 'mk-name' }, h('h3', {}, o.name), o.owned ? badge('Na garagem', 'ok', 'check') : !o.ok ? badge('Bloqueado', 'neutral', 'lock') : o.source === 'elite' ? badge('Elite', 'blue') : o.source === 'league' ? badge('Liga', 'blue') : badge('Popular', 'amber')),
         h('div', { class: 'mk-spec' }, `${nf(o.cv)} cv · ${nf(o.nm)} N·m · ${nf(o.massKg)} kg · ${o.drive}`),
         h('div', { class: 'mk-buy' }, h('span', { class: 'price' }, `${nf(o.price)} CR`), buyButton(o, buyTestId(o))),
         !o.ok && o.reason ? h('div', { class: 'hint', 'data-testid': `dealer-reason-${o.id}` }, o.reason) : null,
@@ -114,7 +117,7 @@ export function buildMarket(d: MarketDeps): HTMLElement {
   };
 
   const render = (): void => {
-    chips.replaceChildren(...FILTERS.filter(([f]) => f !== 'league' || d.leagueOpen).map(([f, label]) => h('button', { class: `mk-filter ${f === filter ? 'on' : ''}`, role: 'tab', 'aria-selected': String(f === filter), 'data-testid': `market-filter-${f}`, onclick: () => ((filter = f), render()) }, label)));
+    chips.replaceChildren(...FILTERS.filter(([f]) => (f !== 'league' || d.leagueOpen) && (f !== 'elite' || !!d.eliteOpen)).map(([f, label]) => h('button', { class: `mk-filter ${f === filter ? 'on' : ''}`, role: 'tab', 'aria-selected': String(f === filter), 'data-testid': `market-filter-${f}`, onclick: () => ((filter = f), render()) }, label)));
     const list = visible();
     grid.replaceChildren(...(list.length ? list.map(card) : [h('p', { class: 'hint' }, 'Nenhum carro neste filtro.')]));
     renderDetail();

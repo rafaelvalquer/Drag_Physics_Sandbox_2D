@@ -11,6 +11,7 @@ import {
 import { exhaustPreset } from '../exhaustPresets';
 import { CAR_VW_GOL_GTS_1988 } from './vwGolGts1988';
 import { CHAPTER2_CARS } from './chapter2/index';
+import { CHAPTER3_CARS } from './chapter3/index';
 import { CAMPAIGN_CARS } from './campaign';
 
 export { CAR_VW_GOL_GTS_1988 } from './vwGolGts1988';
@@ -367,7 +368,7 @@ export function uniqueCars(cars: readonly CarConfig[]): CarConfig[] {
 
 /** Free modes never depend on career ownership, progression or inventory. */
 /** The ten Chapter 2 cars are the same objects the career uses (one catalogue, no duplicate entry). */
-export const SANDBOX_CARS: readonly CarConfig[] = uniqueCars([...CARS, ...CAMPAIGN_CARS, ...CHAPTER2_CARS]);
+export const SANDBOX_CARS: readonly CarConfig[] = uniqueCars([...CARS, ...CAMPAIGN_CARS, ...CHAPTER2_CARS, ...CHAPTER3_CARS]);
 export const LAB_CARS: readonly CarConfig[] = uniqueCars([...SANDBOX_CARS, CAR_AURORA_V12_LAB]);
 export const CALIBRATION_CARS: readonly CarConfig[] = LAB_CARS;
 
@@ -375,6 +376,7 @@ export const CALIBRATION_CARS: readonly CarConfig[] = LAB_CARS;
 export const CAR_GROUPS: readonly { label: string; cars: readonly CarConfig[] }[] = [
   { label: 'Brasileiros clássicos', cars: CAMPAIGN_CARS },
   { label: 'Liga da Madrugada (Capítulo 2)', cars: CHAPTER2_CARS },
+  { label: 'Elite da Madrugada (Capítulo 3)', cars: CHAPTER3_CARS },
   { label: 'Veículos fictícios', cars: CARS.filter((c) => !CAMPAIGN_CARS.some((b) => b.id === c.id)) },
   { label: 'Experimentais', cars: [CAR_AURORA_V12_LAB] },
 ];

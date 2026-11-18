@@ -498,7 +498,10 @@ export type UnlockId =
   | 'c2-generic-tires'
   | 'c2-generic-chassis'
   | 'c2-stage2'
-  | 'c3-stage3';
+  | 'c3-stage3'
+  // Chapter 3 — Elite da Madrugada
+  | 'c3-dealer-gtr'
+  | 'c3-final-challenge';
 
 export const UNLOCK_LABEL: Record<UnlockId, string> = {
   'workshop-basic': 'Oficina básica',
@@ -531,6 +534,8 @@ export const UNLOCK_LABEL: Record<UnlockId, string> = {
   'c2-generic-chassis': 'Alívio de peso e arrefecimento nos carros modernos',
   'c2-stage2': 'Stage 2 do turbo de fábrica (downpipe, admissão direta, mapa Stage 2)',
   'c3-stage3': 'Stage 3 do turbo de fábrica',
+  'c3-dealer-gtr': 'GT-R à venda na revenda Elite',
+  'c3-final-challenge': 'Duelo final da Elite',
 };
 
 const BASE_PARTS: readonly PartDef[] = [

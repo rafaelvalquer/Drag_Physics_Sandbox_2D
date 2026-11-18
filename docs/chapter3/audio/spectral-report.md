@@ -1,0 +1,258 @@
+# Relatório acústico — Capítulo 2 (gerado por scripts/audio-chapter3.ts)
+
+## Nissan 350Z Coupé 2006 (Nissan VQ35DE Rev-Up 3.5 V6 300 hp (350Z), 6 cil.)
+- **antes** 48000 Hz high: CPU 9.3 % do tempo real, nanResets 0, clip 0, clique máx 76.5
+  - WOT: bandas 31% / 66% / 2% / 0%, centroide 474 Hz, >4 kHz 0.5 %
+  - ordens a 3139 rpm: ordem de ignição -44.9 dB, meias ordens -60.6 dB (Δ 15.7 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.000 vs. pico sob carga 0.000 (escape WOT pico 0.53)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.006/0.02 · block 0.024/0.10 · exhaust 0.050/0.53 · turbo 0.000/0.00 · tire 0.032/0.25 · transmission 0.005/0.04 · environment 0.005/0.04
+- **depois** 44100 Hz high: CPU 8.7 % do tempo real, nanResets 0, clip 0, clique máx 67.6
+  - WOT: bandas 48% / 49% / 2% / 0%, centroide 481 Hz, >4 kHz 0.5 %
+  - ordens a 3139 rpm: ordem de ignição -44.8 dB, meias ordens -23.9 dB (Δ -20.9 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.000 vs. pico sob carga 0.000 (escape WOT pico 0.58)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.008/0.03 · block 0.024/0.11 · exhaust 0.049/0.58 · turbo 0.000/0.00 · tire 0.032/0.24 · transmission 0.005/0.06 · environment 0.005/0.03
+- **depois** 44100 Hz low: CPU 7.6 % do tempo real, nanResets 0, clip 0, clique máx 61.2
+  - WOT: bandas 41% / 57% / 2% / 0%, centroide 437 Hz, >4 kHz 0.3 %
+  - ordens a 3139 rpm: ordem de ignição -40.0 dB, meias ordens -55.0 dB (Δ 15.1 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.000 vs. pico sob carga 0.000 (escape WOT pico 0.63)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.009/0.03 · block 0.024/0.11 · exhaust 0.066/0.63 · turbo 0.000/0.00 · tire 0.032/0.24 · transmission 0.005/0.06 · environment 0.005/0.03
+- **depois** 48000 Hz high: CPU 9.5 % do tempo real, nanResets 0, clip 0, clique máx 73.5
+  - WOT: bandas 48% / 49% / 2% / 0%, centroide 484 Hz, >4 kHz 0.5 %
+  - ordens a 3139 rpm: ordem de ignição -45.0 dB, meias ordens -23.9 dB (Δ -21.1 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.000 vs. pico sob carga 0.000 (escape WOT pico 0.59)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.008/0.03 · block 0.024/0.10 · exhaust 0.049/0.59 · turbo 0.000/0.00 · tire 0.032/0.25 · transmission 0.005/0.03 · environment 0.005/0.04
+- **depois** 48000 Hz low: CPU 7.8 % do tempo real, nanResets 0, clip 0, clique máx 66.8
+  - WOT: bandas 43% / 55% / 2% / 0%, centroide 439 Hz, >4 kHz 0.3 %
+  - ordens a 3139 rpm: ordem de ignição -40.0 dB, meias ordens -55.7 dB (Δ 15.8 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.000 vs. pico sob carga 0.000 (escape WOT pico 0.66)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.009/0.03 · block 0.024/0.10 · exhaust 0.066/0.66 · turbo 0.000/0.00 · tire 0.032/0.25 · transmission 0.005/0.03 · environment 0.005/0.04
+
+## Lexus IS 350 F Sport 2015 (Toyota 2GR-FSE 3.5 V6 306 hp (Lexus IS 350), 6 cil.)
+- **antes** 48000 Hz high: CPU 8.7 % do tempo real, nanResets 0, clip 0, clique máx 14.8
+  - WOT: bandas 46% / 52% / 2% / 0%, centroide 446 Hz, >4 kHz 0.2 %
+  - ordens a 3136 rpm: ordem de ignição -45.2 dB, meias ordens -59.5 dB (Δ 14.2 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.000 vs. pico sob carga 0.000 (escape WOT pico 0.19)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.005/0.01 · block 0.026/0.11 · exhaust 0.048/0.19 · turbo 0.000/0.00 · tire 0.033/0.27 · transmission 0.005/0.06 · environment 0.006/0.04
+- **depois** 44100 Hz high: CPU 9.2 % do tempo real, nanResets 0, clip 0, clique máx 16.8
+  - WOT: bandas 41% / 54% / 4% / 1%, centroide 570 Hz, >4 kHz 0.6 %
+  - ordens a 3136 rpm: ordem de ignição -56.9 dB, meias ordens -36.9 dB (Δ -20.0 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.000 vs. pico sob carga 0.000 (escape WOT pico 0.07)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.005/0.01 · block 0.022/0.09 · exhaust 0.015/0.07 · turbo 0.000/0.00 · tire 0.033/0.27 · transmission 0.002/0.02 · environment 0.006/0.04
+- **depois** 44100 Hz low: CPU 7.5 % do tempo real, nanResets 0, clip 0, clique máx 16.4
+  - WOT: bandas 44% / 52% / 3% / 0%, centroide 509 Hz, >4 kHz 0.4 %
+  - ordens a 3136 rpm: ordem de ignição -48.4 dB, meias ordens -65.9 dB (Δ 17.5 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.000 vs. pico sob carga 0.000 (escape WOT pico 0.11)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.007/0.02 · block 0.022/0.09 · exhaust 0.027/0.11 · turbo 0.000/0.00 · tire 0.033/0.27 · transmission 0.002/0.02 · environment 0.006/0.04
+- **depois** 48000 Hz high: CPU 9.8 % do tempo real, nanResets 0, clip 0, clique máx 18.0
+  - WOT: bandas 42% / 53% / 5% / 1%, centroide 574 Hz, >4 kHz 0.6 %
+  - ordens a 3136 rpm: ordem de ignição -57.2 dB, meias ordens -36.9 dB (Δ -20.3 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.000 vs. pico sob carga 0.000 (escape WOT pico 0.08)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.005/0.01 · block 0.021/0.09 · exhaust 0.015/0.08 · turbo 0.000/0.00 · tire 0.033/0.27 · transmission 0.002/0.02 · environment 0.006/0.04
+- **depois** 48000 Hz low: CPU 8.0 % do tempo real, nanResets 0, clip 0, clique máx 17.0
+  - WOT: bandas 44% / 52% / 3% / 0%, centroide 515 Hz, >4 kHz 0.4 %
+  - ordens a 3136 rpm: ordem de ignição -48.3 dB, meias ordens -65.5 dB (Δ 17.2 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.000 vs. pico sob carga 0.000 (escape WOT pico 0.10)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.007/0.02 · block 0.022/0.09 · exhaust 0.028/0.10 · turbo 0.000/0.00 · tire 0.033/0.27 · transmission 0.002/0.02 · environment 0.006/0.04
+
+## Nissan 370Z Coupé 2014 (Nissan VQ37VHR 3.7 V6 332 hp (370Z), 6 cil.)
+- **antes** 48000 Hz high: CPU 8.9 % do tempo real, nanResets 0, clip 0, clique máx 65.9
+  - WOT: bandas 22% / 75% / 2% / 0%, centroide 482 Hz, >4 kHz 0.4 %
+  - ordens a 3099 rpm: ordem de ignição -44.5 dB, meias ordens -60.4 dB (Δ 15.9 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.000 vs. pico sob carga 0.000 (escape WOT pico 0.69)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.006/0.02 · block 0.028/0.12 · exhaust 0.062/0.69 · turbo 0.000/0.00 · tire 0.033/0.24 · transmission 0.005/0.04 · environment 0.006/0.04
+- **depois** 44100 Hz high: CPU 8.3 % do tempo real, nanResets 0, clip 0, clique máx 62.6
+  - WOT: bandas 50% / 47% / 2% / 0%, centroide 462 Hz, >4 kHz 0.4 %
+  - ordens a 3099 rpm: ordem de ignição -44.1 dB, meias ordens -22.1 dB (Δ -22.0 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.000 vs. pico sob carga 0.000 (escape WOT pico 0.59)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.009/0.03 · block 0.030/0.13 · exhaust 0.060/0.59 · turbo 0.000/0.00 · tire 0.033/0.25 · transmission 0.005/0.04 · environment 0.006/0.04
+- **depois** 44100 Hz low: CPU 7.2 % do tempo real, nanResets 0, clip 0, clique máx 55.4
+  - WOT: bandas 35% / 63% / 1% / 0%, centroide 417 Hz, >4 kHz 0.2 %
+  - ordens a 3099 rpm: ordem de ignição -38.3 dB, meias ordens -52.0 dB (Δ 13.7 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.000 vs. pico sob carga 0.000 (escape WOT pico 0.66)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.009/0.04 · block 0.030/0.12 · exhaust 0.091/0.66 · turbo 0.000/0.00 · tire 0.033/0.25 · transmission 0.005/0.04 · environment 0.006/0.04
+- **depois** 48000 Hz high: CPU 9.5 % do tempo real, nanResets 0, clip 0, clique máx 74.1
+  - WOT: bandas 51% / 47% / 2% / 1%, centroide 484 Hz, >4 kHz 0.6 %
+  - ordens a 3099 rpm: ordem de ignição -44.2 dB, meias ordens -22.2 dB (Δ -22.1 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.000 vs. pico sob carga 0.000 (escape WOT pico 0.58)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.009/0.03 · block 0.030/0.12 · exhaust 0.060/0.58 · turbo 0.000/0.00 · tire 0.033/0.24 · transmission 0.005/0.04 · environment 0.006/0.04
+- **depois** 48000 Hz low: CPU 7.9 % do tempo real, nanResets 0, clip 0, clique máx 71.0
+  - WOT: bandas 36% / 62% / 1% / 0%, centroide 424 Hz, >4 kHz 0.3 %
+  - ordens a 3099 rpm: ordem de ignição -38.3 dB, meias ordens -52.4 dB (Δ 14.1 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.000 vs. pico sob carga 0.000 (escape WOT pico 0.56)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.009/0.04 · block 0.030/0.12 · exhaust 0.091/0.56 · turbo 0.000/0.00 · tire 0.033/0.24 · transmission 0.005/0.04 · environment 0.006/0.04
+
+## Mercedes-AMG C 43 4MATIC 2017 (Mercedes-AMG M276 3.0 V6 biturbo 362 hp (C 43), 6 cil.)
+- **antes** 48000 Hz high: CPU 10.7 % do tempo real, nanResets 0, clip 0, clique máx 16.2
+  - WOT: bandas 40% / 51% / 2% / 7%, centroide 1313 Hz, >4 kHz 7.3 %
+  - ordens a 3158 rpm: ordem de ignição -48.6 dB, meias ordens -64.5 dB (Δ 15.9 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.106 vs. pico sob carga 0.110 (escape WOT pico 0.50)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.012/0.02 · block 0.047/0.20 · exhaust 0.048/0.50 · turbo 0.029/0.11 · tire 0.048/0.26 · transmission 0.006/0.05 · environment 0.007/0.05
+- **depois** 44100 Hz high: CPU 10.5 % do tempo real, nanResets 0, clip 0, clique máx 30.2
+  - WOT: bandas 40% / 55% / 2% / 3%, centroide 729 Hz, >4 kHz 3.1 %
+  - ordens a 3158 rpm: ordem de ignição -64.5 dB, meias ordens -46.1 dB (Δ -18.4 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.039 vs. pico sob carga 0.048 (escape WOT pico 0.53)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.009/0.02 · block 0.041/0.17 · exhaust 0.011/0.53 · turbo 0.013/0.05 · tire 0.048/0.24 · transmission 0.003/0.03 · environment 0.007/0.05
+- **depois** 44100 Hz low: CPU 8.7 % do tempo real, nanResets 0, clip 0, clique máx 30.3
+  - WOT: bandas 41% / 54% / 2% / 3%, centroide 717 Hz, >4 kHz 3.1 %
+  - ordens a 3158 rpm: ordem de ignição -58.9 dB, meias ordens -74.2 dB (Δ 15.3 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.039 vs. pico sob carga 0.048 (escape WOT pico 0.52)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.010/0.03 · block 0.041/0.17 · exhaust 0.012/0.52 · turbo 0.013/0.05 · tire 0.048/0.24 · transmission 0.003/0.03 · environment 0.007/0.05
+- **depois** 48000 Hz high: CPU 10.5 % do tempo real, nanResets 0, clip 0, clique máx 28.2
+  - WOT: bandas 39% / 55% / 2% / 4%, centroide 962 Hz, >4 kHz 4.2 %
+  - ordens a 3158 rpm: ordem de ignição -64.2 dB, meias ordens -46.0 dB (Δ -18.3 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.053 vs. pico sob carga 0.055 (escape WOT pico 0.51)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.009/0.02 · block 0.041/0.17 · exhaust 0.011/0.51 · turbo 0.014/0.05 · tire 0.048/0.26 · transmission 0.003/0.03 · environment 0.007/0.05
+- **depois** 48000 Hz low: CPU 9.2 % do tempo real, nanResets 0, clip 0, clique máx 28.4
+  - WOT: bandas 39% / 55% / 2% / 4%, centroide 948 Hz, >4 kHz 4.1 %
+  - ordens a 3158 rpm: ordem de ignição -58.7 dB, meias ordens -76.4 dB (Δ 17.6 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.053 vs. pico sob carga 0.055 (escape WOT pico 0.49)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.010/0.03 · block 0.041/0.18 · exhaust 0.012/0.49 · turbo 0.014/0.05 · tire 0.048/0.26 · transmission 0.003/0.03 · environment 0.007/0.05
+
+## Kia Stinger GT 2019 AWD (Kia Lambda II 3.3 T-GDI V6 biturbo 365 hp (Stinger GT), 6 cil.)
+- **antes** 48000 Hz high: CPU 10.2 % do tempo real, nanResets 0, clip 0, clique máx 12.7
+  - WOT: bandas 40% / 50% / 2% / 9%, centroide 1590 Hz, >4 kHz 9.0 %
+  - ordens a 3113 rpm: ordem de ignição -49.2 dB, meias ordens -64.2 dB (Δ 15.0 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.097 vs. pico sob carga 0.116 (escape WOT pico 0.46)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.012/0.03 · block 0.048/0.20 · exhaust 0.051/0.46 · turbo 0.032/0.12 · tire 0.048/0.25 · transmission 0.006/0.05 · environment 0.007/0.04
+- **depois** 44100 Hz high: CPU 9.7 % do tempo real, nanResets 0, clip 0, clique máx 21.4
+  - WOT: bandas 39% / 55% / 2% / 4%, centroide 802 Hz, >4 kHz 3.7 %
+  - ordens a 3113 rpm: ordem de ignição -69.0 dB, meias ordens -48.6 dB (Δ -20.5 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.042 vs. pico sob carga 0.054 (escape WOT pico 0.48)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.011/0.02 · block 0.043/0.18 · exhaust 0.008/0.48 · turbo 0.014/0.05 · tire 0.048/0.24 · transmission 0.004/0.03 · environment 0.007/0.04
+- **depois** 44100 Hz low: CPU 8.6 % do tempo real, nanResets 0, clip 0, clique máx 21.9
+  - WOT: bandas 39% / 56% / 2% / 4%, centroide 803 Hz, >4 kHz 3.7 %
+  - ordens a 3113 rpm: ordem de ignição -63.5 dB, meias ordens -78.5 dB (Δ 15.0 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.042 vs. pico sob carga 0.054 (escape WOT pico 0.46)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.011/0.03 · block 0.043/0.18 · exhaust 0.009/0.46 · turbo 0.014/0.05 · tire 0.048/0.24 · transmission 0.004/0.03 · environment 0.007/0.04
+- **depois** 48000 Hz high: CPU 10.5 % do tempo real, nanResets 0, clip 0, clique máx 21.0
+  - WOT: bandas 38% / 55% / 2% / 5%, centroide 1163 Hz, >4 kHz 5.4 %
+  - ordens a 3113 rpm: ordem de ignição -69.0 dB, meias ordens -48.6 dB (Δ -20.3 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.051 vs. pico sob carga 0.061 (escape WOT pico 0.49)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.011/0.02 · block 0.043/0.18 · exhaust 0.008/0.49 · turbo 0.017/0.06 · tire 0.048/0.25 · transmission 0.004/0.03 · environment 0.007/0.04
+- **depois** 48000 Hz low: CPU 9.1 % do tempo real, nanResets 0, clip 0, clique máx 21.4
+  - WOT: bandas 38% / 55% / 2% / 5%, centroide 1160 Hz, >4 kHz 5.5 %
+  - ordens a 3113 rpm: ordem de ignição -63.5 dB, meias ordens -77.0 dB (Δ 13.5 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.051 vs. pico sob carga 0.061 (escape WOT pico 0.46)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.011/0.03 · block 0.043/0.19 · exhaust 0.009/0.46 · turbo 0.017/0.06 · tire 0.048/0.25 · transmission 0.004/0.03 · environment 0.007/0.04
+
+## Maserati Ghibli S Q4 2015 (Maserati F160 3.0 V6 biturbo 404 hp (Ghibli S Q4), 6 cil.)
+- **antes** 48000 Hz high: CPU 10.1 % do tempo real, nanResets 0, clip 0, clique máx 15.3
+  - WOT: bandas 37% / 53% / 2% / 8%, centroide 1340 Hz, >4 kHz 7.9 %
+  - ordens a 3155 rpm: ordem de ignição -48.4 dB, meias ordens -65.1 dB (Δ 16.6 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.106 vs. pico sob carga 0.122 (escape WOT pico 0.59)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.012/0.02 · block 0.050/0.21 · exhaust 0.048/0.59 · turbo 0.030/0.12 · tire 0.050/0.28 · transmission 0.006/0.06 · environment 0.007/0.05
+- **depois** 44100 Hz high: CPU 9.6 % do tempo real, nanResets 0, clip 0, clique máx 25.4
+  - WOT: bandas 39% / 55% / 2% / 3%, centroide 782 Hz, >4 kHz 3.4 %
+  - ordens a 3155 rpm: ordem de ignição -68.8 dB, meias ordens -50.3 dB (Δ -18.5 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.042 vs. pico sob carga 0.053 (escape WOT pico 0.54)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.010/0.02 · block 0.044/0.18 · exhaust 0.006/0.54 · turbo 0.014/0.05 · tire 0.050/0.27 · transmission 0.004/0.04 · environment 0.007/0.04
+- **depois** 44100 Hz low: CPU 8.6 % do tempo real, nanResets 0, clip 0, clique máx 25.6
+  - WOT: bandas 39% / 55% / 2% / 3%, centroide 770 Hz, >4 kHz 3.4 %
+  - ordens a 3155 rpm: ordem de ignição -63.5 dB, meias ordens -80.7 dB (Δ 17.1 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.042 vs. pico sob carga 0.053 (escape WOT pico 0.54)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.010/0.02 · block 0.044/0.19 · exhaust 0.007/0.54 · turbo 0.014/0.05 · tire 0.050/0.27 · transmission 0.004/0.04 · environment 0.007/0.04
+- **depois** 48000 Hz high: CPU 10.4 % do tempo real, nanResets 0, clip 0, clique máx 29.0
+  - WOT: bandas 40% / 54% / 2% / 4%, centroide 951 Hz, >4 kHz 4.2 %
+  - ordens a 3155 rpm: ordem de ignição -68.8 dB, meias ordens -50.2 dB (Δ -18.6 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.053 vs. pico sob carga 0.061 (escape WOT pico 0.53)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.010/0.02 · block 0.044/0.19 · exhaust 0.006/0.53 · turbo 0.015/0.06 · tire 0.050/0.28 · transmission 0.003/0.03 · environment 0.007/0.05
+- **depois** 48000 Hz low: CPU 9.3 % do tempo real, nanResets 0, clip 0, clique máx 29.1
+  - WOT: bandas 41% / 53% / 2% / 4%, centroide 931 Hz, >4 kHz 4.1 %
+  - ordens a 3155 rpm: ordem de ignição -63.4 dB, meias ordens -82.7 dB (Δ 19.3 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.053 vs. pico sob carga 0.061 (escape WOT pico 0.53)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.009/0.02 · block 0.044/0.19 · exhaust 0.007/0.53 · turbo 0.015/0.06 · tire 0.050/0.28 · transmission 0.003/0.03 · environment 0.007/0.05
+
+## Alfa Romeo Giulia Quadrifoglio 2017 (Alfa Romeo 690T 2.9 V6 90° biturbo 505 hp (Giulia Quadrifoglio), 6 cil.)
+- **antes** 48000 Hz high: CPU 9.9 % do tempo real, nanResets 0, clip 0, clique máx 17.4
+  - WOT: bandas 34% / 57% / 3% / 5%, centroide 949 Hz, >4 kHz 5.4 %
+  - ordens a 3178 rpm: ordem de ignição -58.2 dB, meias ordens -40.6 dB (Δ -17.6 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.107 vs. pico sob carga 0.123 (escape WOT pico 0.57)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.041/0.08 · block 0.063/0.26 · exhaust 0.049/0.57 · turbo 0.030/0.12 · tire 0.042/0.31 · transmission 0.006/0.05 · environment 0.009/0.06
+- **depois** 44100 Hz high: CPU 9.7 % do tempo real, nanResets 0, clip 0, clique máx 34.2
+  - WOT: bandas 43% / 51% / 3% / 3%, centroide 719 Hz, >4 kHz 2.7 %
+  - ordens a 3178 rpm: ordem de ignição -53.6 dB, meias ordens -41.7 dB (Δ -11.9 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.066 vs. pico sob carga 0.067 (escape WOT pico 0.62)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.036/0.07 · block 0.057/0.23 · exhaust 0.029/0.62 · turbo 0.016/0.07 · tire 0.042/0.32 · transmission 0.004/0.04 · environment 0.009/0.06
+- **depois** 44100 Hz low: CPU 8.7 % do tempo real, nanResets 0, clip 0, clique máx 36.0
+  - WOT: bandas 37% / 56% / 4% / 3%, centroide 788 Hz, >4 kHz 3.1 %
+  - ordens a 3178 rpm: ordem de ignição -57.6 dB, meias ordens -45.0 dB (Δ -12.6 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.066 vs. pico sob carga 0.067 (escape WOT pico 0.58)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.040/0.07 · block 0.057/0.22 · exhaust 0.027/0.58 · turbo 0.016/0.07 · tire 0.042/0.32 · transmission 0.004/0.04 · environment 0.009/0.06
+- **depois** 48000 Hz high: CPU 10.6 % do tempo real, nanResets 0, clip 0, clique máx 33.3
+  - WOT: bandas 43% / 51% / 3% / 3%, centroide 721 Hz, >4 kHz 2.6 %
+  - ordens a 3178 rpm: ordem de ignição -53.5 dB, meias ordens -41.6 dB (Δ -11.9 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.056 vs. pico sob carga 0.065 (escape WOT pico 0.64)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.036/0.07 · block 0.057/0.24 · exhaust 0.029/0.64 · turbo 0.016/0.06 · tire 0.042/0.31 · transmission 0.004/0.03 · environment 0.009/0.06
+- **depois** 48000 Hz low: CPU 9.2 % do tempo real, nanResets 0, clip 0, clique máx 34.5
+  - WOT: bandas 37% / 56% / 4% / 3%, centroide 794 Hz, >4 kHz 3.0 %
+  - ordens a 3178 rpm: ordem de ignição -57.2 dB, meias ordens -44.9 dB (Δ -12.3 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.056 vs. pico sob carga 0.065 (escape WOT pico 0.60)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.040/0.07 · block 0.057/0.22 · exhaust 0.027/0.60 · turbo 0.016/0.06 · tire 0.042/0.31 · transmission 0.004/0.03 · environment 0.009/0.06
+
+## Nissan GT-R R35 Premium 2015 (Nissan VR38DETT 3.8 V6 biturbo 545 hp (GT-R), 6 cil.)
+- **antes** 48000 Hz high: CPU 10.0 % do tempo real, nanResets 0, clip 0, clique máx 3.1
+  - WOT: bandas 30% / 59% / 2% / 9%, centroide 1668 Hz, >4 kHz 8.9 %
+  - ordens a 3144 rpm: ordem de ignição -48.1 dB, meias ordens -63.3 dB (Δ 15.2 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.107 vs. pico sob carga 0.138 (escape WOT pico 0.23)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.013/0.03 · block 0.056/0.21 · exhaust 0.059/0.23 · turbo 0.038/0.14 · tire 0.052/0.26 · transmission 0.007/0.05 · environment 0.009/0.06
+- **depois** 44100 Hz high: CPU 9.0 % do tempo real, nanResets 0, clip 0, clique máx 4.4
+  - WOT: bandas 33% / 63% / 1% / 2%, centroide 595 Hz, >4 kHz 1.9 %
+  - ordens a 3144 rpm: ordem de ignição -46.5 dB, meias ordens -61.4 dB (Δ 14.9 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.058 vs. pico sob carga 0.072 (escape WOT pico 0.22)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.013/0.03 · block 0.059/0.22 · exhaust 0.065/0.22 · turbo 0.018/0.07 · tire 0.052/0.29 · transmission 0.012/0.07 · environment 0.009/0.07
+- **depois** 44100 Hz low: CPU 8.3 % do tempo real, nanResets 0, clip 0, clique máx 4.5
+  - WOT: bandas 39% / 60% / 1% / 1%, centroide 422 Hz, >4 kHz 0.7 %
+  - ordens a 3144 rpm: ordem de ignição -41.7 dB, meias ordens -55.6 dB (Δ 13.9 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.058 vs. pico sob carga 0.072 (escape WOT pico 0.37)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.012/0.03 · block 0.059/0.22 · exhaust 0.127/0.37 · turbo 0.018/0.07 · tire 0.052/0.29 · transmission 0.012/0.07 · environment 0.009/0.07
+- **depois** 48000 Hz high: CPU 9.5 % do tempo real, nanResets 0, clip 0, clique máx 3.3
+  - WOT: bandas 34% / 61% / 1% / 3%, centroide 839 Hz, >4 kHz 3.1 %
+  - ordens a 3144 rpm: ordem de ignição -46.4 dB, meias ordens -61.3 dB (Δ 14.9 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.067 vs. pico sob carga 0.087 (escape WOT pico 0.22)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.013/0.03 · block 0.059/0.22 · exhaust 0.066/0.22 · turbo 0.024/0.09 · tire 0.052/0.26 · transmission 0.011/0.07 · environment 0.009/0.06
+- **depois** 48000 Hz low: CPU 8.9 % do tempo real, nanResets 0, clip 0, clique máx 3.6
+  - WOT: bandas 41% / 57% / 1% / 1%, centroide 517 Hz, >4 kHz 1.2 %
+  - ordens a 3144 rpm: ordem de ignição -41.6 dB, meias ordens -56.6 dB (Δ 15.0 dB)
+  - válvula de alívio: pico do canal turbo no alívio 0.067 vs. pico sob carga 0.087 (escape WOT pico 0.36)
+  - came: sem troca de came
+  - canais na corrida (rms/pico): intake 0.012/0.03 · block 0.059/0.22 · exhaust 0.127/0.36 · turbo 0.024/0.09 · tire 0.052/0.26 · transmission 0.011/0.07 · environment 0.009/0.06
+

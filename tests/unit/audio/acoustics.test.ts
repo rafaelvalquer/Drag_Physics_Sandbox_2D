@@ -693,7 +693,7 @@ describe('exhaust channel: jet turbulence vs pulses near the redline', () => {
           }
         }
       }
-    });
+    }, 300_000); // 4 cars × 3 presets × 12 renders: ≈ 60 s alone, longer when the whole suite shares the CPU
   }
 
   it('the stock pipe keeps a low spectral centroid at full load (old centroid was 3–4 kHz)', () => {

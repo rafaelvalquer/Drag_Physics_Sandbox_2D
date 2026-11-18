@@ -41,6 +41,16 @@ export interface Documented<T = number> {
 
 export const KGFM_TO_NM = 9.80665;
 export const CV_TO_KW = 0.73549875;
+/** Mechanical (SAE) horsepower in kW. hp, cv (PS, metric horsepower) and kW are three different units: 1 hp = 1.01387 cv. */
+export const HP_TO_KW = 0.745699872;
+export const LBFT_TO_NM = 1.3558179483;
+
+/** Horsepower (hp, SAE) to metric horsepower (cv / PS), rounded to 0.1. */
+export const hpToCv = (hp: number): number => Math.round(((hp * HP_TO_KW) / CV_TO_KW) * 10) / 10;
+/** Horsepower (hp, SAE) to kW, rounded to 0.1. */
+export const hpToKw = (hp: number): number => Math.round(hp * HP_TO_KW * 10) / 10;
+/** Pound-feet to N·m, rounded to 0.1. */
+export const lbftToNm = (lbft: number): number => Math.round(lbft * LBFT_TO_NM * 10) / 10;
 
 /** Air density of the standard atmosphere used for the reference flows (kg/m³, 25 °C). */
 const RHO_REF = 1.184;
