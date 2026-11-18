@@ -21,8 +21,8 @@ export function rivalBuild(r: RivalDef): Extract<BuildResult, { ok: true }> {
   return b;
 }
 
-export function rivalCar(rivalId: string): CarConfig {
-  const r = findRival(rivalId);
+export function rivalCar(rivalId: string | RivalDef): CarConfig {
+  const r = typeof rivalId === 'string' ? findRival(rivalId) : rivalId;
   if (!r) throw new Error(`rival desconhecido: ${rivalId}`);
   return painted(rivalBuild(r).car, r.paint);
 }

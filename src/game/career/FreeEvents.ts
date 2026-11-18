@@ -115,7 +115,11 @@ function generateParts(base: CarConfig, chapter: ChapterId, tier: FreeTier, rand
   }
   const shuffledParts = shuffled(candidates, rand);
   // Prefer upper-level physical upgrades at high difficulty, but preserve random combinations.
-  if (tier === 'elite') shuffledParts.sort((a, b) => (b.price - a.price) * (rand() < 0.62 ? 1 : -1));
+  if (tier === 'elite') {
+    const scored = shuffledParts.map((p) => ({ p, score: Math.log1p(p.price) * 0.65 + rand() * 5 }));
+    scored.sort((a, b) => b.score - a.score);
+    shuffledParts.splice(0, shuffledParts.length, ...scored.map((x) => x.p));
+  }
   for (const part of shuffledParts) add(part);
   return { ids, version };
 }
@@ -143,7 +147,7 @@ export function makeFreeEvent(chapter: ChapterId, rotation: number, tier: FreeTi
   const paint = { color: pick(PAINTS, rand), accent: pick(ACCENTS, rand) };
   const name = pick(NAMES, rand);
   const nickname = pick(NICKS, rand);
-  const skillKey = tier === 'bairro' ? 'beginner' : tier === 'preparado' ? 'intermediate' : 'advanced';
+  const skillKey: 'beginner' | 'intermediate' | 'advanced' = tier === 'bairro' ? 'beginner' : tier === 'preparado' ? 'intermediate' : 'advanced';
   const id = freeEventId(chapter, rotation, tier);
   const tracks = TRACK_POOLS[chapter];
   const trackId: CareerTrackId = chapter === CHAPTER_3_ID && tier === 'elite'

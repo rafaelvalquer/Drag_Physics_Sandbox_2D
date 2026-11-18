@@ -1,6 +1,5 @@
 import { findCampaignCar } from '../../data/cars/campaign';
 import { makeFreeEvent, type FreeEventOffer } from './FreeEvents';
-import { rivalBuild } from './RivalBuildFactory';
 import { CHAPTER2_CARS } from '../../data/cars/chapter2/index';
 import { CHAPTER3_CARS } from '../../data/cars/chapter3/index';
 import { EVENTS, findEvent, type CareerEventDef } from './CareerEvents';
@@ -583,7 +582,9 @@ export class CareerController {
       return fail('este capítulo não está disponível');
     if (offer.rotation !== s.freeEventRotation) return fail('este adversário já foi substituído');
     const expected = makeFreeEvent(s.chapterId, s.freeEventRotation, offer.tier);
-    const rb = rivalBuild(expected.rival);
+    const base = findCampaignCar(expected.rival.baseCarId)!;
+    const rb = resolveBuild(base, expected.rival.parts, {}, expected.rival.buildVersion ?? 1);
+    if (!rb.ok) return fail('build procedural inválido');
     if (expected.event.id !== r.eventId || expected.signature !== offer.signature ||
         r.opponentCarId !== rb.car.id || r.opponentBuildKey !== rb.key)
       return fail('o resultado não corresponde ao adversário gerado');

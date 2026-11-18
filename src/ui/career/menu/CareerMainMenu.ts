@@ -10,6 +10,7 @@ export interface MenuCallbacks {
   garage(): void;
   chapters(): void;
   history(): void;
+  freeEvents(): void;
   exportSave(): void;
   importSave(): void;
   back(): void;
@@ -139,6 +140,7 @@ export function buildMainMenu(d: MenuDeps): HTMLElement {
         'div',
         { class: 'cm-secondary', 'data-anim': 'secondary' },
         action('cm-card-btn', 'career-garage', 'MINHA GARAGEM', 'Prepare e personalize seu carro.', 'garage', cb.garage),
+        action('cm-card-btn', 'career-free-events', 'EVENTOS LIVRES', 'Rivais diferentes a cada disputa.', 'flag', cb.freeEvents),
         vm.chapter2Open ? action('cm-card-btn', 'career-chapters', 'CAPÍTULOS', 'Explore a sua trajetória.', 'chapters', cb.chapters) : null,
         action('cm-card-btn', 'career-history', 'HISTÓRICO', 'Reviva corridas e recordes.', 'history', cb.history),
       )

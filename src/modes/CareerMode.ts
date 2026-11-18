@@ -6,6 +6,7 @@ import { CAREER_TRACKS, findCareerTrack } from '../data/tracks/career';
 import { AI_PROFILES, DragAI } from '../game/ai/DragAI';
 import { CareerController, buildVersionFor, parseInventoryEntry } from '../game/career/CareerController';
 import { REGIONS, eventsOf, findEvent, rivalOf, type CareerEventDef, type RivalDef } from '../game/career/CareerEvents';
+import { availableFreeOffers, freeChapterOf, type FreeEventOffer } from '../game/career/FreeEvents';
 import { prizeEvents, prizeState } from '../game/career/PrizeCars';
 import {
   eventLabel,
@@ -57,6 +58,7 @@ import '../ui/career/design/career-screens.css';
 import '../ui/career/design/career-market.css';
 import '../ui/career/design/career-lab.css';
 import '../ui/career/design/career-story.css';
+import '../ui/career/design/career-free-events.css';
 import { buildChoose } from '../ui/career/screens/CareerChooseCarScreen';
 import { buildEnding } from '../ui/career/screens/CareerEndingScreen';
 import { buildResult } from '../ui/career/screens/CareerResultScreen';
@@ -68,12 +70,13 @@ import { buildHistory, type HistoryRow } from '../ui/career/screens/CareerHistor
 import { buildMarket, type Offer } from '../ui/career/screens/CareerMarketScreen';
 import { buildChapters } from '../ui/career/screens/CareerChaptersScreen';
 import { buildEvents } from '../ui/career/screens/CareerEventsScreen';
+import { buildFreeEvents } from '../ui/career/screens/CareerFreeEventsScreen';
 import { buildGarage, type GarageStats } from '../ui/career/screens/CareerGarageScreen';
 import { buildShell, type NavItem } from '../ui/career/screens/CareerShell';
 import { CareerTransitionManager } from '../ui/career/motion/CareerTransitionManager';
 import { menuViewModel } from '../ui/career/menu/CareerMenuProgress';
 
-type Screen = 'menu' | 'choose' | 'garage' | 'workshop' | 'dyno' | 'events' | 'rival' | 'race' | 'result' | 'ending' | 'history' | 'market' | 'chapters';
+type Screen = 'menu' | 'choose' | 'garage' | 'workshop' | 'dyno' | 'events' | 'free-events' | 'rival' | 'race' | 'result' | 'ending' | 'history' | 'market' | 'chapters';
 type Outcome = (typeof OutcomeSchema)['options'][number];
 
 const CAMERAS: CameraMode[] = ['follow', 'wide', 'start'];
@@ -158,8 +161,11 @@ export class CareerMode implements Mode {
     probes: [TelemetryProbe, TelemetryProbe];
     recorded: boolean;
     playerBuild: BuildResult;
+    freeOffer?: FreeEventOffer;
   } | null = null;
   lastRecord: RaceRecord | null = null;
+  private freeSelected: FreeEventOffer | null = null;
+  private lastFreeOffer: FreeEventOffer | null = null;
   private lastComments: Comment[] = [];
   /** Test hook: the player's lane is driven by the advanced AI profile. */
   autopilot = false;
@@ -281,6 +287,8 @@ export class CareerMode implements Mode {
         return this.dynoScreen();
       case 'events':
         return this.eventsScreen();
+      case 'free-events':
+        return this.freeEventsScreen();
       case 'rival':
         return this.rivalScreen();
       case 'result':
@@ -324,6 +332,7 @@ export class CareerMode implements Mode {
       { id: 'overview', label: 'Visão geral', icon: 'overview', on: () => this.show('menu') },
       { id: 'garage', label: 'Garagem', icon: 'garage', on: () => this.show('garage') },
       { id: 'events', label: 'Eventos', icon: 'events', on: () => this.show('events') },
+      { id: 'free-events', label: 'Eventos livres', icon: 'flag', on: () => this.show('free-events') },
       { id: 'workshop', label: 'Oficina', icon: 'workshop', locked: workshopOpen ? null : 'Libera durante o capítulo 1', on: () => this.playScenes('workshop', undefined, () => this.show('workshop')) },
       { id: 'dyno', label: 'Dinamômetro', icon: 'dyno', on: () => this.show('dyno') },
       { id: 'market', label: 'Classificados', icon: 'market', on: () => this.show('market') },
@@ -367,6 +376,7 @@ export class CareerMode implements Mode {
         garage: () => void this.deliverPrizes(() => this.show('garage')),
         chapters: () => this.show('chapters'),
         history: () => this.show('history'),
+        freeEvents: () => this.show('free-events'),
         exportSave: () => this.exportSave(),
         importSave: () => void this.importSave(),
         back: () => this.ctx.switchMode?.('sandbox'),
@@ -1126,12 +1136,37 @@ export class CareerMode implements Mode {
       done: evs.filter((e) => s.completedEventIds.includes(e.id)).length,
       total: evs.length,
       onPick: (id) => {
+        this.freeSelected = null;
         this.selectedEvent = id;
         this.show('rival');
       },
       onBack: () => this.show('garage'),
     });
-    return this.frame(chapterOf(ch).eventsTitle, 'career-events', body);
+    return this.frame(chapterOf(ch).eventsTitle, 'career-events', h('button', { class: 'cs-btn', 'data-testid': 'events-free-shortcut', onclick: () => this.show('free-events') }, 'Eventos livres · ganhar créditos'), body);
+  }
+
+  private freeEventsScreen(): HTMLElement {
+    const save = this.controller.save!;
+    const offers = availableFreeOffers(this.chapter, save.freeEventRotation);
+    const body = buildFreeEvents({
+      chapterTitle: chapterOf(this.chapter).title,
+      offers,
+      makePreview: (offer, width, height) => this.preview(rivalCar(offer.rival), width, height, 'plain', 0.86),
+      onPick: (offer) => {
+        this.freeSelected = offer;
+        this.selectedEvent = null;
+        this.show('rival');
+      },
+      onRefresh: async () => {
+        if (!this.guard()) return;
+        const rotated = await this.controller.rotateFreeEvents();
+        if (!rotated.ok) { toast(rotated.error, 'error'); return; }
+        this.freeSelected = null;
+        this.show('free-events');
+      },
+      onBack: () => this.show('garage'),
+    });
+    return this.frame('Eventos livres', 'career-free-events', body);
   }
 
   selectedEvent: string | null = null;
@@ -1144,11 +1179,12 @@ export class CareerMode implements Mode {
   }
 
   private rivalScreen(): HTMLElement {
-    const ev = findEvent(this.selectedEvent ?? '') ?? nextEvent(this.controller.save!, this.chapter) ?? eventsOf(this.chapter)[0]!;
-    const rv = rivalOf(ev);
+    const offer = this.freeSelected;
+    const ev = offer?.event ?? findEvent(this.selectedEvent ?? '') ?? nextEvent(this.controller.save!, this.chapter) ?? eventsOf(this.chapter)[0]!;
+    const rv = offer?.rival ?? rivalOf(ev);
     const rb = rivalBuild(rv);
     const s = this.controller.save!;
-    const firstWin = !s.claimedRewardIds.includes(`${ev.id}:first`);
+    const firstWin = offer ? true : !s.claimedRewardIds.includes(`${ev.id}:first`);
     this.trackCfg = findCareerTrack(ev.trackId);
     this.runner.setTrack(this.trackCfg);
     const mine = this.controller.activeCar!;
@@ -1161,7 +1197,7 @@ export class CareerMode implements Mode {
         portrait: portraitEl(rv.portrait),
         line: rv.lines.before,
         car: rb.car.name,
-        cfg: rivalCar(rv.id),
+        cfg: rivalCar(rv),
         cv: rb.peakPowerCv,
         nm: rb.peakTorqueNm,
         massKg: rb.car.massKg,
@@ -1170,12 +1206,12 @@ export class CareerMode implements Mode {
         parts: rv.parts.length ? rv.parts.map((id) => findPart(id)!.name).join(', ') : '',
         skill: rv.skillLabel,
       },
-      event: { title: ev.title, distance: RACE_DISTANCES[ev.distance].label, region: ev.regionLabel, prize: firstWin ? `${cr(ev.rewardCr)} + ${ev.reputation} de reputação${rv.prize && prizeState(s, ev) !== 'delivered' ? ` + ${rv.prize.nickname} (quem perde entrega o carro)` : ''}` : `revanche: ${cr(Math.round((ev.rewardCr * 0.35) / 10) * 10)}`, finale: !!ev.finale },
+      event: { title: ev.title, distance: RACE_DISTANCES[ev.distance].label, region: ev.regionLabel, prize: offer ? `${cr(ev.rewardCr)} por vitória · sem taxa de inscrição` : firstWin ? `${cr(ev.rewardCr)} + ${ev.reputation} de reputação${rv.prize && prizeState(s, ev) !== 'delivered' ? ` + ${rv.prize.nickname} (quem perde entrega o carro)` : ''}` : `revanche: ${cr(Math.round((ev.rewardCr * 0.35) / 10) * 10)}`, finale: !!ev.finale },
       makePreview: (c, w, hh) => this.preview(c, w, hh, 'plain', 0.86),
-      onStart: () => (ev.finale ? this.playScenes('final-challenge', undefined, () => this.startRace(ev)) : this.startRace(ev)),
-      onBack: () => this.show('events'),
+      onStart: () => offer ? this.startRace(ev, offer) : ev.finale ? this.playScenes('final-challenge', undefined, () => this.startRace(ev)) : this.startRace(ev),
+      onBack: () => this.show(offer ? 'free-events' : 'events'),
     });
-    return this.frame(ev.finale ? 'Desafio final' : eventLabel(ev), 'career-rival', body);
+    return this.frame(offer ? 'Rival da madrugada' : ev.finale ? 'Desafio final' : eventLabel(ev), 'career-rival', body);
   }
 
   // ------------------------------------------------------------------ race
@@ -1191,7 +1227,7 @@ export class CareerMode implements Mode {
     this.renderList = [];
   }
 
-  startRace(ev: CareerEventDef): void {
+  startRace(ev: CareerEventDef, offer?: FreeEventOffer): void {
     if (!this.guard()) return;
     const owned = this.controller.activeCar;
     if (!owned) return;
@@ -1201,9 +1237,12 @@ export class CareerMode implements Mode {
       return;
     }
     this.clearRace();
-    const rv = rivalOf(ev);
+    if (offer && (offer.rotation !== this.controller.save?.freeEventRotation || offer.event.chapter !== this.chapter)) {
+      toast('Esta oferta já mudou. Gere um novo rival.', 'error'); return;
+    }
+    const rv = offer?.rival ?? rivalOf(ev);
     const playerCar = ownedCarConfig(owned);
-    const rivalCarCfg = rivalCar(rv.id);
+    const rivalCarCfg = rivalCar(rv);
     this.trackCfg = findCareerTrack(ev.trackId);
     this.runner.resetAll();
     this.runner.setTrack(this.trackCfg);
@@ -1236,6 +1275,7 @@ export class CareerMode implements Mode {
       probes,
       recorded: false,
       playerBuild: pb,
+      freeOffer: offer,
     };
     p.control = (hh) => race.beforeStep(hh);
     this.runner.afterStep.push((hh) => {
@@ -1297,10 +1337,10 @@ export class CareerMode implements Mode {
     const outcome = this.outcomeOf(race);
     const playerRes = this.summarize(race.results[0]!, cur.probes[0], 'Você');
     const oppRes = this.summarize(race.results[1]!, cur.probes[1], `${cur.rival.name} "${cur.rival.nickname}"`);
-    await this.record(cur.event, cur.rival, cur.attemptId, outcome, playerRes, oppRes, cur.playerBuild);
+    await this.record(cur.event, cur.rival, cur.attemptId, outcome, playerRes, oppRes, cur.playerBuild, cur.freeOffer);
   }
 
-  private async record(ev: CareerEventDef, rv: RivalDef, attemptId: string, outcome: Outcome, player: RunSummary, opponent: RunSummary, pb: BuildResult): Promise<void> {
+  private async record(ev: CareerEventDef, rv: RivalDef, attemptId: string, outcome: Outcome, player: RunSummary, opponent: RunSummary, pb: BuildResult, freeOffer?: FreeEventOffer): Promise<void> {
     const owned = this.controller.activeCar!;
     const rb = rivalBuild(rv);
     const res: Omit<CareerRaceResult, 'creditsAwarded' | 'reputationAwarded'> = {
@@ -1316,12 +1356,13 @@ export class CareerMode implements Mode {
       playerBuildKey: pb.ok ? pb.key : '',
       opponentBuildKey: rb.key,
     };
-    const r = await this.controller.recordRace(res);
+    const r = freeOffer ? await this.controller.recordFreeRace(res, freeOffer) : await this.controller.recordRace(res);
     if (!r.ok) {
       toast(`O resultado não foi salvo: ${r.error}`, 'error');
       return;
     }
     this.lastRecord = r.value;
+    this.lastFreeOffer = freeOffer ?? null;
     this.lastComments = evaluateRace({
       outcome,
       player,
@@ -1330,6 +1371,11 @@ export class CareerMode implements Mode {
       playerPowerCv: pb.ok ? pb.peakPowerCv : 0,
       opponentPowerCv: rb.peakPowerCv,
     });
+    if (freeOffer) {
+      this.freeSelected = null;
+      this.show('result');
+      return;
+    }
     const trigger: StoryTrigger = outcome === 'win' ? 'victory' : 'defeat';
     const after = (): void => {
       if (r.value.chapterCompleted) {
@@ -1389,12 +1435,13 @@ export class CareerMode implements Mode {
     const rec = this.lastRecord;
     if (!rec) return this.frame('Resultado', 'career-result', h('div', { class: 'hint' }, 'Nenhuma corrida.'));
     const r = rec.result;
-    const ev = findEvent(r.eventId)!;
-    const rv = rivalOf(ev);
+    const freeOffer = this.lastFreeOffer?.event.id === r.eventId ? this.lastFreeOffer : null;
+    const ev = freeOffer?.event ?? findEvent(r.eventId)!;
+    const rv = freeOffer?.rival ?? rivalOf(ev);
     const won = r.outcome === 'win';
     const p = r.playerResult;
     const o = r.opponentResult;
-    const nxt = nextEvent(this.controller.save!, ev.chapter);
+    const nxt = freeOffer ? null : nextEvent(this.controller.save!, ev.chapter);
     const sec = (v: number | null): string => f3(v);
     const body = buildResult({
       outcome: r.outcome,
@@ -1434,13 +1481,13 @@ export class CareerMode implements Mode {
       rivalPortrait: portraitEl(rv.portrait),
       ninaPortrait: portraitEl('nina'),
       ninaComments: this.lastComments.map((c) => ({ id: c.id, text: c.text })),
-      next: nxt ? `Próximo desafio: ${nxt.order}. ${nxt.title} (${rivalOf(nxt).nickname})` : 'Capítulo concluído.',
-      chapterEvents: chapterOf(ev.chapter).eventsTab,
+      next: freeOffer ? 'Novo adversário disponível nos eventos livres.' : nxt ? `Próximo desafio: ${nxt.order}. ${nxt.title} (${rivalOf(nxt).nickname})` : 'Capítulo concluído.',
+      chapterEvents: freeOffer ? 'Eventos livres' : chapterOf(ev.chapter).eventsTab,
       won,
-      onRetry: () => this.startRace(ev),
+      onRetry: () => freeOffer ? this.show('free-events') : this.startRace(ev),
       blown: p.dnfReason === 'engine-blown' ? { rpm: p.blownAtRpm ?? 0, onDyno: () => this.show('dyno') } : null,
       onGarage: () => this.show('garage'),
-      onEvents: () => this.show('events'),
+      onEvents: () => this.show(freeOffer ? 'free-events' : 'events'),
     });
     return this.frame({ win: 'Vitória', loss: 'Derrota', 'red-light': 'Queima de largada', dnf: 'Não completou' }[r.outcome], 'career-result', body);
   }
@@ -1493,9 +1540,9 @@ export class CareerMode implements Mode {
       return {
         id: r.attemptId,
         date: r.completedAt.slice(0, 16).replace('T', ' '),
-        chapter: ev?.chapter ?? CHAPTER_1_ID,
-        event: ev?.title ?? r.eventId,
-        rival: ev ? `${rivalOf(ev).name} "${rivalOf(ev).nickname}"` : '—',
+        chapter: ev?.chapter ?? freeChapterOf(r.eventId) ?? CHAPTER_1_ID,
+        event: ev?.title ?? (freeChapterOf(r.eventId) ? 'Evento livre' : r.eventId),
+        rival: ev ? `${rivalOf(ev).name} "${rivalOf(ev).nickname}"` : r.opponentResult.name,
         outcome: r.outcome,
         rt: r.playerResult.rt,
         et: r.playerResult.et,

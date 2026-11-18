@@ -25,6 +25,7 @@ const ACTIVE: Record<string, string> = {
   menu: 'overview',
   garage: 'garage',
   events: 'events',
+  'free-events': 'free-events',
   rival: 'events',
   result: 'events',
   ending: 'overview',
