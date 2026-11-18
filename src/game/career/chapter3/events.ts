@@ -237,14 +237,14 @@ const EV: readonly Ev[] = [
   // docs/chapter3/balance-report.md): the Golf Stage 2 is the slowest of the ten, then the two
   // aspirated V6, the turbo sedans in order of time, the returning Evo and the two heavy hitters.
   { id: 'c3e1-a-volta-do-gti', order: 1, title: 'A Volta do GTI', rivalId: 'ricardo-elite', trackId: 'marginal-alta', regionLabel: 'Marginal Alta', distance: 'eighth', rewardCr: 15000, reputation: 50, unlocks: ['c3-v6-parts'] },
-  { id: 'c3e2-primeira-elite', order: 2, title: 'Primeira Elite', rivalId: 'hugo', trackId: 'marginal-alta', regionLabel: 'Marginal Alta', distance: 'eighth', rewardCr: 20000, reputation: 55, unlocks: ['c3-na-head'] },
+  { id: 'c3e2-primeira-elite', order: 2, title: 'Primeira Elite', rivalId: 'hugo', trackId: 'marginal-alta', regionLabel: 'Marginal Alta', distance: 'eighth', rewardCr: 20000, reputation: 55, unlocks: [] },
   { id: 'c3e3-silencio-refinado', order: 3, title: 'Silêncio Refinado', rivalId: 'renata', trackId: 'marginal-alta', regionLabel: 'Marginal Alta', distance: 'quarter', rewardCr: 26000, reputation: 60, unlocks: [] },
-  { id: 'c3e4-zeta-de-verdade', order: 4, title: 'Zeta de Verdade', rivalId: 'bruno', trackId: 'hangar-executivo', regionLabel: 'Hangar Executivo', distance: 'quarter', rewardCr: 32000, reputation: 65, unlocks: ['c3-na-high-rpm'] },
-  { id: 'c3e5-peso-pesado', order: 5, title: 'Peso Pesado', rivalId: 'davi', trackId: 'hangar-executivo', regionLabel: 'Hangar Executivo', distance: 'quarter', rewardCr: 40000, reputation: 70, unlocks: ['c3-stage3', 'c3-turbo-street'] },
+  { id: 'c3e4-zeta-de-verdade', order: 4, title: 'Zeta de Verdade', rivalId: 'bruno', trackId: 'hangar-executivo', regionLabel: 'Hangar Executivo', distance: 'quarter', rewardCr: 32000, reputation: 65, unlocks: [] },
+  { id: 'c3e5-peso-pesado', order: 5, title: 'Peso Pesado', rivalId: 'davi', trackId: 'hangar-executivo', regionLabel: 'Hangar Executivo', distance: 'quarter', rewardCr: 40000, reputation: 70, unlocks: ['c3-stage3'] },
   { id: 'c3e6-salao-italiano', order: 6, title: 'Salão Italiano', rivalId: 'valentina', trackId: 'hangar-executivo', regionLabel: 'Hangar Executivo', distance: 'km', rewardCr: 48000, reputation: 75, unlocks: [] },
-  { id: 'c3e7-biturbo-alemao', order: 7, title: 'Biturbo Alemão', rivalId: 'maya', trackId: 'hangar-executivo', regionLabel: 'Hangar Executivo', distance: 'quarter', rewardCr: 60000, reputation: 80, unlocks: ['c3-high-flow'] },
+  { id: 'c3e7-biturbo-alemao', order: 7, title: 'Biturbo Alemão', rivalId: 'maya', trackId: 'hangar-executivo', regionLabel: 'Hangar Executivo', distance: 'quarter', rewardCr: 60000, reputation: 80, unlocks: [] },
   { id: 'c3e8-a-volta-da-evo', order: 8, title: 'A Volta da Evo', rivalId: 'bianca-elite', trackId: 'pier-elite', regionLabel: 'Pier Elite', distance: 'km', rewardCr: 75000, reputation: 90, unlocks: [] },
-  { id: 'c3e9-o-trevo-vermelho', order: 9, title: 'O Trevo Vermelho', rivalId: 'dante', trackId: 'pier-elite', regionLabel: 'Pier Elite', distance: 'quarter', rewardCr: 95000, reputation: 100, unlocks: ['c3-dealer-gtr', 'c3-final-challenge', 'c3-competition'] },
+  { id: 'c3e9-o-trevo-vermelho', order: 9, title: 'O Trevo Vermelho', rivalId: 'dante', trackId: 'pier-elite', regionLabel: 'Pier Elite', distance: 'quarter', rewardCr: 95000, reputation: 100, unlocks: ['c3-dealer-gtr', 'c3-final-challenge'] },
   {
     id: 'c3e10-elite-da-madrugada',
     order: 10,

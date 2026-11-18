@@ -1166,7 +1166,7 @@ export class CareerMode implements Mode {
         nm: rb.peakTorqueNm,
         massKg: rb.car.massKg,
         drive: driveLabel(rb.car),
-        note: rb.car.engine.induction === 'turbo' && findCampaignCar(rv.baseCarId)!.engine.induction !== 'turbo' ? 'turbo (não original)' : undefined,
+        note: rivalNote(rv.parts, rb.car, findCampaignCar(rv.baseCarId)!),
         parts: rv.parts.length ? rv.parts.map((id) => findPart(id)!.name).join(', ') : '',
         skill: rv.skillLabel,
       },
@@ -1272,6 +1272,8 @@ export class CareerMode implements Mode {
       dnf: r.dnf,
       ...(r.dnfReason ? { dnfReason: r.dnfReason } : {}),
       ...(r.dnfReason === 'engine-blown' && r.blownAtRpm !== undefined ? { blownAtRpm: Math.round(r.blownAtRpm) } : {}),
+      ...(Object.keys(r.splits).length ? { splitsS: { ...r.splits } } : {}),
+      ...(r.finished ? { maxRpm: Math.round(r.maxRpm ?? 0), gearsUsed: [...(r.gearsUsed ?? [])] } : {}),
       launchRpm: t.launchRpm,
       maxSlipRatio: t.maxSlipRatio,
       wheelspinS: t.wheelspinS,
@@ -1402,9 +1404,22 @@ export class CareerMode implements Mode {
       rows: [
         { label: 'Reação (RT)', player: p.rt, rival: o.rt, better: 'low', format: sec },
         { label: 'ET', player: p.dnf ? null : p.et, rival: o.dnf ? null : o.et, better: 'low', format: (v) => (v === null ? 'DNF' : f3(v)) },
+        ...(ev.distance === 'km'
+          ? [
+              { label: '201 m', player: p.splitsS?.eighth ?? null, rival: o.splitsS?.eighth ?? null, better: 'low' as const, format: (v: number | null) => (v === null ? '—' : f3(v)) },
+              { label: '402 m', player: p.splitsS?.quarter ?? null, rival: o.splitsS?.quarter ?? null, better: 'low' as const, format: (v: number | null) => (v === null ? '—' : f3(v)) },
+              { label: '1.000 m', player: p.dnf ? null : p.et, rival: o.dnf ? null : o.et, better: 'low' as const, format: (v: number | null) => (v === null ? 'DNF' : f3(v)) },
+            ]
+          : []),
         { label: 'Tempo desde o verde', player: p.total, rival: o.total, better: 'low', format: sec },
-        { label: 'Velocidade final', player: p.trapKmh, rival: o.trapKmh, better: 'high', format: (v) => (v === null ? '—' : `${f1(v)} km/h`) },
+        { label: ev.distance === 'km' ? 'Velocidade na linha de chegada' : 'Velocidade final', player: p.trapKmh, rival: o.trapKmh, better: 'high', format: (v) => (v === null ? '—' : `${f1(v)} km/h`) },
         { label: 'Patinagem', player: p.wheelspinS ?? 0, rival: o.wheelspinS ?? 0, better: 'low', format: (v) => `${f2(v)} s` },
+        ...(ev.distance === 'km'
+          ? [
+              { label: 'Rotação máxima', player: p.maxRpm ?? null, rival: o.maxRpm ?? null, better: 'low' as const, format: (v: number | null) => (v === null ? '—' : `${Math.round(v)} rpm`) },
+              { label: 'Marchas usadas', player: p.gearsUsed?.length ?? null, rival: o.gearsUsed?.length ?? null, better: 'high' as const, format: (v: number | null) => (v === null ? '—' : `${v}`) },
+            ]
+          : []),
       ],
       credits: r.creditsAwarded,
       reputation: r.reputationAwarded,
@@ -1531,13 +1546,14 @@ export class CareerMode implements Mode {
       const sinceGreen = race.elapsedSinceGreen(0);
       this.hud?.update(p.sim, this.ctx.settings.units, this.runner.paused ? 'PAUSADO' : '', {
         distanceM: p.sim.x,
+        ...(race.distanceId === 'km' ? { totalM: race.distanceM, partial: { label: 'parcial 402 m', timeS: r0?.splits.quarter ?? null } } : {}),
         timeS: sinceGreen,
         timeLabel: done ? 'TEMPO TOTAL' : sinceGreen === null ? 'preparação' : 'TEMPO DESDE O VERDE',
         etS: sinceGreen === null ? undefined : race.elapsed(0),
         alert: r0?.redLight ?? false,
         gapM: opp ? opp.sim.x - p.sim.x : null,
       });
-      if (this.banner) this.banner.textContent = `${this.current.event.title} · Você × ${this.current.rival.name} "${this.current.rival.nickname}" · ${race.status}`;
+      if (this.banner) this.banner.textContent = `${race.distanceId === 'km' ? 'ELITE DA MADRUGADA — 1.000 M · ' : ''}${this.current.event.title} · Você × ${this.current.rival.name} "${this.current.rival.nickname}" · ${race.status}`;
       if (race.phase === 'finished' && !this.current.recorded) {
         this.banner && (this.banner.textContent = race.status);
         void this.finishRace();
@@ -1568,6 +1584,14 @@ export class CareerMode implements Mode {
     if (!this.race || !p || this.race.phase === 'finished') return null;
     return p.sim.x < 5.5 ? TREE_X_M : null;
   }
+}
+
+/** Aspiration and preparation level of a rival, read from its resolved build (never from a label). */
+function rivalNote(parts: readonly string[], car: CarConfig, base: CarConfig): string {
+  const turbo = car.engine.induction === 'turbo';
+  const aspiration = !turbo ? 'aspirado' : car.engine.turbo?.layout === 'parallel-twin' ? 'biturbo' : 'turbo';
+  const stage = parts.includes('ecu-stage3') ? 'Stage 3' : parts.includes('ecu-stage2') ? 'Stage 2' : parts.includes('ecu-stage1') ? 'Stage 1' : parts.length ? 'preparado' : 'de fábrica';
+  return `${aspiration} · ${stage}${turbo && base.engine.induction !== 'turbo' ? ' (turbo não original)' : ''}`;
 }
 
 function portraitEl(id: Parameters<typeof portraitSvg>[0]): HTMLElement {

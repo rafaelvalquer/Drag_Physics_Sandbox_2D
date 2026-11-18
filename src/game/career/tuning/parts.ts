@@ -1,5 +1,6 @@
 import type { TransmissionKind, TurboConfig } from '../../../data/schema';
 import { CHAPTER2_PARTS } from './chapter2Parts';
+import { CHAPTER3_PARTS } from './chapter3Parts';
 
 /**
  * Career parts. Each part is a discriminated union member by `category` and carries the PHYSICAL
@@ -500,6 +501,7 @@ export type UnlockId =
   | 'c2-stage2'
   | 'c3-stage3'
   // Chapter 3 — Elite da Madrugada
+  | 'c3-v6-parts'
   | 'c3-dealer-gtr'
   | 'c3-final-challenge';
 
@@ -534,6 +536,7 @@ export const UNLOCK_LABEL: Record<UnlockId, string> = {
   'c2-generic-chassis': 'Alívio de peso e arrefecimento nos carros modernos',
   'c2-stage2': 'Stage 2 do turbo de fábrica (downpipe, admissão direta, mapa Stage 2)',
   'c3-stage3': 'Stage 3 do turbo de fábrica',
+  'c3-v6-parts': 'Peças dos V6 aspirados (admissão, escape, comandos, remap, cabeçotes)',
   'c3-dealer-gtr': 'GT-R à venda na revenda Elite',
   'c3-final-challenge': 'Duelo final da Elite',
 };
@@ -713,7 +716,7 @@ const DYNO_LAB_PARTS: readonly PartDef[] = [
 export const PARTS: readonly PartDef[] = [...BASE_PARTS, ...EXPANDED_PARTS, ...DYNO_LAB_PARTS];
 
 /** Every part of every resolver version (ids are unique across versions). */
-export const ALL_PARTS: readonly PartDef[] = [...PARTS, ...CHAPTER2_PARTS];
+export const ALL_PARTS: readonly PartDef[] = [...PARTS, ...CHAPTER2_PARTS, ...CHAPTER3_PARTS];
 
 export function findPart(id: string): PartDef | undefined {
   return ALL_PARTS.find((p) => p.id === id);

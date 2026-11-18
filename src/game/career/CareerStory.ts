@@ -98,11 +98,7 @@ const UNLOCK_SPEAKER: Partial<Record<UnlockId, PortraitId>> = {
   'c2-stage2': 'caio',
   'c3-stage3': 'caio',
   'c3-v6-parts': 'caio',
-  'c3-na-head': 'caio',
-  'c3-na-high-rpm': 'caio',
-  'c3-turbo-street': 'caio',
-  'c3-high-flow': 'caio',
-  'c3-competition': 'caio',
+
 };
 
 const UNLOCK_INTRO: Partial<Record<UnlockId, string>> = {
@@ -127,11 +123,6 @@ const UNLOCK_INTRO: Partial<Record<UnlockId, string>> = {
   // ---- chapter 3
   'c3-stage3': 'Stage 3 de turbina de fábrica: mapa para motor forjado. Exige turbina de maior fluxo, downpipe, intercooler maior e pistões forjados; sem tudo isso a ECU recusa o mapa.',
   'c3-v6-parts': 'Os V6 aspirados ganharam peças próprias: admissão e escape de alto fluxo, remap, e comandos e cabeçotes por família. Peça de Nissan não serve em Toyota, e nenhuma delas cria turbo.',
-  'c3-na-head': 'Cabeçotes retrabalhados também para o Lexus: o D-4S tem os dutos otimizados, então o ganho dele é bem menor que o dos Nissan.',
-  'c3-na-high-rpm': 'Projeto Aspirado High RPM: comandos, VVEL e VVT-i, molas de competição e a ECU Stage 2. O motor passa a respirar em alto giro e perde embaixo; o corte só sobe até onde as molas e os internos seguram.',
-  'c3-turbo-street': 'Conversão para turbo e biturbo Stage 3. O kit Street enche cedo e dá pouca pressão; sem injetores maiores, pistões de baixa compressão e embreagem à altura, a oficina recusa o projeto.',
-  'c3-high-flow': 'Projetos High Flow: turbinas grandes, combustível de alta vazão, lubrificação e internos Stage 3. Mais fluxo enche mais tarde; o limite passa a ser alimentação, óleo e câmbio.',
-  'c3-competition': 'Projetos Competition: ECU programável, coletores de competição, balanceamento e lubrificação. O corte de giro vem da ECU, mas quem aguenta o giro são as molas e os internos.',
   'c3-dealer-gtr': 'A revenda Elite liberou o GT-R de série. O do Akira, esse você só ganha na pista.',
   'c3-final-challenge': 'O Akira aceitou o duelo final. Pier Elite, quatrocentos metros.',
   // ---- chapter 1
