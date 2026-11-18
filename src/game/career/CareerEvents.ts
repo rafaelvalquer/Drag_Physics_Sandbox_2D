@@ -1,7 +1,7 @@
 import type { AiProfile } from '../ai/DragAI';
 import type { RaceDistanceId } from '../race/RaceController';
 import type { UnlockId } from './tuning/parts';
-import type { ResolverVersion } from './tuning/buildCommon';
+import type { ResolverVersion, BuildTune } from './tuning/buildCommon';
 import { CHAPTER_1_ID, CHAPTER_1_TITLE, CHAPTER_2_ID, type ChapterId } from './chapters';
 import { CHAPTER2_EVENTS, CHAPTER2_REGIONS, CHAPTER2_RIVALS } from './chapter2/events';
 import { CHAPTER3_EVENTS, CHAPTER3_REGIONS, CHAPTER3_RIVALS } from './chapter3/events';
@@ -45,7 +45,8 @@ export interface RivalDef {
   /** Build resolver version of the rival's build (chapter 1: 1). */
   buildVersion?: ResolverVersion;
   parts: string[];
-  tune?: { boostBar?: number };
+  /** Same settings a player has in the Dyno Lab; the resolver rejects what the installed parts do not unlock. */
+  tune?: BuildTune;
   paint: { color: string; accent: string };
   /** Driver skill (the only thing that is not the car). */
   skill: AiProfile;

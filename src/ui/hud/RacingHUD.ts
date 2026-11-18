@@ -26,6 +26,10 @@ export interface HudInfo {
   timeLabel?: string;
   /** Separate ET (s since leaving the stage beam): undefined hides the row, null shows "—". */
   etS?: number | null;
+  /** Official distance of the run (m): shows "X / total" and the distance left to the finish line. */
+  totalM?: number;
+  /** Intermediate time of a long run (label, s since the beam): null while not crossed, never estimated. */
+  partial?: { label: string; timeS: number | null };
   /** Highlights the timer (e.g. red light). */
   alert?: boolean;
   /** Opponent position relative to the player (m, positive = opponent ahead) or null. */
@@ -57,6 +61,11 @@ export class RacingHUD {
   private readonly etRow: HTMLElement;
   private readonly et: HTMLElement;
   private readonly timeRow: HTMLElement;
+  private readonly leftRow: HTMLElement;
+  private readonly left: HTMLElement;
+  private readonly partialRow: HTMLElement;
+  private readonly partialK: HTMLElement;
+  private readonly partialV: HTMLElement;
   private readonly gapRow: HTMLElement;
   private readonly gap: HTMLElement;
   private readonly slipBar: HTMLElement;
@@ -93,6 +102,13 @@ export class RacingHUD {
     this.etRow = h('div', { class: 'kv-row' }, h('span', { class: 'k' }, 'ET (desde o sensor)'), this.et);
     this.etRow.style.display = 'none';
     this.timeRow = h('div', { class: 'kv-row big' }, this.timeLabel, this.time);
+    this.left = h('span', { 'data-testid': 'hud-left' }, '—');
+    this.leftRow = h('div', { class: 'kv-row' }, h('span', { class: 'k' }, 'faltam'), this.left);
+    this.leftRow.style.display = 'none';
+    this.partialK = h('span', { class: 'k' }, 'parcial');
+    this.partialV = h('span', { 'data-testid': 'hud-partial' }, '—');
+    this.partialRow = h('div', { class: 'kv-row' }, this.partialK, this.partialV);
+    this.partialRow.style.display = 'none';
     this.gap = h('span', { 'data-testid': 'hud-gap' }, '');
     this.gapRow = h('div', { class: 'kv-row' }, h('span', { class: 'k' }, 'adversário'), this.gap);
     this.slipBar = h('div', { class: 'fill' });
@@ -135,6 +151,8 @@ export class RacingHUD {
         this.timeRow,
         this.etRow,
         h('div', { class: 'kv-row' }, h('span', { class: 'k' }, 'distância'), this.dist),
+        this.leftRow,
+        this.partialRow,
         this.gapRow,
         h('div', { class: 'bar-row', title: 'Escorregamento longitudinal dos pneus de tração: (ωr − v) / v' }, h('span', { class: 'k' }, 'patinagem'), h('div', { class: 'hbar' }, this.slipBar), this.slipText),
         this.strainRow,
@@ -180,7 +198,15 @@ export class RacingHUD {
 
     this.msg.textContent = message || stateText(sim);
     const inf = info ?? { distanceM: sim.x, timeS: null, gapM: null };
-    this.dist.textContent = `${inf.distanceM.toFixed(1)} m`;
+    const shown = inf.totalM === undefined ? inf.distanceM : Math.min(inf.distanceM, inf.totalM);
+    this.dist.textContent = inf.totalM === undefined ? `${shown.toFixed(1)} m` : `${Math.max(0, shown).toFixed(0)} / ${inf.totalM.toFixed(0)} m`;
+    this.leftRow.style.display = inf.totalM === undefined ? 'none' : '';
+    if (inf.totalM !== undefined) this.left.textContent = `${Math.max(0, inf.totalM - inf.distanceM).toFixed(0)} m`;
+    this.partialRow.style.display = inf.partial ? '' : 'none';
+    if (inf.partial) {
+      this.partialK.textContent = inf.partial.label;
+      this.partialV.textContent = inf.partial.timeS === null ? '—' : `${inf.partial.timeS.toFixed(3)} s`;
+    }
     this.timeLabel.textContent = inf.timeLabel ?? 'tempo';
     this.time.textContent = inf.timeS === null ? '—' : `${inf.timeS.toFixed(3)} s`;
     this.etRow.style.display = inf.etS === undefined ? 'none' : '';

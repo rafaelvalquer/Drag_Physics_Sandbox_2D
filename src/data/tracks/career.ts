@@ -97,7 +97,7 @@ export const CAREER_TRACKS: readonly TrackConfig[] = [
     ambientPressurePa: 101400,
     windMs: -0.5,
     gradePercent: 0,
-    lengthM: 1000,
+    lengthM: 1700, // finish at 1000 m + 700 m of run-off for the 1 km duels (the safety brake needs ~530 m from 285 km/h)
   },
   {
     id: 'pier-elite',
@@ -110,7 +110,7 @@ export const CAREER_TRACKS: readonly TrackConfig[] = [
     ambientPressurePa: 101300,
     windMs: 1,
     gradePercent: 0,
-    lengthM: 1000,
+    lengthM: 1700, // finish at 1000 m + 700 m of run-off for the 1 km duels (the safety brake needs ~530 m from 285 km/h)
   },
   {
     id: 'corredor-da-liga',

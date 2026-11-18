@@ -63,6 +63,17 @@ export interface EngineParts {
   revLimitAddRpm?: number;
   /** Additional hardware effects resolved from independent workshop slots. */
   mod?: MechanicalMods;
+  /**
+   * Air mass flow the compressor of a conversion kit delivers before it leaves its efficiency island
+   * (kg/s). Above it the pressure it holds falls (flow ∝ absolute pressure at a speed). Absent = no
+   * limit (every v1 kit).
+   */
+  compressorFlowKgS?: number;
+  /**
+   * Intercooler of the workshop (resolver v2): replaces the kit's core. Cooler charge also detonates
+   * less: the knock retard scales with the heating the core leaves, (1 − ε) / (1 − ε_kit).
+   */
+  intercoolerEffectiveness?: number;
 }
 
 /** Otto cycle efficiency 1 − r^(1−γ) (γ = 1.3 for the real charge). */
@@ -286,13 +297,14 @@ export function applyEngineParts(stock: EngineConfig, parts: EngineParts): Breat
     spoolTimeS: turbo.turbo.spoolTimeS * (mod.turboSpoolScale ?? 1),
     fullBoostFlowFraction: turbo.turbo.fullBoostFlowFraction * (mod.turboFlowScale ?? 1),
   };
-  const intercooler = Math.min(0.92, (mod.intercoolerEffectiveness ?? turbo.intercoolerEffectiveness) + (mod.intercoolerEffectivenessAdd ?? 0));
+  const intercooler = Math.min(0.92, (parts.intercoolerEffectiveness ?? mod.intercoolerEffectiveness ?? turbo.intercoolerEffectiveness) + (mod.intercoolerEffectivenessAdd ?? 0));
+  const icKnockScale = parts.intercoolerEffectiveness !== undefined ? (1 - intercooler) / (1 - turbo.intercoolerEffectiveness) : 1;
   let knockLoss = 0;
 
   // ---- turbo: fixed point between the curve and the steady boost it produces ----
   const fuel = engineFuel(stock);
   const knockPerBar = fuel === 'ethanol' ? turbo.knockLossPerBarEthanol : turbo.knockLossPerBarPetrol;
-  const crExcess = Math.max(1, compressionRatio - 7);
+  const crExcess = Math.max(1, compressionRatio + (parts.compressionAdd ?? 0) - 7);
   let curve = base.torqueCurve.torqueNm.slice();
   let boosts: number[] = grid.map(() => 0);
   for (let pass = 0; pass < 5; pass++) {
@@ -302,20 +314,24 @@ export function applyEngineParts(stock: EngineConfig, parts: EngineParts): Breat
     boosts = [];
     for (let i = 0; i < grid.length; i++) {
       const op = model.wotOperatingPoint(grid[i]!);
-      const pr = (ATMOSPHERIC_PRESSURE + op.boost) / ATMOSPHERIC_PRESSURE;
+      // compressor flow limit of a conversion kit: the charge mass flow scales with the absolute pressure
+      const boostPa = parts.compressorFlowKgS
+        ? Math.max(0, Math.min(op.boost, ((ATMOSPHERIC_PRESSURE + op.boost) * parts.compressorFlowKgS) / Math.max(op.flow, 1e-6) - ATMOSPHERIC_PRESSURE))
+        : op.boost;
+      const pr = (ATMOSPHERIC_PRESSURE + boostPa) / ATMOSPHERIC_PRESSURE;
       const t2 = STANDARD_TEMPERATURE_K * (1 + (Math.pow(pr, 0.2857) - 1) / COMPRESSOR_EFFICIENCY);
       const tCharge = t2 - intercooler * (t2 - STANDARD_TEMPERATURE_K);
       // boosted MAP scaled from the NA point (same restriction ratio, higher upstream pressure)
       const mapT = naMap[i]! * pr;
       const willans = (p: number): number => p - WILLANS_OFFSET * ATMOSPHERIC_PRESSURE;
       const density = (mapT * STANDARD_TEMPERATURE_K) / tCharge;
-      const knock = 1 - knockPerBar * (mod.knockRetardScale ?? 1) * (mod.coolingKnockScale ?? 1) * (op.boost / 1e5) * crExcess;
+      const knock = 1 - knockPerBar * icKnockScale * (mod.knockRetardScale ?? 1) * (mod.coolingKnockScale ?? 1) * (boostPa / 1e5) * crExcess;
       knockLoss = Math.max(knockLoss, 1 - knock);
       const indicated = (naIndicated[i]! * willans(density) * knock) / willans(naMap[i]!);
       const back = op.back;
       const pumping = (back - mapT) * vdOver4pi;
       next.push(round1(Math.max(indicated - op.frictionNm * (mod.coolingFrictionScale ?? 1) - pumping, 1)));
-      boosts.push(op.boost / 1e5);
+      boosts.push(boostPa / 1e5);
     }
     const change = Math.max(...next.map((t, i) => Math.abs(t - curve[i]!)));
     curve = next;

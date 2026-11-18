@@ -307,6 +307,11 @@ export const TransmissionSchema = z.object({
   torqueConverter: TorqueConverterSchema.optional(),
   powershift: PowershiftSchema.optional(),
   autoShift: AutoShiftSchema.optional(),
+  /**
+   * Boost by gear (turbo engines): fraction of the boost target the ECU holds in each of the first
+   * gears (index 0 = 1st gear); later gears run the full target. Absent = full target everywhere.
+   */
+  boostByGear: z.array(finite(0.3, 1)).max(6).optional(),
 });
 export type TransmissionConfig = z.infer<typeof TransmissionSchema>;
 

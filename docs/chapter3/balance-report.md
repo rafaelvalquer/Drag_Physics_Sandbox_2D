@@ -1,93 +1,75 @@
-# Relatório de balanceamento — Capítulo 3
+# Relatório de balanceamento — Capítulo 3 (P1: rivais preparados e corridas de 1 km)
 
-Dados completos, gerados por `npx tsx scripts/balance-chapter3.ts --out docs/chapter3/balance-data.md`: [`balance-data.md`](balance-data.md) (tabela de builds, ficha dos dez rivais e a matriz de corridas de 27 builds × 2 pilotos contra os dez rivais). Tudo roda sem interface (`runHeadlessRace`) com as mesmas regras de física, IA e recompensa do jogo e sementes fixas, então o relatório é reproduzível.
+Dados completos, gerados por `npx tsx scripts/balance-chapter3.ts --out docs/chapter3/balance-data.md`: [`balance-data.md`](balance-data.md) (builds de referência e do capítulo com 0–100, 201/402/1000 m e velocidade, ficha dos dez rivais e a matriz de corridas com três pilotos e três sementes por duelo). Tudo roda sem interface (`runHeadlessRace`) com as mesmas regras de física, IA e recompensa do jogo, então o relatório é reproduzível. Nenhum save é lido ou alterado: todos os carros saem do catálogo.
+
+## Diagnóstico (antes da P1)
+
+Com os oito rivais novos de fábrica, um **335i Stage 3** (489 cv, 629 N·m, 402 m em 11,62 s, 1000 m em 20,72 s) vencia 9 dos 10 duelos com o piloto intermediário e 10 de 10 com o avançado. O Stage 2 (391 cv) vencia 6 e 8 e o original, 3. O capítulo era fácil demais para quem chegava com o 335i do capítulo 2.
 
 ## Princípios
 
-- **Sem potência artificial.** Rivais e jogador usam o mesmo `resolveBuild` (v2). Os oito carros novos dos rivais são o carro **de fábrica** (o teste confere que o build dos rivais sem peças tem exatamente a potência e o torque de fábrica). A dificuldade vem do carro, das peças e do piloto (reação, controle de patinação, ponto de troca), tudo exibido na tela do rival.
-- **Nenhum torque forçado** e nenhum multiplicador oculto de IA.
+- **Sem potência artificial.** Rivais e jogador usam o mesmo `resolveBuild` (v2). O teste `chapter3.test.ts` confere que a potência, o torque e a massa de cada rival são exatamente os que o resolvedor produz a partir das mesmas peças e do mesmo ajuste. Não há multiplicador oculto, torque forçado, aceleração forçada nem resistência infinita do motor; o rival do 1 km usa o mesmo Blown Engine da família do motor.
+- **Nenhuma peça exclusiva de rival.** Todas as peças dos rivais existem no catálogo e a compatibilidade (`incompatibility`) vale para eles como para o jogador.
+- A dificuldade vem do carro, das peças, do ajuste e do piloto, tudo exibido na tela do rival (potência, torque, aspiração, nível de preparo, peças e distância).
 
-## Os dez rivais, na ordem real de dificuldade
+## Peças novas dos V6 aspirados
 
-O plano propôs uma ordem; o próprio plano manda "ajustar a sequência dos eventos e as configurações dos rivais" se um carro quebrar a ordem de dificuldade. Com os tempos simulados, a ordem proposta quebrava em quatro pontos (o Golf Stage 2, terceiro, é mais lento que a 350Z e a IS 350 que o antecedem; o Stinger, sexto, é mais fácil que o C 43, quinto; a Ghibli, oitava, é mais fácil que a Evo, sétima). A sequência abaixo é a do tempo de 402 m de cada rival na pista de testes (estritamente decrescente):
+Os V6 aspirados tinham só peças genéricas. Foram criadas cinco peças, todas com efeito físico no modelo de respiração (restrição, eventos de válvula, ignição, capacidade de fluxo), por família, liberadas ao fim do 1.º duelo (`c3-v6-parts`) e disponíveis ao jogador:
 
-| # | Duelo | Rival | Carro e preparação | cv / N·m | 0–100 | 402 m |
-|---|---|---|---|---|---|---|
-| 1 | A Volta do GTI (201 m) | Ricardo | Golf GTI **Stage 2** (remap, downpipe, intercooler, admissão direta, forjados, embreagem, slick, suspensão, alívio de peso, volante, diferencial) | 230 / 301 | 5,86 s | 14,21 s |
-| 2 | Primeira Elite (201 m) | Hugo | 350Z de fábrica | 304 / 353 | 5,79 s | 14,10 s |
-| 3 | Silêncio Refinado | Renata | IS 350 de fábrica | 312 / 376 | 5,93 s | 14,07 s |
-| 4 | Zeta de Verdade | Bruno | 370Z de fábrica | 337 / 366 | 5,34 s | 13,63 s |
-| 5 | Peso Pesado | Davi | Stinger GT de fábrica | 370 / 510 | 4,88 s | 13,13 s |
-| 6 | Salão Italiano | Valentina | Ghibli S Q4 de fábrica | 410 / 551 | 4,58 s | 12,79 s |
-| 7 | Biturbo Alemão | Maya | C 43 de fábrica | 367 / 521 | 4,33 s | 12,61 s |
-| 8 | A Volta da Evo | Bianca | Evo X **preparado** (ECU programável, turbina híbrida, forjados, intercooler, controle de pressão, SST, diferencial central, slick, suspensão) | 391 / 476 | 3,94 s | 12,19 s |
-| 9 | O Trevo Vermelho | Dante | Giulia QV de fábrica | 512 / 601 | 4,09 s | 11,85 s |
-| 10 | Elite da Madrugada | Akira | GT-R de fábrica, piloto de elite | 553 / 628 | 3,50 s | 11,51 s |
+| Peça | Famílias | Preço (CR) | Efeito |
+|---|---|---:|---|
+| Admissão V6 de alto fluxo | VQ35DE, VQ37VHR, 2GR-FSE | 1.100 | queda de pressão da admissão 0,7 kPa |
+| Escape esportivo V6 | as três | 2.200 | contrapressão 5 kPa, geometria e som |
+| Remap aspirado V6 | as três | 2.400 | ignição e corte de giro +200 rpm |
+| Comandos VQ35DE Stage 1 | VQ35DE | 2.800 | duração, cruzamento e levantamento |
+| Comandos VQ37VHR Stage 1 | VQ37VHR | 3.200 | idem, ganho menor (VVEL) |
+| Cabeçotes V6 retrabalhados | VQ35DE, VQ37VHR | 4.600 | fluxo +5 % |
 
-Os dois que voltam do capítulo 2 estão claramente acima das versões originais, com peças que existem na oficina: o Golf de Ricardo vai de 180 cv e 235 N·m (15,64 s) a 230 cv e 301 N·m (14,21 s); o Evo de Bianca vai de 295 cv e 366 N·m (13,66 s) a 391 cv e 476 N·m (12,19 s). O Golf não passa de Stage 2 porque a turbina híbrida exige ECU programável e o Stage 2 é um mapa fechado (sem a turbina, o Stage 3 chegaria a 13,75 s, mas o plano pede Stage 2). O que o Golf tem de mais forte é o piloto: o tempo de reação de Ricardo (0,19 s) é o mais baixo dos quatro primeiros.
+O 2GR-FSE (IS 350) só recebe admissão, escape e remap: a seleção conservadora. Um 350Z passa de 304 cv a 323 cv com admissão, escape e remap, 335 cv com os comandos e 357 cv com os cabeçotes; nenhum chega perto de um turbo.
 
-Os eventos 1 e 2 são de 201 m e os demais de 402 m, como no plano. Prêmios: 15, 20, 26, 32, 40, 48, 60, 75, 95 e 150 mil CR (561 mil no total); reputação: 50, 55, 60, 65, 70, 75, 80, 90, 100 e 120 (765 no total).
+## Os dez rivais — antes e depois
 
-## Builds dos oito carros
+| # | Duelo (distância) | Rival | Antes (cv, 402 m) | Depois (cv, 402 m / 1000 m) | Preparação |
+|---|---|---|---|---|---|
+| 1 | A Volta do GTI (201 m) | Ricardo | 230, 14,21 s | 230, 14,21 s / 25,54 s | Golf Stage 2 (inalterado) |
+| 2 | Primeira Elite (201 m) | Hugo | 304, 14,10 s | 323, 13,33 s / 23,85 s | 350Z: admissão, escape, remap, embreagem, slick, diferencial, peso, suspensão |
+| 3 | Silêncio Refinado (402 m) | Renata | 312, 14,07 s | 333, 12,95 s / 23,42 s | IS 350: admissão, escape, remap, câmbio, slick, diferencial, peso, suspensão |
+| 4 | Zeta de Verdade (402 m) | Bruno | 337, 13,63 s | 367, 12,84 s / 22,88 s | 370Z: admissão, escape, remap, comandos, embreagem, slick, diferencial, peso, suspensão |
+| 5 | Peso Pesado (402 m) | Davi | 370, 13,13 s | 439, 12,32 s | Stinger Stage 1 + admissão direta, câmbio, semi-slick, AWD, suspensão |
+| 6 | Salão Italiano (**1 km**) | Valentina | 410, 12,79 s | 522, 11,60 s / 21,01 s | Ghibli Stage 2 completo |
+| 7 | Biturbo Alemão (402 m) | Maya | 367, 12,61 s | 468, 11,62 s | C 43 Stage 2 completo |
+| 8 | A Volta da Evo (**1 km**) | Bianca | 391, 12,19 s | 452, 11,70 s / 21,33 s | Evo X Stage 3 (turbina híbrida, ECU Stage 3, forjados, DCT, AWD, slick) |
+| 9 | O Trevo Vermelho (402 m) | Dante | 512, 11,85 s | 655, 10,50 s | Giulia Stage 2 completo |
+| 10 | Elite da Madrugada (**1 km**) | Akira | 553, 11,51 s | 707, 10,39 s / 18,96 s | GT-R Stage 2 completo (dupla embreagem, AWD, slick) |
 
-| Carro | Original | Stage 1 ou primeiros upgrades | Preparado | 402 m (orig → prep.) |
-|---|---|---|---|---|
-| 350Z | 304 cv | 304 cv (pneus + embreagem) | 312 cv | 14,10 → 13,55 s |
-| IS 350 | 312 cv | 312 cv (pneus) | 323 cv | 14,07 → 13,35 s |
-| 370Z | 337 cv | 337 cv (pneus + embreagem) | 345 cv | 13,63 → 13,16 s |
-| C 43 | 367 cv | 417 cv (Stage 1, 1,20 bar) | 468 cv (Stage 2, 1,45 bar) | 12,61 → 11,53 s |
-| Stinger GT | 370 cv | 430 cv | 474 cv | 13,13 → 11,90 s |
-| Ghibli S Q4 | 410 cv | 464 cv | 522 cv | 12,79 → 11,61 s |
-| Giulia QV | 512 cv | 576 cv | 655 cv | 11,85 → 10,50 s |
-| GT-R | 553 cv | 630 cv | 707 cv | 11,51 → 10,39 s |
+Os eventos mantêm os IDs e a ordem. O GT-R do prêmio é a cópia do build do Akira (Stage 2), entregue uma vez; um GT-R já recebido no save não é alterado (o prêmio é um carro do jogador, com as peças gravadas na entrega).
 
-Os V6 aspirados só têm peças genéricas (sem remap nem turbo, como manda o plano): ganham no máximo ≈ 3 % de potência (alívio de peso, volante, escape) e o resto do tempo vem de pneu, embreagem e peso. Os biturbo têm toda a árvore de turbo: +13 % de potência no Stage 1 e +27 a +28 % no Stage 2, cada mapa recusado pelo resolvedor se faltar o hardware (testado).
+## Dificuldade para um 335i preparado
 
-## Matriz de corridas (resumo)
+Vitórias do jogador contra os duelos 1–10 (3 sementes, os três pilotos dão o mesmo resultado para o 335i):
 
-Vitórias contra os dez rivais, em ordem (`V` = ganha). Dados completos em `balance-data.md`.
+| 335i | Duelos vencidos |
+|---|---|
+| original | 1 |
+| Stage 1 / Stage 2 | 1–4 |
+| Stage 3 (489 cv) | 1–6 e 8; perde o 7, o 9 e o 10 |
 
-| Carro do jogador | Piloto intermediário | Piloto avançado |
-|---|---|---|
-| Evo X preparado do cap. 2 | 1–5 | 1–6 |
-| 335i do Victor (prêmio do cap. 2) | 1–5 | 1–5 |
-| Saveiro do Marcos (prêmio do cap. 1) | nenhuma | nenhuma |
-| 350Z / IS 350 / 370Z de fábrica | 0–2 (só o 370Z vence) | 1–3, 1–3 e 1–4 |
-| 350Z / IS 350 / 370Z preparados | até 4 (a IS 350 só com o avançado) | até 4 |
-| C 43 de fábrica | 1–6 | 1–6 |
-| C 43 Stage 1 | 1–8 | 1–8 |
-| C 43 Stage 2 preparado | **1–10** | **1–10** |
-| Stinger, Ghibli, Giulia de fábrica | 1–4 / 1–5 e 8 / 1–8 | 1–5 / 1–6 / 1–8 |
-| Stinger e Ghibli Stage 2 | 1–9 / 1–10 | 1–10 / 1–10 |
-| Giulia Stage 1 / Stage 2 | 1–8 / 1–10 | 1–10 / 1–10 |
-| GT-R de fábrica / Stage 1 / Stage 2 | 1–8 / 1–10 / 1–10 | 1–9 / 1–10 / 1–10 |
+Metas do plano: 1–3 acessíveis (sim), 4–5 competitivos (o 5 só com o Stage 3), 6–8 pedem bom acerto e pilotagem (o 7, Maya, é o mais duro do grupo: a C 43 de tração integral com 468 cv iguala o 335i de 489 cv), 9 alto e 10 máximo (nenhuma versão do 335i vence).
 
-Leitura:
-- **O capítulo se conclui.** Com o piloto intermediário, qualquer biturbo com Stage 2 vence os dez (o C 43 é o mais barato: 105.000 + 28.600 CR). O Stage 1 do GT-R basta com os dois pilotos e o do Giulia com o avançado.
-- **O chefe pede um carro preparado.** O Akira vence todos os carros de fábrica do jogador, inclusive o próprio GT-R de fábrica pilotado pelo avançado (que ganha 1–9 e perde o 10). É a regra que o plano pede (o GT-R "não ganha aceleração artificial": a vantagem dele é a combinação de motor, câmbio e tração, mais um piloto melhor).
-- **Os carros do capítulo 2 acompanham o começo, mas não o fim.** O Evo preparado do capítulo 2 chega até o 5.º ou 6.º duelo, então o jogador precisa comprar e preparar um carro Elite: o capítulo cumpre o papel de "novo patamar".
-- **O prêmio do capítulo 1 não distorce nada.** A Saveiro do Marcos (a do Marcos, turbo) não vence nenhum rival do capítulo 3.
-- **Os V6 aspirados são carros de entrada e de coleção**, não da campanha inteira: custam 45–70 mil CR, abrem a Elite, mas não passam do 4.º duelo mesmo preparados. É o resultado físico, sem ajuste.
+## Caminhos viáveis para fechar o capítulo
 
-## Economia e revenda
+Piloto humano (reação 0,22 s, trocas ±90 rpm), 5 sementes nos duelos 6–10:
 
-| Carro | Preço (CR) | Reputação | Quando abre (caminho mínimo, ≥ 600 de reputação ao entrar) |
-|---|---|---|---|
-| Nissan 350Z | 45.000 | 600 | desde o 1.º duelo |
-| Lexus IS 350 | 58.000 | 650 | depois do 1.º duelo |
-| Nissan 370Z | 70.000 | 720 | depois do 3.º |
-| Mercedes-AMG C 43 | 105.000 | 810 | depois do 4.º |
-| Kia Stinger GT | 115.000 | 890 | depois do 5.º |
-| Maserati Ghibli S Q4 | 145.000 | 970 | depois do 6.º |
-| Alfa Romeo Giulia QV | 190.000 | 1.090 | depois do 8.º |
-| Nissan GT-R | 250.000 | 1.230 + desbloqueio `c3-dealer-gtr` | depois do 9.º duelo |
+| Carro (Stage 3 completo) | cv | 6 | 7 | 8 | 9 | 10 |
+|---|---:|---|---|---|---|---|
+| Giulia QV | 767 | 5/5 | 5/5 | 5/5 | 5/5 | 5/5 |
+| GT-R | 871 | 5/5 | 5/5 | 5/5 | 5/5 | 5/5 |
+| C 43 | 577 | 5/5 | 5/5 | 5/5 | 0/5 | 0/5 |
 
-- A reputação mínima que o capítulo 2 deixa (200 do capítulo 1 + 400 das primeiras vitórias do capítulo 2) já abre o carro mais barato; cada duelo abre o seguinte, com a reputação que o caminho mínimo acumula (`chapter3.test.ts` confere que a 350Z está disponível ao entrar e que o GT-R só abre depois do 9.º duelo).
-- Os prêmios dos quatro primeiros duelos (93 mil CR) já pagam a 350Z; os cinco primeiros somam 133 mil CR, o que cobre o C 43 (105.000) mais o Stage 2 (28.600): o caminho "Evo do capítulo 2 até o 5.º duelo, depois C 43 Stage 2" fecha o capítulo sem repetir corrida. O jogador não é obrigado a comprar carro (o Evo preparado chega ao 5.º ou 6.º duelo), mas para o 7.º em diante precisa de um carro mais forte.
-- O GT-R de série só abre depois do 9.º duelo (preço 250.000); o do Akira vem como prêmio do 10.º. A revenda segue a regra de um por modelo, e o prêmio entra mesmo assim (é o prêmio da vitória). Vender qualquer um rende 60 % do preço de tabela (GT-R 150.000 CR; a 350Z comprada por 45.000 rende 27.000).
+Com o Stage 2: a Giulia vence 1–8 (e às vezes o 9) e o GT-R vence 1–9 com os três pilotos e o 10 em 1/3 das sementes com o piloto avançado. Portanto há **dois caminhos** com carros da economia normal: **Giulia Stage 3** (190 mil CR do carro, abre depois do 8.º duelo) e **GT-R Stage 2/3** (250 mil CR, abre depois do 9.º). O C 43 Stage 3 chega ao 8.º duelo. Nenhuma compra é obrigatória antes do 5.º duelo, e os preços das peças não foram alterados.
 
 ## Limitações
 
-- **Não foi feita uma simulação de campanha completa** (compra de peças e de carros por estratégia, com repetição de duelos perdidos) como a do capítulo 2. A economia acima foi conferida por conta (preços, prêmios e reputação) e pelos tempos da matriz; um jogador real pode precisar de algumas repetições pagas (35 % do prêmio) em corridas perdidas.
-- A matriz usa só os dois níveis de piloto da IA (intermediário e avançado). A margem entre carros muito próximos (por exemplo C 43 de fábrica contra Maya) muda com a semente.
-- Os 0–100 de C 43 e Stinger ficam 10 % abaixo do declarado pelos fabricantes e o GT-R 17 % acima do estimado (ver `mechanical-calibration.md`): os rivais herdam esses números da física, não de ajustes.
+- A simulação é determinista: os três pilotos produzem resultados muito próximos para a mesma sequência de sementes; a diferença entre intermediário, avançado e humano aparece só nos duelos muito parelhos.
+- A economia (prêmios de 15 a 150 mil CR, 561 mil no total, e a reputação) não foi alterada nesta etapa; o custo de preparar o C 43 (Stage 2) continua em ≈ 28.600 CR sobre o preço do carro. Os prêmios do 5.º ao 9.º duelo não foram revistos além da matriz acima.
+- Não foi feita uma simulação de campanha completa com compras por estratégia. A extração (somente leitura) de um save real não foi feita: o 335i de referência vem do catálogo.

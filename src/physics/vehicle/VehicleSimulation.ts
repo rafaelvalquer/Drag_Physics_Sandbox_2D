@@ -486,6 +486,11 @@ export class VehicleSimulation {
     ei.sparkCut = this.shift.sparkCut;
     ei.ignitionOn = ignitionOn;
     ei.starter = starter;
+    if (eng.turbo) {
+      const bbg = c.transmission.boostByGear;
+      const g = this.gearbox.engaged ? this.gearbox.gear : 0;
+      eng.turbo.boostLimit = bbg && g >= 1 && g <= bbg.length ? bbg[g - 1]! : 1;
+    }
     const engineTorque = eng.preStep(h, ei);
 
     // ---------- loads & external forces ----------

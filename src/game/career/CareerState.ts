@@ -79,6 +79,12 @@ export const RunSummarySchema = z.object({
   dnfReason: z.enum(['timeout', 'engine-blown']).optional(),
   /** Engine speed when the engine broke (rpm). */
   blownAtRpm: z.number().optional(),
+  /** Measured times from the stage beam at the official splits (s), by split id: 'eighth' (201 m), 'quarter' (402 m), 'km'. Absent in older results. */
+  splitsS: z.record(z.string().max(16), z.number()).optional(),
+  /** Highest engine speed of the run (rpm). */
+  maxRpm: z.number().optional(),
+  /** Gears used in the run, ascending. */
+  gearsUsed: z.array(z.number().int().min(0).max(12)).max(12).optional(),
   launchRpm: z.number().optional(),
   maxSlipRatio: z.number().optional(),
   wheelspinS: z.number().optional(),

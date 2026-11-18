@@ -1,5 +1,6 @@
 import type { CarConfig } from '../../../data/schema';
 import type { MechanicalMods, PartDef, TirePart } from './parts';
+import type { BuildDiagnostics } from './BuildResolverV2';
 
 /** Resolver versions. A build is always resolved by the version stored with it (saves keep theirs). */
 export type ResolverVersion = 1 | 2;
@@ -80,6 +81,8 @@ export type BuildResult =
       knockLoss: number;
       /** Resolver version that produced the build. */
       version: ResolverVersion;
+      /** Measured limits of the project (fuel, oil, internals, induction); resolver v2 modern engines. */
+      diagnostics?: BuildDiagnostics;
     }
   | { ok: false; errors: string[] };
 

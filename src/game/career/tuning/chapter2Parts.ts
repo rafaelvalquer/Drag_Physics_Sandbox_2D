@@ -65,7 +65,7 @@ export const CHAPTER2_PARTS: readonly PartDef[] = [
     name: 'Remap Stage 1',
     price: 2500,
     unlock: 'c2-ecu',
-    compat: { induction: 'turbo' },
+    compat: { induction: 'turbo', factoryTurbo: true },
     description: 'Reprogramação da ECU original feita pelo Caio no dinamômetro: mapa de pressão, ignição e limitador de torque.',
     physics:
       'A pressão alvo sobe 0,3 bar (até onde a wastegate original segura), o limitador de torque passa a 85 % do que pistões e bielas aguentam e a ignição ganha ≈ 2 % com gasolina de alta octanagem. O torque novo sai do modelo do turbo: densidade da carga, temperatura e detonação.',
@@ -98,7 +98,7 @@ export const CHAPTER2_PARTS: readonly PartDef[] = [
     name: 'ECU programável',
     price: 6000,
     unlock: 'c2-programmable',
-    compat: { induction: 'turbo' },
+    compat: { induction: 'turbo', factoryTurbo: true },
     description: 'Central programável: pressão ajustável no dinamômetro, limitador de torque no limite mecânico e corte de giro mais alto.',
     physics:
       'Pressão alvo ajustável de +0,1 a +0,8 bar sobre a de fábrica (a wastegate e a turbina ainda limitam), limitador de torque em 100 % do limite de pistões/bielas, ignição ≈ 3 % e corte de giro até o limite do trem de válvulas.',
@@ -117,7 +117,7 @@ export const CHAPTER2_PARTS: readonly PartDef[] = [
     name: 'Remap Stage 2',
     price: 5500,
     unlock: 'c2-stage2',
-    compat: { induction: 'turbo' },
+    compat: { induction: 'turbo', factoryTurbo: true },
     description: 'Mapa Stage 2 do Caio, feito para downpipe sem catalisador e intercooler maior, com solenoide de controle de pressão.',
     physics:
       'Pressão alvo +0,55 bar sobre a de fábrica (o solenoide do mapa segura até +0,7 bar), mapa de torque até 28 % acima do original em cada rotação (dentro do limite de pistões e bielas), ignição ≈ 3 % e corte +200 rpm. Exige downpipe e intercooler maior; acima de 85 % do limite dos internos de fábrica exige forjados, e o câmbio precisa aguentar o torque.',
@@ -169,7 +169,7 @@ export const CHAPTER2_PARTS: readonly PartDef[] = [
     name: 'Remap Stage 3',
     price: 9000,
     unlock: 'c3-stage3',
-    compat: { induction: 'turbo' },
+    compat: { induction: 'turbo', factoryTurbo: true },
     description: 'Mapa de turbina de maior fluxo, para motor forjado.',
     physics: 'Pressão alvo +0,8 bar sobre a de fábrica, limitador em 100 % do limite dos forjados, ignição ≈ 3 %. Exige turbina de maior fluxo, downpipe, intercooler maior e pistões forjados.',
     boostAddBar: 0.8,
@@ -178,10 +178,10 @@ export const CHAPTER2_PARTS: readonly PartDef[] = [
     revLimitAddRpm: 200,
     wastegateHeadroomBar: 0.9,
     requiresParts: [
-      { ids: ['turbo-hybrid'], label: 'a turbina de maior fluxo' },
+      { ids: ['turbo-hybrid', 'turbo-hybrid-s3', 'turbo-hybrid-hf'], label: 'a turbina de maior fluxo' },
       { ids: ['downpipe-catless'], label: 'o downpipe sem catalisador' },
-      { ids: ['intercooler-race'], label: 'o intercooler de maior capacidade' },
-      { ids: ['pistons-forged-modern'], label: 'pistões e bielas forjados' },
+      { ids: ['intercooler-race', 'intercooler-comp'], label: 'o intercooler de maior capacidade' },
+      { ids: ['pistons-forged-modern', 'internals-biturbo-s3'], label: 'pistões e bielas forjados' },
     ],
   },
   {
@@ -191,7 +191,7 @@ export const CHAPTER2_PARTS: readonly PartDef[] = [
     name: 'Wastegate e controle de pressão',
     price: 1500,
     unlock: 'c2-boost-control',
-    compat: { induction: 'turbo' },
+    compat: { induction: 'turbo', factoryTurbo: true },
     description: 'Atuador de wastegate mais firme e solenoide de controle eletrônico.',
     physics: 'A wastegate original só segura ≈ 0,35 bar acima do alvo de fábrica e deixa a pressão cair no alto giro; esta segura até 0,9 bar, mantém a válvula fechada até o alvo (enchimento ≈ 10 % mais rápido) e sustenta +0,08 bar até o corte.',
     wastegateHeadroomBar: 0.9,
@@ -207,7 +207,7 @@ export const CHAPTER2_PARTS: readonly PartDef[] = [
     name: 'Turbina híbrida de maior fluxo',
     price: 9000,
     unlock: 'c2-turbo-hybrid',
-    compat: { induction: 'turbo' },
+    compat: { induction: 'turbo', factoryTurbo: true },
     description: 'Turbina de fábrica com rotor de compressor maior e carcaça retrabalhada. Exige ECU programável.',
     physics:
       'Vazão máxima do compressor ≈ 40 % maior (a pressão não cai no alto giro) e carcaça de turbina maior (contrapressão −6 kPa no fluxo nominal); o eixo em rolamentos de esferas compensa o rotor maior: enche no mesmo giro da original e reage 10 % mais rápido.',

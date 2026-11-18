@@ -40,6 +40,13 @@ export type TreeType = 'pro' | 'sportsman';
 /** A blown engine coasts this long (s) before the safety braking, when the car is moving. */
 export const BLOWN_COAST_S = 1.25;
 export type DnfReason = 'timeout' | 'engine-blown';
+/**
+ * Time after the green light (s) at which a lane that has not finished is out of the race. The
+ * 201 m and 402 m values are unchanged; the 1 km takes about 70 s, so even the slowest car that can
+ * enter an Elite duel (a long-gearing 1000 m run takes well under 60 s) is never cut by the clock
+ * while it is still accelerating. Timing the attempt out is the only use of this value.
+ */
+export const DNF_TIMEOUT_S: Record<RaceDistanceId, number> = { eighth: 45, quarter: 45, km: 70 };
 export type RacePhase = 'staging' | 'tree' | 'racing' | 'finished';
 
 export interface LaneResult {
@@ -54,7 +61,7 @@ export interface LaneResult {
   trapMs: number | null;
   finished: boolean;
   dnf: boolean;
-  /** Why the lane did not finish: timeout (45 s after the green) or a blown engine. */
+  /** Why the lane did not finish: timeout (45 s after the green; 70 s at 1 km) or a blown engine. */
   dnfReason?: DnfReason;
   /** Engine speed at the failure (rpm), from the failure model (blown engine only). */
   blownAtRpm?: number;
@@ -112,7 +119,7 @@ export class RaceController {
   winner: number | null = null;
   /** Message for the UI (hints, results). */
   status = 'Preparando…';
-  dnfTimeoutS = 45;
+  dnfTimeoutS: number;
 
   constructor(
     readonly raceLanes: RaceLane[],
@@ -121,6 +128,7 @@ export class RaceController {
     seed = 1,
   ) {
     this.distanceM = RACE_DISTANCES[distanceId].m;
+    this.dnfTimeoutS = DNF_TIMEOUT_S[distanceId];
     this.splits = SPLITS.filter((s) => s.m <= this.distanceM + 1e-6);
     this.rng = new Prng(seed * 977 + 13);
     this.lanes = raceLanes.map((l) => ({ ready: false, engineOn: false, leftAt: null, endT: null, prevX: l.sim.x, prevT: 0, crossT: new Map(), result: emptyResult() }));

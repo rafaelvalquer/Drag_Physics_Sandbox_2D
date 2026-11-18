@@ -112,12 +112,13 @@ describe('chapter 3 definition', () => {
 });
 
 describe('the ten events and rivals', () => {
-  it('ten events of the chapter, in three venues, the first two on the eighth mile and the final last', () => {
+  it('ten events of the chapter, in three venues: 201 m, 402 m and, from the sixth on, three 1 km duels', () => {
     expect(CHAPTER3_EVENTS).toHaveLength(10);
     expect(eventsOf(CHAPTER_3_ID)).toBe(CHAPTER3_EVENTS);
     expect(CHAPTER3_EVENTS.map((e) => e.order)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-    expect(CHAPTER3_EVENTS.slice(0, 2).every((e) => e.distance === 'eighth')).toBe(true);
-    expect(CHAPTER3_EVENTS.slice(2).every((e) => e.distance === 'quarter')).toBe(true);
+    expect(CHAPTER3_EVENTS.map((e) => e.distance)).toEqual(['eighth', 'eighth', 'quarter', 'quarter', 'quarter', 'km', 'quarter', 'km', 'quarter', 'km']);
+    // the ids of the existing events never change
+    expect(CHAPTER3_EVENTS.map((e) => e.id)).toEqual(['c3e1-a-volta-do-gti', 'c3e2-primeira-elite', 'c3e3-silencio-refinado', 'c3e4-zeta-de-verdade', 'c3e5-peso-pesado', 'c3e6-salao-italiano', 'c3e7-biturbo-alemao', 'c3e8-a-volta-da-evo', 'c3e9-o-trevo-vermelho', 'c3e10-elite-da-madrugada']);
     expect(new Set(CHAPTER3_EVENTS.map((e) => e.trackId))).toEqual(new Set(['marginal-alta', 'hangar-executivo', 'pier-elite']));
     expect(CHAPTER3_EVENTS.filter((e) => e.finale).map((e) => e.id)).toEqual(['c3e10-elite-da-madrugada']);
     expect(CHAPTER3_EVENTS.every((e) => e.chapter === CHAPTER_3_ID)).toBe(true);
@@ -158,12 +159,14 @@ describe('the ten events and rivals', () => {
     }
   });
 
-  it('no hidden power: a rival with no parts has exactly the factory car', () => {
-    for (const r of CHAPTER3_RIVALS.filter((x) => x.parts.length === 0)) {
-      const stock = resolveBuild(findCampaignCar(r.baseCarId)!, [], {}, 2);
+  it('no hidden power: every rival build is exactly what the player resolver produces from the same parts and tune', () => {
+    for (const r of CHAPTER3_RIVALS) {
+      const direct = resolveBuild(findCampaignCar(r.baseCarId)!, r.parts, r.tune ?? {}, 2);
       const b = rivalBuild(r);
-      expect(stock.ok && b.peakPowerCv, r.id).toBe(stock.ok ? stock.peakPowerCv : -1);
-      expect(stock.ok && b.peakTorqueNm, r.id).toBe(stock.ok ? stock.peakTorqueNm : -1);
+      expect(direct.ok, r.id).toBe(true);
+      expect(b.peakPowerCv, r.id).toBe(direct.ok ? direct.peakPowerCv : -1);
+      expect(b.peakTorqueNm, r.id).toBe(direct.ok ? direct.peakTorqueNm : -1);
+      expect(b.car.massKg, r.id).toBe(direct.ok ? direct.car.massKg : -1);
     }
   });
 
@@ -179,7 +182,7 @@ describe('the ten events and rivals', () => {
       expect(rb.peakPowerCv).toBeGreaterThan(golf0.peakPowerCv * 1.2);
       expect(rb.peakTorqueNm).toBeGreaterThan(golf0.peakTorqueNm * 1.2);
     }
-    for (const need of ['ecu-programmable', 'turbo-hybrid', 'pistons-forged-modern', 'intercooler-race', 'boost-control', 'dct-upgrade', 'awd-center-tune', 'tires-slick', 'suspension-drag-awd']) expect(bianca.parts).toContain(need);
+    for (const need of ['ecu-stage3', 'turbo-hybrid', 'pistons-forged-modern', 'intercooler-race', 'dct-upgrade', 'awd-center-tune', 'tires-slick', 'suspension-drag-awd']) expect(bianca.parts).toContain(need);
     const evo2 = CHAPTER3_RIVALS.find((r) => r.id === 'bianca-elite')!;
     const evoCh2 = rivalBuild(rivalOf(findEvent('c2e9-tracao-total')!));
     expect(rivalBuild(evo2).peakPowerCv).toBeGreaterThan(evoCh2.peakPowerCv * 1.25);

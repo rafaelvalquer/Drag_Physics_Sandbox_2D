@@ -1,9 +1,12 @@
 import { validateCar, type CarConfig, type TransmissionKind } from '../../../data/schema';
 import { exhaustPreset } from '../../../data/exhaustPresets';
-import { applyEngineParts, curvePeakCv, engineFuel, powerPeakRpm, TURBO_MAX_COMPRESSION, withStockBreathing, type EngineParts } from './breathingModel';
+import { applyEngineParts, curvePeakCv, engineFuel, powerPeakRpm, withStockBreathing, type EngineParts } from './breathingModel';
 import { applyGenericChassisMods, applyTyre, CLUTCH_TORQUE_MARGIN, combineMods, deepFreeze, fmtBar, workshopFinalDrive, MAX_KNOCK_LOSS, type BuildResult, type BuildTune } from './buildCommon';
 import { ENGINE_FAMILIES } from './chapter2Parts';
 import { applyFactoryTurboParts, wastegateMaxBar } from './factoryTurboModel';
+import { checkFuel, fuelErrorMessage, type FuelCheck } from './FuelSystemModel';
+import { oilCheck, oilErrorMessage, type OilCheck } from './LubricationModel';
+import { conversionCompressionError, conversionInternalsError, effectiveInduction, isConversionKit } from './ConvertedTurboModel';
 import {
   CATEGORY_LABEL,
   CATEGORY_ORDER_V2,
@@ -11,6 +14,7 @@ import {
   GENERIC_V2_CATEGORIES,
   LEGACY_FAMILY,
   type CamPart,
+  type MechanicalMods,
   type PartCategory,
   type PartDef,
   type TurboPart,
@@ -47,7 +51,7 @@ export function transmissionKindOf(car: CarConfig): TransmissionKind {
 }
 
 /** Why a part does not fit a car (pt-BR), or null when it fits. */
-export function incompatibility(base: CarConfig, p: PartDef): string | null {
+export function incompatibility(base: CarConfig, p: PartDef, induction: 'NA' | 'turbo' = base.engine.induction): string | null {
   const fam = familyOf(base);
   // two catalogues: the slot catalogue (v1, classic engines) and the family parts (v2, modern engines)
   // car hardware of the slot catalogue (mass, cooling, tyre size/pressure) fits every car
@@ -60,7 +64,9 @@ export function incompatibility(base: CarConfig, p: PartDef): string | null {
     return `${p.name} não é feita para ${label}`;
   }
   if (c.layouts && !c.layouts.includes(base.engine.architecture)) return `${p.name} não é feita para este tipo de motor`;
-  if (c.induction && c.induction !== base.engine.induction)
+  if (c.factoryTurbo && base.engine.induction !== 'turbo') return `${p.name} é para o turbo de fábrica deste motor, não para um kit de conversão`;
+  // the conversion kit itself is judged by the factory induction; every other part by the hardware's
+  if (c.induction && c.induction !== (isConversionKit(p) ? base.engine.induction : induction))
     return c.induction === 'turbo' ? `${p.name} é para motor turbo` : `${p.name} é para motor aspirado`;
   if (c.transmissions && !c.transmissions.includes(transmissionKindOf(base))) {
     const kinds: Record<TransmissionKind, string> = { manual: 'câmbio manual', 'dual-clutch': 'câmbio de dupla embreagem', 'torque-converter-auto': 'câmbio automático' };
@@ -71,6 +77,19 @@ export function incompatibility(base: CarConfig, p: PartDef): string | null {
     return `${p.name} é para ${c.drives.map((x) => d[x]).join(' ou ')}`;
   }
   return null;
+}
+
+/** Measured limits of a resolved build (Dyno Lab "limitações do projeto", reliability, reports). */
+export interface BuildDiagnostics {
+  /** Factory sheet induction vs the one of the installed hardware. */
+  factoryInduction: 'NA' | 'turbo';
+  currentInduction: 'NA' | 'turbo';
+  fuel?: FuelCheck;
+  oil?: OilCheck;
+  /** Peak torque against what the internals take (N·m); `null` limit = not applicable. */
+  internals?: { peakTorqueNm: number; limitNm: number };
+  /** Compressor flow capacity of a conversion kit (kg/s). */
+  compressorFlowKgS?: number;
 }
 
 export function resolveV2(base: CarConfig, partIds: readonly string[], key: string, tune: BuildTune, resolveV1: V1Resolver): BuildResult {
@@ -87,9 +106,17 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
     else bySlot.set(p.category, p);
   }
   if (errors.length) return { ok: false, errors };
+  const induction = effectiveInduction(base, [...bySlot.values()]);
   for (const p of bySlot.values()) {
-    const why = incompatibility(base, p);
+    const why = incompatibility(base, p, induction);
     if (why) errors.push(why);
+  }
+  if (errors.length) return { ok: false, errors };
+  // hardware a part is calibrated for (the staged ECU of a factory turbo keeps its own check below)
+  const factoryTurboBuild = base.engine.induction === 'turbo' && familyOf(base) !== LEGACY_FAMILY;
+  for (const p of bySlot.values()) {
+    if (factoryTurboBuild && p.category === 'ecu') continue;
+    for (const req of p.requiresParts ?? []) if (!req.ids.some((id) => partIds.includes(id))) errors.push(`${p.name} exige ${req.label}`);
   }
   if (errors.length) return { ok: false, errors };
 
@@ -107,6 +134,9 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   const car: CarConfig = structuredClone(base);
   const get = <C extends PartCategory>(c: C): Extract<PartDef, { category: C }> | undefined => bySlot.get(c) as Extract<PartDef, { category: C }> | undefined;
   const ecu = get('ecu');
+  const balancing = get('engine-balancing');
+  // friction: the cooling slot of the chassis catalogue and the balanced crank both act on the engine's friction torque
+  const engMod: MechanicalMods = balancing ? { ...genericMod, coolingFrictionScale: (genericMod.coolingFrictionScale ?? 1) * balancing.frictionScale } : genericMod;
   const turboSlot = get('turbo');
   const turboKit = turboSlot && !('upgrade' in turboSlot) ? (turboSlot as TurboPart) : undefined;
   const turboUp = turboSlot && 'upgrade' in turboSlot ? (turboSlot as TurboUpgradePart) : undefined;
@@ -134,7 +164,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
     for (const req of ecu?.requiresParts ?? [])
       if (!req.ids.some((id) => partIds.includes(id))) errors.push(`${ecu!.name} exige ${req.label}`);
     if (errors.length) return { ok: false, errors };
-    const anyEngine = genericMod.coolingFrictionScale || genericMod.coolingKnockScale || ecu || turboUp || get('intercooler') || get('boost-control') || get('pistons') || get('intake-filter') || get('exhaust');
+    const anyEngine = engMod.coolingFrictionScale || genericMod.coolingKnockScale || get('turbo-manifold') || ecu || turboUp || get('intercooler') || get('boost-control') || get('pistons') || get('intake-filter') || get('exhaust');
     if (anyEngine) {
       const r = applyFactoryTurboParts(stockEngine, {
         family,
@@ -145,8 +175,9 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
         intercooler: get('intercooler'),
         boostControl: get('boost-control'),
         pistons: get('pistons'),
+        manifold: get('turbo-manifold'),
         boostBar: tune.boostBar,
-        mod: genericMod,
+        mod: engMod,
       });
       car.engine = r.engine;
       steadyBoostBar = r.steadyBoostBar;
@@ -156,9 +187,8 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
     // NA engine (or a Chapter 1 engine with a v2 part): breathing model
     if (tune.boostBar !== undefined && !turboKit) return { ok: false, errors: ['ajuste de pressão sem turbo instalado'] };
     if (turboKit) {
-      const fuel = engineFuel(base.engine);
-      const max = TURBO_MAX_COMPRESSION[fuel];
-      if (base.engine.compressionRatio > max) return { ok: false, errors: [`taxa de compressão ${base.engine.compressionRatio.toFixed(1).replace('.', ',')}:1 não aceita o kit turbo sem detonar`] };
+      const crErr = conversionCompressionError(base, turboKit, get('pistons'));
+      if (crErr) return { ok: false, errors: [crErr] };
       if (tune.boostBar !== undefined) {
         const [lo, hi] = turboKit.boostRangeBar;
         if (!(tune.boostBar >= lo && tune.boostBar <= hi)) return { ok: false, errors: [`pressão fora da faixa do kit (${fmtBar(lo)} a ${fmtBar(hi)} bar)`] };
@@ -183,12 +213,14 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
       compressionAdd: pistons?.compressionAdd,
       ignitionGain: ecu?.ignitionGain,
       revLimitAddRpm: ecu ? Math.min(ecu.revLimitAddRpm, family?.valvetrainRevAddRpm ?? 0) : undefined,
-      mod: pistons?.frictionScale || genericMod.coolingFrictionScale || genericMod.coolingKnockScale
+      mod: pistons?.frictionScale || engMod.coolingFrictionScale || genericMod.coolingKnockScale
         ? {
-            ...(genericMod.coolingFrictionScale || pistons?.frictionScale ? { coolingFrictionScale: (genericMod.coolingFrictionScale ?? 1) * (pistons?.frictionScale ?? 1) } : {}),
+            ...(engMod.coolingFrictionScale || pistons?.frictionScale ? { coolingFrictionScale: (engMod.coolingFrictionScale ?? 1) * (pistons?.frictionScale ?? 1) } : {}),
             ...(genericMod.coolingKnockScale ? { coolingKnockScale: genericMod.coolingKnockScale } : {}),
           }
         : undefined,
+      compressorFlowKgS: turboKit?.conversion?.compressorFlowKgS,
+      intercoolerEffectiveness: turboKit && get('intercooler') ? get('intercooler')!.effectiveness : undefined,
     };
     const any = Object.values(engineParts).some((v) => v !== undefined);
     if (any) {
@@ -222,8 +254,8 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
           },
         };
       }
-      // mechanical limit of the NA internals
-      if (family) {
+      // mechanical limit of the NA internals (a converted engine is checked below instead of silently clamped)
+      if (family && !turboKit?.conversion) {
         const lim = family.internalsTorqueNm * (pistons?.torqueLimitScale ?? 1);
         car.engine.torqueCurve = { ...car.engine.torqueCurve, torqueNm: car.engine.torqueCurve.torqueNm.map((t) => Math.min(t, lim)) };
       }
@@ -319,6 +351,10 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   if (fly?.launchRpmAdd) car.transmission.clutch.launchRpm = Math.min(car.transmission.clutch.launchRpm + fly.launchRpmAdd, car.engine.redlineRpm - 800);
   if (awd?.transferEfficiencyAdd && car.awd) car.awd = { ...car.awd, transferEfficiency: Math.min(1, car.awd.transferEfficiency + awd.transferEfficiencyAdd) };
 
+  // boost by gear: the ECU map holds a fraction of the boost target in the first gears
+  const bbg = get('boost-by-gear');
+  if (bbg && car.engine.induction === 'turbo') car.transmission = { ...car.transmission, boostByGear: [...bbg.gearFractions] };
+
   // ---- visible parts ----
   car.visual = { ...car.visual, mods: { intercooler: !!(turboKit || ic || turboUp), sportTip: !!exhaust, tyre: tyre?.grade ?? 'stock' } };
   if (parts.length) car.name = `${base.name} (preparado)`.slice(0, 64);
@@ -338,10 +374,32 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   }
   if (knockLoss > MAX_KNOCK_LOSS)
     errors.push(`detonação: este motor perde ${(knockLoss * 100).toFixed(0)} % do torque em atraso de ignição nesta pressão; baixe a pressão`);
+  // ---- Chapter 3 project checks: internals of a conversion, fuel supply, lubrication ----
+  const diag: BuildDiagnostics = { factoryInduction: base.engine.induction, currentInduction: car.engine.induction };
+  if (modern) {
+    const famDef = ENGINE_FAMILIES[fam];
+    if (famDef) {
+      const limitNm = famDef.internalsTorqueNm * (get('pistons')?.torqueLimitScale ?? 1);
+      diag.internals = { peakTorqueNm, limitNm };
+      if (turboKit?.conversion) {
+        const e = conversionInternalsError(peakTorqueNm, famDef.internalsTorqueNm, get('pistons'));
+        if (e) errors.push(e);
+      }
+    }
+    if (turboKit?.conversion || parts.some((p) => p.needsFuelCheck)) {
+      const fuel = checkFuel(base, { injectors: get('fuel-system'), hpPump: get('fuel-hp-pump') }, peakPowerCv, car.engine.induction === 'turbo');
+      diag.fuel = fuel;
+      if (!fuel.ok) errors.push(fuelErrorMessage(fuel));
+    }
+    const oil = oilCheck(base, car, get('oil-system'));
+    diag.oil = oil;
+    if (!oil.ok) errors.push(oilErrorMessage(oil));
+    if (turboKit?.conversion) diag.compressorFlowKgS = turboKit.conversion.compressorFlowKgS;
+  }
   const v = validateCar(car);
   if (!v.ok) errors.push(...v.errors);
   if (errors.length) return { ok: false, errors };
-  return { ok: true, car: deepFreeze(v.value!), parts, key, peakTorqueNm, peakPowerCv, steadyBoostBar, knockLoss, version: 2 };
+  return { ok: true, car: deepFreeze(v.value!), parts, key, peakTorqueNm, peakPowerCv, steadyBoostBar, knockLoss, version: 2, diagnostics: diag };
 }
 
 function interp(xs: readonly number[], ys: readonly number[], x: number): number {

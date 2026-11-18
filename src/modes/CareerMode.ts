@@ -33,6 +33,9 @@ import { BUILD_RESOLVER_VERSION, resolveBuild, type BuildResult } from '../game/
 import type { BuildTune } from '../game/career/tuning/buildCommon';
 import { failureSpecFor, reconcileTune, tuneReliability } from '../game/career/tuning/TuningCapabilities';
 import { playBlownEngine, playRiskWarning } from '../audio/core/blownEngineSound';
+import { effectiveInduction } from '../game/career/tuning/ConvertedTurboModel';
+import { isBottleneck, projectLimitations } from '../game/career/tuning/ProjectLimitations';
+import { classifyProject } from '../game/career/tuning/EngineProjectClassifier';
 import { ALL_PARTS, CATEGORY_DESCRIPTION, CATEGORY_LABEL, CATEGORY_ORDER_V1, UNLOCK_LABEL, WORKSHOP_TABS, findPart, type PartCategory, type PartDef } from '../game/career/tuning/parts';
 import { RACE_DISTANCES, RaceController, type LaneResult, type RaceLane } from '../game/race/RaceController';
 import { runAccelerationTest } from '../game/race/accelerationTest';
@@ -834,6 +837,7 @@ export class CareerMode implements Mode {
         h('div', {}, h('span', { class: 'ws-kicker' }, 'CATÁLOGO DE COMPONENTES'),
           h('h2', {}, tab.label), h('p', {}, tab.description)),
         h('span', { class: 'ws-count' }, `${tab.categories.length} grupos · ${allInTab.length} upgrades`)),
+      this.projectPanel(car, before),
       ...groups,
     );
     const detail = h(
@@ -857,6 +861,52 @@ export class CareerMode implements Mode {
   }
 
   /**
+   * Engine projects (Chapter 3): the project the hardware makes today (derived from the parts), the
+   * factory vs current induction, and the presets with before/after, requirements and atomic purchase.
+   */
+  private projectPanel(car: OwnedCar, before: BuildResult): HTMLElement | null {
+    const presets = this.controller.presetsOf(car);
+    if (!presets.length) return null;
+    const base = findCampaignCar(car.baseCarId)!;
+    const proj = classifyProject(base, car.installedParts);
+    const ind = proj.induction;
+    const rows = presets.map((pr) => {
+      const plan = this.controller.planBundle(car, pr.parts, { dropIncompatible: true, replaceProject: true });
+      const after = 'error' in plan ? null : resolveOwned(car, plan.parts);
+      const current = proj.id === pr.id;
+      const reason = 'error' in plan ? plan.error : after && !after.ok ? after.errors.join('; ') : null;
+      const delta = after && after.ok && before.ok ? `${f1(before.peakPowerCv)} → ${f1(after.peakPowerCv)} cv · ${f1(before.peakTorqueNm)} → ${f1(after.peakTorqueNm)} N·m` : '—';
+      const lim = after && after.ok ? after.diagnostics : undefined;
+      const limits = lim ? [lim.fuel ? `combustível ${Math.round(lim.fuel.margin * 100)} %` : '', lim.oil ? `óleo ${Math.round(lim.oil.margin * 100)} %` : ''].filter(Boolean).join(' · ') : '';
+      const cost = 'error' in plan ? 0 : plan.cost;
+      return h('li', { class: `ws-part-card ${current ? 'sel' : ''}`, 'data-testid': `ws-preset-${pr.id}`, 'data-school': pr.school },
+        h('div', { class: 'ws-part-head' }, h('span', { class: 'ws-part-name' }, pr.label), h('span', { class: 'pill' }, current ? 'Em uso' : cr(cost))),
+        h('small', { class: 'ws-part-meta' }, pr.summary),
+        h('small', { class: 'ws-part-meta' }, reason ? `Bloqueado: ${reason}` : `Antes/depois: ${delta}${limits ? ` · margens: ${limits}` : ''}`),
+        'error' in plan ? null : h('small', { class: 'ws-part-meta' }, `Peças: ${pr.parts.map((id) => findPart(id)?.name ?? id).join(', ')}`),
+        'error' in plan || plan.removed.length ? h('small', { class: 'ws-part-meta' }, `Vão para o estoque: ${'error' in plan ? '' : plan.removed.map((id) => findPart(id)?.name ?? id).join(', ')}`) : null,
+        h('button', {
+          class: 'primary', 'data-testid': `ws-preset-buy-${pr.id}`, disabled: current || !!reason || this.controller.save!.credits < cost,
+          onclick: () => void (async () => {
+            if (!this.guard()) return;
+            const r = await this.controller.applyPreset(pr.id);
+            if (!r.ok) toast(r.error, 'error');
+            else { toast(`${pr.label} instalado.`); if (r.notice) toast(r.notice); }
+            this.selectedPart = null;
+            this.show('workshop');
+          })(),
+        }, current ? 'Projeto atual' : `Instalar projeto (${cr(cost)})`),
+      );
+    });
+    return h('section', { class: 'ws-group', 'data-testid': 'ws-projects', 'aria-label': 'Projetos do motor' },
+      h('div', { class: 'ws-group-header' }, h('div', {},
+        h('h3', {}, `PROJETOS DO MOTOR — ${proj.label}`),
+        h('p', {}, `${proj.summary} Ficha: ${ind.factoryInduction === 'turbo' ? 'turbo' : 'aspirado'} · hardware agora: ${ind.currentInduction === 'turbo' ? (ind.turboLayout === 'twin' ? 'biturbo' : 'turbo') : 'aspirado'}. Trocar de projeto manda as peças que saem para o estoque; voltar é de graça.`))),
+      h('ul', { class: 'ws-parts', 'data-testid': 'ws-preset-list' }, ...rows),
+    );
+  }
+
+  /**
    * Parts the shop offers for this car: parts of resolver version 2 appear once chapter 2 is open,
    * and only those that fit the car (engine family, induction, gearbox, driven axles). An AP part
    * never shows on an N55; a manual clutch never shows on a DSG.
@@ -866,11 +916,12 @@ export class CareerMode implements Mode {
     const base = findCampaignCar(car.baseCarId)!;
     const c2 = isChapterUnlocked(s, CHAPTER_2_ID);
     const v2 = buildVersionFor(car, car.installedParts) === 2;
+    const induction = effectiveInduction(base, car.installedParts.map((id) => findPart(id)).filter((p): p is PartDef => !!p));
     return ALL_PARTS.filter((p) => {
       if (car.installedParts.includes(p.id)) return true;
       if (p.since === 2 && !c2) return false;
       // version 2 compatibility rules apply to the cars resolved by version 2 and to v2 parts
-      if ((v2 || p.since === 2) && incompatibility(base, p)) return false;
+      if ((v2 || p.since === 2) && incompatibility(base, p, induction)) return false;
       return true;
     });
   }
@@ -1099,7 +1150,16 @@ export class CareerMode implements Mode {
       onBack: () => this.show('garage'),
     });
     this.dynoLab = view;
-    return this.frame('Dyno Lab', 'career-dyno', h('p', { class: 'lead' }, `${car.nickname}: o dinamômetro mede o motor que está no carro, com as peças instaladas, e a pista de testes mede o carro. Os valores vêm da física, não da ficha.`), view.el);
+    // Chapter 3: bottlenecks measured on the resolved build
+    const lims = projectLimitations(b, caps.limits).filter(isBottleneck);
+    const panel = base.engine.family
+      ? h('section', { class: 'ws-group', 'data-testid': 'dyno-limitations' },
+          h('h3', {}, 'LIMITAÇÕES DO PROJETO'),
+          lims.length
+            ? h('ul', {}, ...lims.map((l) => h('li', { 'data-testid': `limit-${l.id}` }, `${l.label}: ${l.detail}`)))
+            : h('p', {}, 'Nenhum gargalo medido: todas as margens estão acima de 110 %.'))
+      : null;
+    return this.frame('Dyno Lab', 'career-dyno', h('p', { class: 'lead' }, `${car.nickname}: o dinamômetro mede o motor que está no carro, com as peças instaladas, e a pista de testes mede o carro. Os valores vêm da física, não da ficha.`), view.el, panel);
   }
 
   // ------------------------------------------------------------------ events
@@ -1166,7 +1226,7 @@ export class CareerMode implements Mode {
         nm: rb.peakTorqueNm,
         massKg: rb.car.massKg,
         drive: driveLabel(rb.car),
-        note: rb.car.engine.induction === 'turbo' && findCampaignCar(rv.baseCarId)!.engine.induction !== 'turbo' ? 'turbo (não original)' : undefined,
+        note: rivalNote(rv.parts, rb.car, findCampaignCar(rv.baseCarId)!),
         parts: rv.parts.length ? rv.parts.map((id) => findPart(id)!.name).join(', ') : '',
         skill: rv.skillLabel,
       },
@@ -1272,6 +1332,8 @@ export class CareerMode implements Mode {
       dnf: r.dnf,
       ...(r.dnfReason ? { dnfReason: r.dnfReason } : {}),
       ...(r.dnfReason === 'engine-blown' && r.blownAtRpm !== undefined ? { blownAtRpm: Math.round(r.blownAtRpm) } : {}),
+      ...(Object.keys(r.splits).length ? { splitsS: { ...r.splits } } : {}),
+      ...(r.finished ? { maxRpm: Math.round(r.maxRpm ?? 0), gearsUsed: [...(r.gearsUsed ?? [])] } : {}),
       launchRpm: t.launchRpm,
       maxSlipRatio: t.maxSlipRatio,
       wheelspinS: t.wheelspinS,
@@ -1402,9 +1464,22 @@ export class CareerMode implements Mode {
       rows: [
         { label: 'Reação (RT)', player: p.rt, rival: o.rt, better: 'low', format: sec },
         { label: 'ET', player: p.dnf ? null : p.et, rival: o.dnf ? null : o.et, better: 'low', format: (v) => (v === null ? 'DNF' : f3(v)) },
+        ...(ev.distance === 'km'
+          ? [
+              { label: '201 m', player: p.splitsS?.eighth ?? null, rival: o.splitsS?.eighth ?? null, better: 'low' as const, format: (v: number | null) => (v === null ? '—' : f3(v)) },
+              { label: '402 m', player: p.splitsS?.quarter ?? null, rival: o.splitsS?.quarter ?? null, better: 'low' as const, format: (v: number | null) => (v === null ? '—' : f3(v)) },
+              { label: '1.000 m', player: p.dnf ? null : p.et, rival: o.dnf ? null : o.et, better: 'low' as const, format: (v: number | null) => (v === null ? 'DNF' : f3(v)) },
+            ]
+          : []),
         { label: 'Tempo desde o verde', player: p.total, rival: o.total, better: 'low', format: sec },
-        { label: 'Velocidade final', player: p.trapKmh, rival: o.trapKmh, better: 'high', format: (v) => (v === null ? '—' : `${f1(v)} km/h`) },
+        { label: ev.distance === 'km' ? 'Velocidade na linha de chegada' : 'Velocidade final', player: p.trapKmh, rival: o.trapKmh, better: 'high', format: (v) => (v === null ? '—' : `${f1(v)} km/h`) },
         { label: 'Patinagem', player: p.wheelspinS ?? 0, rival: o.wheelspinS ?? 0, better: 'low', format: (v) => `${f2(v)} s` },
+        ...(ev.distance === 'km'
+          ? [
+              { label: 'Rotação máxima', player: p.maxRpm ?? null, rival: o.maxRpm ?? null, better: 'low' as const, format: (v: number | null) => (v === null ? '—' : `${Math.round(v)} rpm`) },
+              { label: 'Marchas usadas', player: p.gearsUsed?.length ?? null, rival: o.gearsUsed?.length ?? null, better: 'high' as const, format: (v: number | null) => (v === null ? '—' : `${v}`) },
+            ]
+          : []),
       ],
       credits: r.creditsAwarded,
       reputation: r.reputationAwarded,
@@ -1531,13 +1606,14 @@ export class CareerMode implements Mode {
       const sinceGreen = race.elapsedSinceGreen(0);
       this.hud?.update(p.sim, this.ctx.settings.units, this.runner.paused ? 'PAUSADO' : '', {
         distanceM: p.sim.x,
+        ...(race.distanceId === 'km' ? { totalM: race.distanceM, partial: { label: 'parcial 402 m', timeS: r0?.splits.quarter ?? null } } : {}),
         timeS: sinceGreen,
         timeLabel: done ? 'TEMPO TOTAL' : sinceGreen === null ? 'preparação' : 'TEMPO DESDE O VERDE',
         etS: sinceGreen === null ? undefined : race.elapsed(0),
         alert: r0?.redLight ?? false,
         gapM: opp ? opp.sim.x - p.sim.x : null,
       });
-      if (this.banner) this.banner.textContent = `${this.current.event.title} · Você × ${this.current.rival.name} "${this.current.rival.nickname}" · ${race.status}`;
+      if (this.banner) this.banner.textContent = `${race.distanceId === 'km' ? 'ELITE DA MADRUGADA — 1.000 M · ' : ''}${this.current.event.title} · Você × ${this.current.rival.name} "${this.current.rival.nickname}" · ${race.status}`;
       if (race.phase === 'finished' && !this.current.recorded) {
         this.banner && (this.banner.textContent = race.status);
         void this.finishRace();
@@ -1568,6 +1644,14 @@ export class CareerMode implements Mode {
     if (!this.race || !p || this.race.phase === 'finished') return null;
     return p.sim.x < 5.5 ? TREE_X_M : null;
   }
+}
+
+/** Aspiration and preparation level of a rival, read from its resolved build (never from a label). */
+function rivalNote(parts: readonly string[], car: CarConfig, base: CarConfig): string {
+  const turbo = car.engine.induction === 'turbo';
+  const aspiration = !turbo ? 'aspirado' : car.engine.turbo?.layout === 'parallel-twin' ? 'biturbo' : 'turbo';
+  const stage = parts.includes('ecu-stage3') ? 'Stage 3' : parts.includes('ecu-stage2') ? 'Stage 2' : parts.includes('ecu-stage1') ? 'Stage 1' : parts.length ? 'preparado' : 'de fábrica';
+  return `${aspiration} · ${stage}${turbo && base.engine.induction !== 'turbo' ? ' (turbo não original)' : ''}`;
 }
 
 function portraitEl(id: Parameters<typeof portraitSvg>[0]): HTMLElement {

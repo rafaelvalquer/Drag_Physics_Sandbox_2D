@@ -1,5 +1,7 @@
 import type { TransmissionKind, TurboConfig } from '../../../data/schema';
 import { CHAPTER2_PARTS } from './chapter2Parts';
+import { CHAPTER3_PARTS } from './chapter3Parts';
+import { CHAPTER3_STAGE3_PARTS } from './chapter3Stage3Parts';
 
 /**
  * Career parts. Each part is a discriminated union member by `category` and carries the PHYSICAL
@@ -34,9 +36,19 @@ export type V2Category =
   | 'flywheel'
   | 'gearbox'
   | 'awd'
-  | 'suspension';
+  | 'suspension'
+  // Chapter 3 workshop (Stage 3): fuel supply, lubrication, balancing, turbine manifold, boost by gear
+  | 'fuel-system'
+  | 'fuel-hp-pump'
+  | 'oil-system'
+  | 'engine-balancing'
+  | 'turbo-manifold'
+  | 'boost-by-gear';
 
-export const V2_CATEGORIES: readonly V2Category[] = ['cylinder-head', 'pistons', 'flywheel', 'ecu', 'intercooler', 'boost-control', 'gearbox', 'awd', 'suspension'];
+export const V2_CATEGORIES: readonly V2Category[] = [
+  'cylinder-head', 'pistons', 'flywheel', 'ecu', 'intercooler', 'boost-control', 'gearbox', 'awd', 'suspension',
+  'fuel-system', 'fuel-hp-pump', 'oil-system', 'engine-balancing', 'turbo-manifold', 'boost-by-gear',
+];
 
 /**
  * Slot-catalogue categories that are hardware of the CAR, not of a classic engine (mass, cooling,
@@ -58,14 +70,14 @@ export interface WorkshopTab {
  * catalogue (classic engines: the slot catalogue; modern families: the Chapter 2 parts).
  */
 export const WORKSHOP_TABS: readonly WorkshopTab[] = [
-  { id: 'engine', label: 'Motor', icon: '⚙', description: 'Comando, cabeçote, taxa e internos', categories: ['camshaft', 'engine-head', 'engine-compression', 'engine-internals', 'engine-flywheel', 'cylinder-head', 'pistons', 'flywheel', 'engine-valvetrain'] },
+  { id: 'engine', label: 'Motor', icon: '⚙', description: 'Comando, cabeçote, taxa e internos', categories: ['camshaft', 'engine-head', 'engine-compression', 'engine-internals', 'engine-flywheel', 'cylinder-head', 'pistons', 'flywheel', 'engine-valvetrain', 'engine-balancing'] },
   { id: 'intake', label: 'Admissão', icon: '◉', description: 'Ar limpo, dutos e resposta', categories: ['intake-filter', 'intake-manifold', 'intake-throttle', 'intake-airbox'] },
   { id: 'exhaust', label: 'Escape', icon: '≋', description: 'Contrapressão e acústica', categories: ['exhaust', 'exhaust-header', 'exhaust-pipe', 'exhaust-muffler'] },
   { id: 'transmission', label: 'Transmissão', icon: '⌁', description: 'Relações e embreagem', categories: ['clutch', 'transmission-gearbox', 'differential', 'gearbox', 'awd'] },
   { id: 'tires', label: 'Pneus', icon: '◎', description: 'Composto, largura e pressão', categories: ['tires', 'tires-width', 'tires-pressure'] },
-  { id: 'turbo', label: 'Turbo', icon: '◌', description: 'Pressão, spool e temperatura', categories: ['turbo', 'turbo-turbine', 'turbo-intercooler', 'turbo-wastegate', 'turbo-boost', 'intercooler'] },
-  { id: 'electronics', label: 'Eletrônica', icon: '⌘', description: 'ECU, combustível e ignição', categories: ['electronics-ecu', 'electronics-fuel', 'electronics-ignition', 'ecu', 'boost-control', 'electronics-launch'] },
-  { id: 'cooling', label: 'Arrefecimento', icon: '❄', description: 'Gerenciamento térmico', categories: ['cooling-radiator', 'cooling-oil', 'cooling-fan', 'turbo-intercooler'] },
+  { id: 'turbo', label: 'Turbo', icon: '◌', description: 'Pressão, spool e temperatura', categories: ['turbo', 'turbo-turbine', 'turbo-intercooler', 'turbo-wastegate', 'turbo-boost', 'intercooler', 'turbo-manifold'] },
+  { id: 'electronics', label: 'Eletrônica', icon: '⌘', description: 'ECU, combustível e ignição', categories: ['electronics-ecu', 'electronics-fuel', 'electronics-ignition', 'ecu', 'boost-control', 'boost-by-gear', 'fuel-system', 'fuel-hp-pump', 'electronics-launch'] },
+  { id: 'cooling', label: 'Arrefecimento', icon: '❄', description: 'Gerenciamento térmico', categories: ['cooling-radiator', 'cooling-oil', 'cooling-fan', 'turbo-intercooler', 'oil-system'] },
   { id: 'chassis', label: 'Estrutura', icon: '◇', description: 'Massa e geometria', categories: ['chassis-weight', 'chassis-suspension', 'suspension'] },
 ];
 /** One mechanical slot can appear in more than one navigation tab (intercooler: turbo + cooling).
@@ -103,6 +115,12 @@ export const CATEGORY_LABEL: Record<PartCategory, string> = {
   suspension: 'Suspensão de arrancada',
   'engine-valvetrain': 'Molas de válvula',
   'electronics-launch': 'Controle de largada',
+  'fuel-system': 'Injetores e bomba de combustível',
+  'fuel-hp-pump': 'Bomba de alta pressão (injeção direta)',
+  'oil-system': 'Sistema de lubrificação',
+  'engine-balancing': 'Balanceamento do virabrequim',
+  'turbo-manifold': 'Coletor de escape do turbo',
+  'boost-by-gear': 'Pressão por marcha',
 };
 export const CATEGORY_DESCRIPTION: Record<PartCategory, string> = {
   'intake-filter': 'Restrição do filtro de ar em alta vazão.', 'intake-manifold': 'Comprimento e área dos dutos de admissão.',
@@ -130,6 +148,12 @@ export const CATEGORY_DESCRIPTION: Record<PartCategory, string> = {
   suspension: 'Altura efetiva do centro de gravidade na transferência de carga.',
   'engine-valvetrain': 'Rotação em que as válvulas deixam de seguir o comando (flutuação).',
   'electronics-launch': 'Rotação mantida na linha de largada (two-step).',
+  'fuel-system': 'Vazão dos injetores e da bomba: limita a potência que o motor sustenta.',
+  'fuel-hp-pump': 'Vazão da bomba de alta pressão dos motores de injeção direta.',
+  'oil-system': 'Vazão da bomba de óleo e capacidade de troca térmica.',
+  'engine-balancing': 'Atrito e vibração do virabrequim em alta rotação.',
+  'turbo-manifold': 'Contrapressão do escape antes da turbina e enchimento.',
+  'boost-by-gear': 'Limita a pressão do turbo nas marchas baixas para a tração segurar.',
 };
 
 /** Numeric mechanical changes use SI units or the documented suffix (Bar, KPa, Mm, Rpm).
@@ -175,6 +199,11 @@ export interface PartCompat {
   families?: readonly string[];
   /** Induction the part needs. */
   induction?: 'NA' | 'turbo';
+  /**
+   * Part made for the hardware of a FACTORY turbo engine (its turbine map, wastegate and boost
+   * model): it never fits an aspirated engine converted to turbo with a workshop kit.
+   */
+  factoryTurbo?: boolean;
   /** Gearbox kinds the part fits. */
   transmissions?: readonly TransmissionKind[];
   /** Driven axles the part is for. */
@@ -200,6 +229,15 @@ interface PartBase {
   compat?: PartCompat;
   /** Career chapter whose shop sells the part (absent = the chapter of its unlock). */
   chapter?: 1 | 2 | 3;
+  /** Hardware the part is calibrated for: the build is refused without one of the ids of each entry. */
+  requiresParts?: readonly { ids: readonly string[]; label: string }[];
+  /**
+   * Mechanical headroom the part adds, read by EngineReliability: safe speed (rpm) and the factor
+   * on the seconds the engine lasts at the mechanical limit. Never a power effect.
+   */
+  reliability?: { safeRpmAdd?: number; enduranceScale?: number };
+  /** The build must pass the fuel-supply check (injectors / pumps) when this part is installed. */
+  needsFuelCheck?: boolean;
 }
 
 export interface FilterPart extends PartBase {
@@ -256,6 +294,21 @@ export interface TurboPart extends PartBase {
   massAddKg: number;
   /** Intercooler effectiveness (fraction of the compressor temperature rise removed). */
   intercoolerEffectiveness: number;
+  /** Conversion kit of an aspirated engine (Chapter 3): turbine profile, layout and limits. */
+  conversion?: TurboConversionSpec;
+}
+
+/** Turbine profile of a conversion kit (corrected-flow behaviour of the turbine and compressor). */
+export type TurbineProfile = 'street' | 'balanced' | 'high-flow';
+
+export interface TurboConversionSpec {
+  profile: TurbineProfile;
+  /** Two parallel turbos (one per bank) or a single turbo with a merged manifold. */
+  layout: 'single' | 'twin-parallel';
+  /** Air mass flow the compressor delivers before leaving its efficiency island (kg/s). */
+  compressorFlowKgS: number;
+  /** Highest compression ratio the kit takes without knocking (low-compression pistons lower the engine's). */
+  maxCompression: number;
 }
 
 export interface ClutchPart extends PartBase {
@@ -409,6 +462,48 @@ export interface SuspensionPart extends PartBase {
   massRemoveKg?: number;
 }
 
+/** Injectors and low-pressure pump: scales of the family's factory flow (FuelSystemModel). */
+export interface FuelSystemPart extends PartBase {
+  category: 'fuel-system';
+  injectorScale: number;
+  pumpScale: number;
+}
+
+/** High-pressure pump of a direct-injection engine: scale of the factory pump flow. */
+export interface FuelHpPumpPart extends PartBase {
+  category: 'fuel-hp-pump';
+  hpPumpScale: number;
+}
+
+/** Oil pump, sump and cooler: scales of the family's factory oil flow and heat rejection (LubricationModel). */
+export interface OilSystemPart extends PartBase {
+  category: 'oil-system';
+  /** Pump flow relative to the factory pump. */
+  pumpFlowScale: number;
+  /** Heat the oil cooler / sump removes relative to the factory one. */
+  coolerScale: number;
+}
+
+/** Balanced and lightened crankshaft assembly: lower friction at speed. */
+export interface BalancingPart extends PartBase {
+  category: 'engine-balancing';
+  frictionScale: number;
+}
+
+/** High-flow exhaust manifold of a turbo engine: less back pressure ahead of the turbine. */
+export interface TurboManifoldPart extends PartBase {
+  category: 'turbo-manifold';
+  backPressureReductionKPa: number;
+  spoolTimeScale: number;
+}
+
+/** Boost by gear: boost target held in the first gears (traction limited), the full target above. */
+export interface BoostByGearPart extends PartBase {
+  category: 'boost-by-gear';
+  /** Fraction of the boost target held in each of the first gears; later gears run the full target. */
+  gearFractions: readonly number[];
+}
+
 /**
  * Reinforced valve springs (and retainers): the valves follow the cam to a higher speed before they
  * float, so the speed the engine tolerates rises. They do not move the ignition cut and add no
@@ -464,7 +559,13 @@ export type PartDef =
   | AwdPart
   | SuspensionPart
   | ValveSpringPart
-  | LaunchControlPart;
+  | LaunchControlPart
+  | FuelSystemPart
+  | FuelHpPumpPart
+  | OilSystemPart
+  | BalancingPart
+  | TurboManifoldPart
+  | BoostByGearPart;
 
 /** Things the career unlocks (event wins). */
 export type UnlockId =
@@ -500,6 +601,12 @@ export type UnlockId =
   | 'c2-stage2'
   | 'c3-stage3'
   // Chapter 3 — Elite da Madrugada
+  | 'c3-v6-parts'
+  | 'c3-na-head'
+  | 'c3-na-high-rpm'
+  | 'c3-turbo-street'
+  | 'c3-high-flow'
+  | 'c3-competition'
   | 'c3-dealer-gtr'
   | 'c3-final-challenge';
 
@@ -534,6 +641,12 @@ export const UNLOCK_LABEL: Record<UnlockId, string> = {
   'c2-generic-chassis': 'Alívio de peso e arrefecimento nos carros modernos',
   'c2-stage2': 'Stage 2 do turbo de fábrica (downpipe, admissão direta, mapa Stage 2)',
   'c3-stage3': 'Stage 3 do turbo de fábrica',
+  'c3-v6-parts': 'Peças dos V6 aspirados (admissão, escape, comandos, remap, cabeçotes)',
+  'c3-na-head': 'Cabeçotes Stage 1 dos V6 aspirados',
+  'c3-na-high-rpm': 'Aspirado High RPM (comandos, VVEL/VVT-i, molas, ECU Stage 2)',
+  'c3-turbo-street': 'Kits de conversão turbo Street e biturbo Stage 3',
+  'c3-high-flow': 'Projetos High Flow (turbinas, alimentação avançada, internos)',
+  'c3-competition': 'Projetos Competition (ECU, coletores, lubrificação e balanceamento)',
   'c3-dealer-gtr': 'GT-R à venda na revenda Elite',
   'c3-final-challenge': 'Duelo final da Elite',
 };
@@ -713,7 +826,7 @@ const DYNO_LAB_PARTS: readonly PartDef[] = [
 export const PARTS: readonly PartDef[] = [...BASE_PARTS, ...EXPANDED_PARTS, ...DYNO_LAB_PARTS];
 
 /** Every part of every resolver version (ids are unique across versions). */
-export const ALL_PARTS: readonly PartDef[] = [...PARTS, ...CHAPTER2_PARTS];
+export const ALL_PARTS: readonly PartDef[] = [...PARTS, ...CHAPTER2_PARTS, ...CHAPTER3_PARTS, ...CHAPTER3_STAGE3_PARTS];
 
 export function findPart(id: string): PartDef | undefined {
   return ALL_PARTS.find((p) => p.id === id);
