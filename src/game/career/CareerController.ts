@@ -1,4 +1,6 @@
 import { findCampaignCar } from '../../data/cars/campaign';
+import { makeFreeEvent, type FreeEventOffer } from './FreeEvents';
+import { rivalBuild } from './RivalBuildFactory';
 import { CHAPTER2_CARS } from '../../data/cars/chapter2/index';
 import { CHAPTER3_CARS } from '../../data/cars/chapter3/index';
 import { EVENTS, findEvent, type CareerEventDef } from './CareerEvents';
@@ -548,6 +550,59 @@ export class CareerController {
         prizeGarageFull,
       },
     };
+  }
+
+
+  /** New, repeatable opponents become available without progressing the story. */
+  async rotateFreeEvents(): Promise<OpResult> {
+    const s = this.save;
+    if (!s) return fail('nenhuma campanha carregada');
+    try {
+      await this.commit((n) => { n.freeEventRotation = (n.freeEventRotation + 1) % 2147483640; });
+      return { ok: true, value: this.save! };
+    } catch (e) { return fail((e as Error).message); }
+  }
+
+  /**
+   * Pays exactly once for a generated opponent, without story progress, prizes or unlocks.
+   * Rebuilds the offer from the persisted seed instead of trusting a caller-provided reward.
+   * A won/lost race consumes the current rotation so it cannot be paid twice with a new attempt.
+   */
+  async recordFreeRace(r: Omit<CareerRaceResult, 'creditsAwarded' | 'reputationAwarded'>, offer: FreeEventOffer): Promise<OpResult<RaceRecord>> {
+    const s = this.save;
+    if (!s) return fail('nenhuma campanha carregada');
+    const prior = s.results.find((x) => x.attemptId === r.attemptId);
+    if (prior) return {
+      ok: true, value: {
+        save: s, result: prior, applied: false,
+        reward: { credits: prior.creditsAwarded, reputation: prior.reputationAwarded, claimId: null, kind: 'none' },
+        newUnlocks: [], chapterCompleted: false,
+      },
+    };
+    if (offer.event.chapter !== s.chapterId || !isChapterUnlocked(s, offer.event.chapter))
+      return fail('este capítulo não está disponível');
+    if (offer.rotation !== s.freeEventRotation) return fail('este adversário já foi substituído');
+    const expected = makeFreeEvent(s.chapterId, s.freeEventRotation, offer.tier);
+    const rb = rivalBuild(expected.rival);
+    if (expected.event.id !== r.eventId || expected.signature !== offer.signature ||
+        r.opponentCarId !== rb.car.id || r.opponentBuildKey !== rb.key)
+      return fail('o resultado não corresponde ao adversário gerado');
+    if (!s.ownedCars.some((c) => c.id === r.playerCarId))
+      return fail('carro do jogador desconhecido');
+    let reward: Reward = { credits: 0, reputation: 0, claimId: null, kind: 'none' };
+    let stored: CareerRaceResult | null = null;
+    try {
+      await this.commit((n) => {
+        const credits = r.outcome === 'win' ? expected.event.rewardCr : 0;
+        reward = { credits, reputation: 0, claimId: null, kind: credits ? 'repeat-win' : 'none' };
+        n.credits += credits;
+        stored = { ...r, creditsAwarded: credits, reputationAwarded: 0 };
+        n.results.push(stored);
+        if (n.results.length > MAX_RESULTS) n.results.splice(0, n.results.length - MAX_RESULTS);
+        n.freeEventRotation = (n.freeEventRotation + 1) % 2147483640;
+      });
+      return { ok: true, value: { save: this.save!, result: stored!, reward, applied: true, newUnlocks: [], chapterCompleted: false } };
+    } catch (e) { return fail((e as Error).message); }
   }
 
   /**

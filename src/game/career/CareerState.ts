@@ -126,6 +126,8 @@ export const CareerSaveSchema = z
     /** Optimistic-concurrency counter: every write increments it. */
     revision: z.number().int().min(0),
     credits: z.number().int().min(0),
+    /** Advances procedural rival offers. Optional/defaulted for older saves. */
+    freeEventRotation: z.number().int().min(0).max(2147483640).default(0),
     reputation: z.number().int().min(0),
     ownedCars: z.array(OwnedCarSchema).max(MAX_GARAGE),
     activeCarId: z.string().nullable(),
@@ -164,6 +166,7 @@ export function newCareerSave(slotId = DEFAULT_SLOT, now = new Date()): CareerSa
     chapterCompletions: {},
     revision: 0,
     credits: START_CREDITS,
+    freeEventRotation: Math.floor(Math.random() * 100000000),
     reputation: 0,
     ownedCars: [],
     activeCarId: null,
