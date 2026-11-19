@@ -21,6 +21,8 @@ const specs: Spec[] = [
   ['cam-street-strong', 'camshaft', 'Comando street forte', 2, 1580, 'part-cam', { camIvoDeltaDeg: -8, camIvcDeltaDeg: 16, camEvoDeltaDeg: -10, camEvcDeltaDeg: 11, camLiftAddMm: 1.65, revLimitAddRpm: 500 }, 'Comando de rua bravo, para quem quer giro alto sem abrir mão de andar na cidade.', 'Ganha da média rotação para cima; a marcha lenta fica irregular e perde um pouco embaixo.'],
   ['cam-na-race', 'camshaft', 'Comando aspirado agressivo', 3, 2500, 'part-cam', { camIvoDeltaDeg: -12, camIvcDeltaDeg: 23, camEvoDeltaDeg: -13, camEvcDeltaDeg: 15, camLiftAddMm: 2.1, revLimitAddRpm: 650 }, 'Comando de competição para motor aspirado preparado.', 'Muito cruzamento: forte em alta, fraco abaixo da faixa de torque.'],
   ['cam-turbo', 'camshaft', 'Comando turbo', 3, 2350, 'part-cam', { camIvoDeltaDeg: -3, camIvcDeltaDeg: 9, camEvoDeltaDeg: -6, camEvcDeltaDeg: 5, camLiftAddMm: 1.4, revLimitAddRpm: 450 }, 'Comando de pouco cruzamento, feito para motor sobrealimentado.', 'Pouco cruzamento: não deixa o ar pressurizado escapar pela válvula de escape.'],
+  ['cam-turbo-street', 'camshaft', 'Comando turbo de rua', 1, 1050, 'part-turbo', { camIvoDeltaDeg: -1, camIvcDeltaDeg: 4, camEvoDeltaDeg: -3, camEvcDeltaDeg: 2, camLiftAddMm: 0.55, revLimitAddRpm: 180 }, 'Comando para turbo leve que conserva a sobreposição curta da preparação de rua.'],
+  ['cam-turbo-sport', 'camshaft', 'Comando turbo esportivo', 2, 1770, 'part-turbo', { camIvoDeltaDeg: -2, camIvcDeltaDeg: 6, camEvoDeltaDeg: -4.5, camEvcDeltaDeg: 3.5, camLiftAddMm: 0.95, revLimitAddRpm: 310 }, 'Perfil com levantamento intermediário e sobreposição curta, calibrado sob pressão.'],
   ['head-street', 'engine-head', 'Cabeçote retrabalhado leve', 2, 1900, 'part-cam', { headFlowScale: 1.045 }, 'Dutos de admissão e escape limpos e casados com as juntas.'],
   ['head-classic-street', 'engine-head', 'Cabeçote com sedes retrabalhadas', 1, 1050, 'part-cam', { headFlowScale: 1.022 }, 'Retrabalho das sedes mantendo a seção original dos dutos.'],
   ['head-race', 'engine-head', 'Cabeçote retrabalhado completo', 3, 3400, 'part-cam', { headFlowScale: 1.09 }, 'Cabeçote de competição: dutos alargados, sedes retrabalhadas e válvulas maiores.'],
@@ -149,7 +151,8 @@ export const EXPANDED_PARTS: readonly ExpandedPart[] = specs.map(([id, category,
   id, category, name, chapter, price, unlock, mod, description,
   physics: note ? `${describeMods(mod)} ${note}` : describeMods(mod),
   requiresTurbo: category === 'turbo-turbine' || category === 'turbo-intercooler' ||
-    category === 'turbo-wastegate' || category === 'turbo-boost' || id === 'compression-low',
+    category === 'turbo-wastegate' || category === 'turbo-boost' || id === 'compression-low' ||
+    id === 'cam-turbo-street' || id === 'cam-turbo-sport',
   // car hardware that also fits the modern engine families, opened along Chapter 2
   ...(category === 'tires-width' || category === 'tires-pressure'
     ? { modernUnlock: 'c2-generic-tires' as const }

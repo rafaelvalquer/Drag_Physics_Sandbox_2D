@@ -312,7 +312,8 @@ function pressureControlGain(group: string | undefined, gain: PartGain): boolean
 }
 
 function topEndGain(part: PartDef, gain: PartGain): boolean {
-  if (part.since !== 2 || !part.progression || gain.etAfter - gain.etBefore > 0.08) return false;
+  const legacyTurboCam = progressionOf(part)?.group === 'classic-turbo-cam';
+  if ((!legacyTurboCam && (part.since !== 2 || !part.progression)) || gain.etAfter - gain.etBefore > 0.08) return false;
   if (part.category !== 'camshaft' && part.category !== 'cylinder-head' && part.category !== 'intake-manifold') return false;
   const high = gain.torqueBands.at(-1)!;
   return gain.cvAfter - gain.cvBefore >= 0.2 || high.afterNm - high.beforeNm >= 0.2;
@@ -350,6 +351,8 @@ export function auditPartGain(car: CarConfig, part: PartDef, track: TrackConfig,
   const incompatible = incompatibility(car, part);
   if (incompatible) return { status: 'incompatible', reasons: [incompatible] };
   if (version === 1 && part.since === 2) return { status: 'incompatible', reasons: ['Peça requer resolver 2.'] };
+  if (progressionOf(part)?.group === 'factory-turbo-ecu')
+    return auditLegacyEcuStages(car, track, version).find((result) => result.next === part.id)!.audit;
   if (progressionOf(part)?.objective === 'boost-headroom')
     return auditBoostHeadroom(car, [part], track, version)[0]!.audit;
   if ('conversionPreparation' in part && part.conversionPreparation)
@@ -387,6 +390,26 @@ export interface StageComparison {
 function supportedTransmission(car: CarConfig): string {
   const kind = transmissionKindOf(car);
   return kind === 'manual' ? 'clutch-reinforced' : kind === 'dual-clutch' ? 'dct-upgrade' : 'at-upgrade';
+}
+
+function auditLegacyEcuStages(car: CarConfig, track: TrackConfig, version: ResolverVersion): StageComparison[] {
+  const stages = ['ecu-stage1', 'ecu-stage2', 'ecu-stage3'];
+  const support = ['pistons-forged-modern', supportedTransmission(car)];
+  const packages = [support, [...support, 'downpipe-catless', 'intercooler-race'], [...support, 'downpipe-catless', 'intercooler-race', 'turbo-hybrid']];
+  const builds = [
+    resolveBuild(car, support, {}, version),
+    ...stages.map((id, index) => resolveBuild(car, [...packages[index]!, id], {}, version)),
+  ];
+  return stages.map((next, index) => {
+    const previous = stages[index - 1] ?? null;
+    const before = builds[index]!;
+    const after = builds[index + 1]!;
+    if (!before.ok || !after.ok) {
+      const reasons = [...(before.ok ? [] : before.errors), ...(after.ok ? [] : after.errors)];
+      return { previous, next, audit: { status: 'invalid-build', reasons } };
+    }
+    return { previous, next, audit: compareBuilds(before, after, findPart(next)!, packages[index]!, track) };
+  });
 }
 
 function conversionSupport(car: CarConfig): string[] {
@@ -473,6 +496,7 @@ function auditBoostHeadroom(car: CarConfig, stages: readonly PartDef[], track: T
 export function auditPartStages(car: CarConfig, stages: readonly PartDef[], track: TrackConfig, version: ResolverVersion): StageComparison[] {
   const first = stages[0];
   if (!first) return [];
+  if (progressionOf(first)?.group === 'factory-turbo-ecu') return auditLegacyEcuStages(car, track, version);
   if (progressionOf(first)?.objective === 'boost-headroom') return auditBoostHeadroom(car, stages, track, version);
   const slot = physicalSlotOf(first);
   const specialization = progressionOf(first)?.specialization;

@@ -57,7 +57,7 @@ const metrics = [
 const markdown = [
   '# Progressão de estágios da oficina',
   '',
-  `Comparações adjacentes na mesma configuração de apoio, na pista de testes a ${WORKSHOP_DISTANCE_M.toFixed(3)} m. As séries com estágio ausente ou sem contexto comum ficam explícitas.`,
+  `Comparações adjacentes na pista de testes a ${WORKSHOP_DISTANCE_M.toFixed(3)} m. Os estágios usam o mesmo conjunto de apoio. A série legada de ECU mede os pacotes completos com as peças exigidas em cada nível. Estágios ausentes ou montagens inválidas ficam explícitos.`,
   '',
   `| Carro | Família | Grupo | Antes | Depois | ${metrics.join(' | ')} | Resultado |`,
   `|---|---|---|---|---|${metrics.map(() => '---:').join('|')}|---|`,
