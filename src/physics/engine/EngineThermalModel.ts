@@ -19,7 +19,7 @@ export class EngineThermalModel {
 
   step(dt: number, indicatedPowerW: number, ambientC: number, speedMps: number): void {
     const cooling = this.config.cooling;
-    const flow = Math.min(1.4, Math.abs(speedMps) / 25);
+    const flow = Math.min(2.6, Math.abs(speedMps) / 25);
     const thermostat = clamp01((this.coolantC - 82) / 12);
     const fan = clamp01((this.coolantC - 91) / 7);
     const airSide = 0.16 + 0.6 * flow;
