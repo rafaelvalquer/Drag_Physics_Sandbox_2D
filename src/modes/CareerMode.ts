@@ -1697,6 +1697,8 @@ function stockSpec(car: CarConfig, cat: PartCategory): string {
       return 'Wastegate original: segura ≈ 0,35 bar acima da pressão de fábrica.';
     case 'cylinder-head':
       return 'Cabeçote original, dutos de fundição.';
+    case 'engine-compression':
+      return `Taxa de compressão original: ${e.compressionRatio.toFixed(2).replace('.', ',')}:1.`;
     case 'pistons':
       return `Pistões e bielas originais; taxa ${e.compressionRatio.toFixed(1).replace('.', ',')}:1.`;
     case 'flywheel':

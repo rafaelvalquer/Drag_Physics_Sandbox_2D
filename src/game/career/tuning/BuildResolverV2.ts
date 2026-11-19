@@ -113,6 +113,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   const car: CarConfig = structuredClone(base);
   const get = <C extends PartCategory>(c: C): Extract<PartDef, { category: C }> | undefined => bySlot.get(c) as Extract<PartDef, { category: C }> | undefined;
   const ecu = get('ecu');
+  const pistons = get('pistons');
   const exhaust = get('exhaust');
   const fuelSupply = get('electronics-fuel');
   const ratedRpm = powerPeakRpm(base.engine.torqueCurve, base.engine.revLimitRpm);
@@ -134,6 +135,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   const turboSlot = get('turbo');
   const turboKit = turboSlot && !('upgrade' in turboSlot) ? (turboSlot as TurboPart) : undefined;
   const turboUp = turboSlot && 'upgrade' in turboSlot ? (turboSlot as TurboUpgradePart) : undefined;
+  const compressionAdd = (pistons?.compressionAdd ?? 0) + (get('engine-compression')?.compressionAdd ?? 0);
   let steadyBoostBar: { rpm: number; bar: number }[] = [];
   let knockLoss = 0;
   let exhaustRestrictionKPa: number | undefined;
@@ -157,11 +159,13 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
     // a map calibrated for given hardware (Stage 2/3) refuses the build without it
     for (const req of ecu?.requiresParts ?? [])
       if (!req.ids.some((id) => partIds.includes(id))) errors.push(`${ecu!.name} exige ${req.label}`);
+    if (ecu?.minInternalsTorqueScale && (pistons?.torqueLimitScale ?? 1) < ecu.minInternalsTorqueScale)
+      errors.push(`${ecu.name} exige pistões e bielas forjados`);
     if (errors.length) return { ok: false, errors };
     const cam = get('camshaft');
     const head = get('cylinder-head');
     const manifold = get('intake-manifold');
-    const anyEngine = genericMod.coolingFrictionScale || genericMod.coolingKnockScale || ecu || turboUp || get('intercooler') || get('boost-control') || get('pistons') || get('intake-filter') || exhaust || cam || head || manifold || sectionParts.length > 0;
+    const anyEngine = genericMod.coolingFrictionScale || genericMod.coolingKnockScale || ecu || turboUp || get('intercooler') || get('boost-control') || pistons || get('intake-filter') || exhaust || cam || head || manifold || sectionParts.length > 0;
     if (anyEngine) {
       engineModified = true;
       const r = applyFactoryTurboParts(stockEngine, {
@@ -172,7 +176,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
         turbo: turboUp,
         intercooler: get('intercooler'),
         boostControl: get('boost-control'),
-        pistons: get('pistons'),
+        pistons,
         cam,
         head,
         manifold,
@@ -190,16 +194,16 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
     if (turboKit) {
       const fuel = engineFuel(base.engine);
       const max = TURBO_MAX_COMPRESSION[fuel];
-      if (base.engine.compressionRatio > max) return { ok: false, errors: [`taxa de compressão ${base.engine.compressionRatio.toFixed(1).replace('.', ',')}:1 não aceita o kit turbo sem detonar`] };
+      const cr = base.engine.compressionRatio + compressionAdd;
+      if (cr > max + 1e-9) return { ok: false, errors: [`taxa de compressão ${cr.toFixed(1).replace('.', ',')}:1 não aceita o kit turbo sem detonar`] };
       if (tune.boostBar !== undefined) {
         const [lo, hi] = turboKit.boostRangeBar;
         if (!(tune.boostBar >= lo && tune.boostBar <= hi)) return { ok: false, errors: [`pressão fora da faixa do kit (${fmtBar(lo)} a ${fmtBar(hi)} bar)`] };
       }
     }
-    const pistons = get('pistons');
-    if (pistons && pistons.compressionAdd > 0) {
+    if (compressionAdd > 0) {
       const fuel = engineFuel(base.engine);
-      const cr = base.engine.compressionRatio + pistons.compressionAdd;
+      const cr = base.engine.compressionRatio + compressionAdd;
       if (cr > NA_MAX_COMPRESSION[fuel] + 1e-9)
         return { ok: false, errors: [`taxa ${cr.toFixed(1).replace('.', ',')}:1 detona com ${fuel === 'ethanol' ? 'etanol' : 'gasolina'} (máximo ${NA_MAX_COMPRESSION[fuel].toFixed(1).replace('.', ',')}:1)`] };
     }
@@ -214,7 +218,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
       turbo: turboKit,
       boostBar: tune.boostBar,
       head: get('cylinder-head'),
-      compressionAdd: pistons?.compressionAdd,
+      compressionAdd: compressionAdd || undefined,
       ignitionGain: ecu?.ignitionGain,
       // New profiles include the spring limit. A remap may use the larger safe range, not add a second spring kit.
       revLimitAddRpm: cam?.progression && ecuRevAdd !== undefined ? Math.max(0, ecuRevAdd - cam.revLimitAddRpm) : ecuRevAdd,
@@ -269,8 +273,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   const fly = get('flywheel');
   if (fly) car.engine.inertiaKgM2 = Math.round(car.engine.inertiaKgM2 * fly.inertiaScale * 10000) / 10000;
   // lighter reciprocating/rotating parts of a forged set
-  const pist = get('pistons');
-  if (pist?.inertiaScale) car.engine.inertiaKgM2 = Math.round(car.engine.inertiaKgM2 * pist.inertiaScale * 10000) / 10000;
+  if (pistons?.inertiaScale) car.engine.inertiaKgM2 = Math.round(car.engine.inertiaKgM2 * pistons.inertiaScale * 10000) / 10000;
 
   if (fuelSupply) {
     const original = factoryFuelSupply(base.engine);
@@ -393,8 +396,8 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
     errors.push(`as embreagens do câmbio de dupla embreagem (${cap} N·m) não seguram ${peakTorqueNm.toFixed(0)} N·m com folga: instale o upgrade DSG/SST`);
   if (kind === 'torque-converter-auto' && cap < peakTorqueNm * AT_TORQUE_MARGIN)
     errors.push(`os elementos do câmbio automático (${cap} N·m) não seguram ${peakTorqueNm.toFixed(0)} N·m com folga: instale o upgrade do automático`);
-  if (factoryTurbo && ecu?.forgedAboveFraction && !get('pistons')) {
-    const lim = ENGINE_FAMILIES[fam]!.internalsTorqueNm * ecu.forgedAboveFraction;
+  if (factoryTurbo && ecu?.forgedAboveFraction && (pistons?.torqueLimitScale ?? 1) < 1.45) {
+    const lim = ENGINE_FAMILIES[fam]!.internalsTorqueNm * ecu.forgedAboveFraction * (pistons?.torqueLimitScale ?? 1);
     if (peakTorqueNm > lim) errors.push(`o torque (${peakTorqueNm.toFixed(0)} N·m) passa do que pistões e bielas de fábrica aguentam com folga (${lim.toFixed(0)} N·m): instale pistões e bielas forjados`);
   }
   if (knockLoss > MAX_KNOCK_LOSS)

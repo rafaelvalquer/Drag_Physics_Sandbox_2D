@@ -178,11 +178,11 @@ export const CHAPTER2_PARTS: readonly PartDef[] = [
     ignitionGain: 0.03,
     revLimitAddRpm: 200,
     wastegateHeadroomBar: 0.9,
+    minInternalsTorqueScale: 1.45,
     requiresParts: [
       { ids: ['turbo-hybrid'], label: 'a turbina de maior fluxo' },
       { ids: ['downpipe-catless'], label: 'o downpipe sem catalisador' },
       { ids: ['intercooler-race'], label: 'o intercooler de maior capacidade' },
-      { ids: ['pistons-forged-modern'], label: 'pistões e bielas forjados' },
     ],
   },
   {

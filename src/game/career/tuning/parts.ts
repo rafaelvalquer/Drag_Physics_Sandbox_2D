@@ -5,6 +5,7 @@ import { MODERN_BREATHING_PARTS } from './modernBreathingParts';
 import { MODERN_DRIVELINE_PARTS } from './modernDrivelineParts';
 import { MODERN_FUEL_PARTS } from './modernFuelParts';
 import { MODERN_TOP_END_PARTS } from './modernTopEndParts';
+import { MODERN_INTERNAL_PARTS } from './modernInternalParts';
 import type { PartProgression } from './partProgression';
 
 /**
@@ -337,6 +338,8 @@ export interface EcuPart extends PartBase {
   wastegateHeadroomBar?: number;
   /** Hardware the map is calibrated for: the build is refused without one of the ids of each entry. */
   requiresParts?: readonly { ids: readonly string[]; label: string }[];
+  /** Minimum relative torque rating of the fitted rotating assembly. */
+  minInternalsTorqueScale?: number;
   /** Above this fraction of the factory internals' torque, forged pistons/rods are required. */
   forgedAboveFraction?: number;
   /** Staged map: torque target at most this multiple of the factory peak torque. */
@@ -394,6 +397,16 @@ export interface PistonPart extends PartBase {
   frictionScale?: number;
   /** Lighter pistons and rods: scale of the engine's rotating inertia. */
   inertiaScale?: number;
+  /** Safe speed gained by reducing reciprocating loads, with the factory cut unchanged. */
+  safeRpmReserve?: number;
+  /** Relative exposure time allowed above the new safe speed. */
+  enduranceScale?: number;
+}
+
+export interface CompressionPart extends PartBase {
+  category: 'engine-compression';
+  /** Change in compression ratio from machining the combustion chambers to a measured volume. */
+  compressionAdd: number;
 }
 
 export interface FlywheelPart extends PartBase {
@@ -489,6 +502,7 @@ export type PartDef =
   | BoostControlPart
   | HeadPart
   | PistonPart
+  | CompressionPart
   | FlywheelPart
   | GearboxPart
   | AwdPart
@@ -757,7 +771,7 @@ export const PARTS: readonly PartDef[] = [...BASE_PARTS, ...EXPANDED_PARTS, ...D
 /** Every part of every resolver version (ids are unique across versions). */
 export const ALL_PARTS: readonly PartDef[] = [
   ...PARTS, ...CHAPTER2_PARTS, ...CHAPTER3_PARTS, ...MODERN_BREATHING_PARTS,
-  ...MODERN_DRIVELINE_PARTS, ...MODERN_FUEL_PARTS, ...MODERN_TOP_END_PARTS,
+  ...MODERN_DRIVELINE_PARTS, ...MODERN_FUEL_PARTS, ...MODERN_TOP_END_PARTS, ...MODERN_INTERNAL_PARTS,
 ];
 
 export function findPart(id: string): PartDef | undefined {

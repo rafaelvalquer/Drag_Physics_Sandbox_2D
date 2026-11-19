@@ -190,8 +190,13 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     gain.safeRpmBefore !== gain.safeRpmAfter || gain.exhaustRestrictionBeforeKPa !== gain.exhaustRestrictionAfterKPa;
   const fuelGain = 'fuelCapacityScale' in part && gain.fuelCapacityBeforeKgS !== null && gain.fuelCapacityAfterKgS !== null &&
     gain.fuelCapacityAfterKgS - gain.fuelCapacityBeforeKgS >= 0.0001 && gain.etAfter - gain.etBefore <= 0.05;
+  const group = progressionOf(part)?.group;
+  const internalGain = group === 'modern-rotating-assembly' && gain.safeRpmAfter - gain.safeRpmBefore >= 100 &&
+    gain.engineInertiaAfterKgM2 < gain.engineInertiaBeforeKgM2 && gain.etAfter - gain.etBefore <= 0.05;
+  const compressionGain = group === 'modern-na-compression' &&
+    gain.cvAfter - gain.cvBefore >= 0.15 && gain.etAfter - gain.etBefore <= NOT_WORSE_S;
   const improvement = isGain(gain) || breathingGain(part, gain) || drivelineGain(part, gain) ||
-    topEndGain(part, gain) || fuelGain;
+    topEndGain(part, gain) || fuelGain || internalGain || compressionGain;
   return { status: !effect ? 'no-effect' : improvement ? 'gain' : 'no-gain', gain };
 }
 
