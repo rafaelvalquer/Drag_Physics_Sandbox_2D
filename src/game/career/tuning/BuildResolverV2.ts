@@ -143,6 +143,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   let knockLoss = 0;
   let exhaustRestrictionKPa: number | undefined;
   let chargeTemperatureAtTargetK: number | undefined;
+  let wastegateLimitBar: number | undefined;
   let engineModified = false;
 
   // ---- engine ----
@@ -150,6 +151,10 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   if (factoryTurbo) {
     const family = ENGINE_FAMILIES[fam];
     if (!family) return { ok: false, errors: [`família de motor sem dados de preparação: ${fam}`] };
+    const boostControl = get('boost-control');
+    const wastegate = get('turbo-wastegate');
+    const wg = wastegateMaxBar(stockEngine, boostControl, ecu, wastegate);
+    wastegateLimitBar = wg;
     if (turboUp && turboUp.factoryTurboStage !== 1 && ecu?.level !== 'programmable' && ecu?.level !== 'stage3')
       errors.push('a turbina de maior fluxo exige ECU programável ou mapa Stage 3');
     if (turboUp?.factoryTurboStage === 3) {
@@ -163,7 +168,6 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
       const [lo, hi] = ecu.boostRangeAddBar ?? [0, 0];
       if (!(tune.boostBar >= b0 + lo - 1e-9 && tune.boostBar <= b0 + hi + 1e-9))
         return { ok: false, errors: [`pressão fora da faixa da ECU (${fmtBar(b0 + lo)} a ${fmtBar(b0 + hi)} bar)`] };
-      const wg = wastegateMaxBar(stockEngine, get('boost-control'), ecu);
       if (tune.boostBar > wg + 1e-9) return { ok: false, errors: [`a wastegate não segura ${fmtBar(tune.boostBar)} bar (máximo ${fmtBar(wg)} bar): instale o controle de pressão`] };
     }
     // a map calibrated for given hardware (Stage 2/3) refuses the build without it
@@ -179,7 +183,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
     const cam = get('camshaft');
     const head = get('cylinder-head');
     const manifold = get('intake-manifold');
-    const anyEngine = genericMod.coolingFrictionScale || genericMod.coolingKnockScale || ignition || ecu || turboUp || get('intercooler') || get('boost-control') || pistons || get('intake-filter') || exhaust || cam || head || manifold || sectionParts.length > 0;
+    const anyEngine = genericMod.coolingFrictionScale || genericMod.coolingKnockScale || ignition || ecu || turboUp || get('intercooler') || boostControl || pistons || get('intake-filter') || exhaust || cam || head || manifold || sectionParts.length > 0;
     if (anyEngine) {
       engineModified = true;
       const r = applyFactoryTurboParts(stockEngine, {
@@ -189,7 +193,8 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
         ecu,
         turbo: turboUp,
         intercooler: get('intercooler'),
-        boostControl: get('boost-control'),
+        boostControl,
+        wastegate,
         pistons,
         cam,
         head,
@@ -439,7 +444,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   if (errors.length) return { ok: false, errors };
   return {
     ok: true, car: deepFreeze(v.value!), parts, key, peakTorqueNm, peakPowerCv, steadyBoostBar, knockLoss,
-    exhaustRestrictionKPa, chargeTemperatureAtTargetK, version: 2,
+    exhaustRestrictionKPa, chargeTemperatureAtTargetK, wastegateLimitBar, version: 2,
   };
 }
 

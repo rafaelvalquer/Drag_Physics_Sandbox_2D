@@ -80,6 +80,8 @@ export type BuildResult =
       /** Modelled exhaust restriction at reference flow. Factory turbo keeps its turbine-side live calibration. */
       exhaustRestrictionKPa?: number;
       chargeTemperatureAtTargetK?: number;
+      /** Maximum pressure the installed actuator can hold. Other build limits still apply. */
+      wastegateLimitBar?: number;
       knockLoss: number;
       /** Resolver version that produced the build. */
       version: ResolverVersion;

@@ -1694,7 +1694,11 @@ function stockSpec(car: CarConfig, cat: PartCategory): string {
     case 'intercooler':
       return 'Intercooler original de fábrica (≈ 60 % de eficiência).';
     case 'boost-control':
-      return 'Wastegate original: segura ≈ 0,35 bar acima da pressão de fábrica.';
+      return 'Solenoide original de controle da pressão.';
+    case 'turbo-wastegate':
+      return e.induction === 'turbo'
+        ? 'Atuador original: sustenta até 0,35 bar acima do alvo de fábrica.'
+        : 'Sem atuador separado na configuração original.';
     case 'cylinder-head':
       return 'Cabeçote original, dutos de fundição.';
     case 'engine-compression':

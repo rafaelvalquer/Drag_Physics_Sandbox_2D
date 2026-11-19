@@ -41,6 +41,10 @@ export interface PartGain {
   knockAfter: number;
   chargeTemperatureBeforeK: number | null;
   chargeTemperatureAfterK: number | null;
+  wastegateBeforeBar: number | null;
+  wastegateAfterBar: number | null;
+  spoolTimeBeforeS: number | null;
+  spoolTimeAfterS: number | null;
   fuelCapacityBeforeKgS: number | null;
   fuelCapacityAfterKgS: number | null;
   etBefore: number;
@@ -76,6 +80,7 @@ const CONTEXTS: readonly string[][] = [
   ['clutch-reinforced'],
   ['turbo-basic', 'clutch-reinforced'],
   ['turbo-basic', 'clutch-reinforced', 'injectors'],
+  ['turbo-basic', 'clutch-ceramic-race', 'injectors', 'rods-reinforced'],
   ['turbo-medium', 'clutch-ceramic-race', 'injectors', 'rods-reinforced', 'compression-low'],
   ['turbo-strong', 'clutch-ceramic-race', 'fuel-pump', 'forged-kit', 'compression-low'],
   ['ecu-programmable'],
@@ -91,6 +96,7 @@ const CONTEXTS: readonly string[][] = [
   ['downpipe-catless', 'intercooler-race', 'pistons-forged-modern', 'at-upgrade'],
   ['compression-celta-turbo', 'clutch-reinforced'],
   ['compression-celta-turbo', 'turbo-basic', 'clutch-reinforced'],
+  ['compression-celta-turbo-s2', 'turbo-basic', 'clutch-ceramic-race', 'injectors', 'rods-reinforced', 'ecu-race', 'ignition-race'],
   ['compression-celta-turbo-s2', 'turbo-medium', 'clutch-ceramic-race', 'injectors', 'rods-reinforced', 'ecu-race', 'ignition-race'],
   ['compression-celta-turbo-s3', 'turbo-strong', 'clutch-ceramic-race', 'fuel-pump', 'forged-kit', 'ecu-race', 'ignition-race'],
 ];
@@ -179,6 +185,10 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     knockAfter: after.knockLoss,
     chargeTemperatureBeforeK: base.chargeTemperatureAtTargetK ?? null,
     chargeTemperatureAfterK: after.chargeTemperatureAtTargetK ?? null,
+    wastegateBeforeBar: wastegateLimit(base),
+    wastegateAfterBar: wastegateLimit(after),
+    spoolTimeBeforeS: base.car.engine.turbo?.spoolTimeS ?? null,
+    spoolTimeAfterS: after.car.engine.turbo?.spoolTimeS ?? null,
     fuelCapacityBeforeKgS: base.car.engine.fueling?.maxFuelKgS ??
       ('fuelCapacityScale' in part && after.car.engine.fueling ? after.car.engine.fueling.maxFuelKgS / part.fuelCapacityScale : null),
     fuelCapacityAfterKgS: after.car.engine.fueling?.maxFuelKgS ?? null,
@@ -200,7 +210,8 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     launchRpmAfter: after.car.transmission.clutch.launchRpm,
   };
   const effect = physicsSignature(base.car) !== physicsSignature(after.car) ||
-    gain.safeRpmBefore !== gain.safeRpmAfter || gain.exhaustRestrictionBeforeKPa !== gain.exhaustRestrictionAfterKPa;
+    gain.safeRpmBefore !== gain.safeRpmAfter || gain.exhaustRestrictionBeforeKPa !== gain.exhaustRestrictionAfterKPa ||
+    gain.wastegateBeforeBar !== gain.wastegateAfterBar;
   const fuelGain = 'fuelCapacityScale' in part && gain.fuelCapacityBeforeKgS !== null && gain.fuelCapacityAfterKgS !== null &&
     gain.fuelCapacityAfterKgS - gain.fuelCapacityBeforeKgS >= 0.0001 && gain.etAfter - gain.etBefore <= 0.05;
   const group = progressionOf(part)?.group;
@@ -218,8 +229,29 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     gain.chargeTemperatureBeforeK !== null && gain.chargeTemperatureAfterK !== null &&
     gain.chargeTemperatureBeforeK - gain.chargeTemperatureAfterK >= 0.5;
   const improvement = isGain(gain) || breathingGain(part, gain) || drivelineGain(part, gain) ||
-    topEndGain(part, gain) || fuelGain || internalGain || compressionGain || ignitionGain || turboFlowGain || chargeCoolingGain;
+    topEndGain(part, gain) || fuelGain || internalGain || compressionGain || ignitionGain || turboFlowGain || chargeCoolingGain ||
+    pressureControlGain(group, gain);
   return { status: !effect ? 'no-effect' : improvement ? 'gain' : 'no-gain', gain };
+}
+
+function wastegateLimit(build: ValidBuild): number | null {
+  if (build.wastegateLimitBar !== undefined) return build.wastegateLimitBar;
+  if (build.version !== 1 || !build.car.engine.turbo) return null;
+  return boostRangeForParts(build.parts.map((part) => part.id))?.[1] ?? null;
+}
+
+function pressureControlGain(group: string | undefined, gain: PartGain): boolean {
+  if (gain.etAfter - gain.etBefore > 0.05) return false;
+  if (group === 'modern-wastegate')
+    return gain.wastegateBeforeBar !== null && gain.wastegateAfterBar !== null &&
+      gain.wastegateAfterBar - gain.wastegateBeforeBar >= 0.1;
+  if (group === 'classic-wastegate')
+    return gain.wastegateBeforeBar !== null && gain.wastegateAfterBar !== null &&
+      gain.wastegateAfterBar - gain.wastegateBeforeBar >= 0.02 - 1e-9;
+  if (group === 'modern-boost-control')
+    return gain.spoolTimeBeforeS !== null && gain.spoolTimeAfterS !== null &&
+      gain.spoolTimeBeforeS - gain.spoolTimeAfterS >= 0.005;
+  return false;
 }
 
 function topEndGain(part: PartDef, gain: PartGain): boolean {

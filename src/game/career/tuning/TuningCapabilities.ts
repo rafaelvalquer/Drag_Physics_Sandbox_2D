@@ -15,8 +15,7 @@ import {
 } from './buildCommon';
 import { overrevSpecOf, reliabilityLimits, reliabilityLevel, type ReliabilityLevel, type ReliabilityLimits } from './EngineReliability';
 import type { OverrevSpec } from '../../../physics/engine/EngineOverrevFailure';
-import { findPart, type BoostControlPart, type EcuPart, type PartDef } from './parts';
-import { wastegateMaxBar } from './factoryTurboModel';
+import { findPart, type EcuPart, type PartDef } from './parts';
 
 /**
  * Dyno Lab capabilities: which settings a build can take, from the parts really installed.
@@ -132,9 +131,10 @@ export function tuningCapabilities(base: CarConfig, partIds: readonly string[], 
       const [lo, hi] = programmable.boostRangeAddBar ?? [0.1, 0.8];
       const def = hwR.steadyBoostBar.length ? Math.max(...hwR.steadyBoostBar.map((x) => x.bar), factoryBoost) : factoryBoost;
       // the wastegate (factory actuator, or the boost-control kit) caps what the ECU can ask for
-      const wg = wastegateMaxBar(base.engine, parts.find((p) => p.category === 'boost-control') as BoostControlPart | undefined, programmable);
+      const wg = hwR.wastegateLimitBar ?? factoryBoost;
       const max = Math.floor(Math.min(factoryBoost + hi, wg) * 100 + 1e-6) / 100;
-      boost = { enabled: true, reason: null, min: round(factoryBoost + lo, 0.01), max, step: 0.05, default: Math.min(max, round(def, 0.01)) };
+      const step = has((p) => 'actuatorHeadroomBar' in p) ? 0.01 : 0.05;
+      boost = { enabled: true, reason: null, min: round(factoryBoost + lo, 0.01), max, step, default: Math.min(max, round(def, 0.01)) };
     }
   } else if (conversion && 'boostRangeBar' in conversion) {
     const [min, max] = conversion.boostRangeBar;

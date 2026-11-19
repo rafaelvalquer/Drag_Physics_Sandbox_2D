@@ -9,6 +9,7 @@ import { MODERN_INTERNAL_PARTS } from './modernInternalParts';
 import { MODERN_IGNITION_PARTS } from './modernIgnitionParts';
 import { MODERN_CONVERSION_PARTS } from './modernConversionParts';
 import { MODERN_INTERCOOLER_PARTS, MODERN_TURBO_PARTS } from './modernTurboParts';
+import { MODERN_PRESSURE_PARTS } from './modernPressureParts';
 import type { PartProgression } from './partProgression';
 
 /**
@@ -396,14 +397,20 @@ export interface IntercoolerPart extends PartBase {
   massAddKg: number;
 }
 
-/** Wastegate actuator + electronic boost control solenoid. */
+/** Electronic boost control. Legacy combined kits also include an actuator. */
 export interface BoostControlPart extends PartBase {
   category: 'boost-control';
   /** Highest boost the wastegate can hold above the factory target (bar); the stock one holds 0.35. */
-  wastegateHeadroomBar: number;
+  wastegateHeadroomBar?: number;
   spoolTimeScale: number;
   /** Boost held above the target at high flow, where the factory wastegate lets it taper (bar). */
   holdAddBar?: number;
+}
+
+export interface WastegatePart extends PartBase {
+  category: 'turbo-wastegate';
+  /** Pressure the actuator can hold above the original target. */
+  actuatorHeadroomBar: number;
 }
 
 /** Ported cylinder head (flow capacity where the valves choke). */
@@ -528,6 +535,7 @@ export type PartDef =
   | TurboUpgradePart
   | IntercoolerPart
   | BoostControlPart
+  | WastegatePart
   | HeadPart
   | PistonPart
   | CompressionPart
@@ -803,6 +811,7 @@ export const ALL_PARTS: readonly PartDef[] = [
   ...MODERN_IGNITION_PARTS,
   ...MODERN_CONVERSION_PARTS,
   ...MODERN_TURBO_PARTS, ...MODERN_INTERCOOLER_PARTS,
+  ...MODERN_PRESSURE_PARTS,
 ];
 
 export function findPart(id: string): PartDef | undefined {

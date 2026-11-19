@@ -63,6 +63,7 @@ const specs: Spec[] = [
   ['wastegate-adjust', 'turbo-wastegate', 'Wastegate ajustável', 2, 1500, 'part-turbo', { wastegateRangeAddBar: 0.18, wastegateHoldAddBar: 0.06, turboSpoolScale: 0.95 }, 'Válvula de alívio externa com mola regulável.'],
   ['wastegate-race', 'turbo-wastegate', 'Wastegate performance', 3, 2850, 'part-turbo', { wastegateRangeAddBar: 0.35, wastegateHoldAddBar: 0.1, turboSpoolScale: 0.92 }, 'Válvula de alívio de competição, de grande passagem.'],
   ['boost-street', 'turbo-boost', 'Pressão street 0,65 bar', 2, 1150, 'part-turbo', { boostTargetBar: 0.65 }, 'Ajuste da pressão de trabalho para 0,65 bar.', 'Um pouco acima dos 0,6 bar do kit básico: mais ar por ciclo e mais torque, com um pouco mais de atraso contra detonação.'],
+  ['boost-classic-sport', 'turbo-boost', 'Pressão esportiva 0,8 bar', 2, 1500, 'part-turbo', { boostTargetBar: 0.8 }, 'Calibração intermediária de pressão de trabalho, com a alimentação conferida antes da montagem.'],
   ['boost-race', 'turbo-boost', 'Pressão competição 1,0 bar', 3, 1900, 'part-turbo', { boostTargetBar: 1.0 }, 'Ajuste da pressão de trabalho para 1,0 bar.', 'Exige bicos maiores ou bomba reforçada.'],
   ['ecu-remap', 'electronics-ecu', 'Remap leve', 1, 850, 'engine-tuners', { knockRetardScale: 0.97, burnDurationScale: 0.99 }, 'Reprogramação do mapa original de ignição.'],
   ['ecu-street', 'electronics-ecu', 'ECU programável street', 2, 3300, 'engine-tuners', { knockRetardScale: 0.88, burnDurationScale: 0.975 }, 'Central programável acertada no dinamômetro para rua.'],

@@ -7,7 +7,7 @@ import {
   ottoEfficiency, powerPeakRpm, runnerPressureRecoveryPa, throttleChargeRatio, torquePeakRpm,
 } from './breathingModel';
 import type { EngineFamilyDef } from './chapter2Parts';
-import type { BoostControlPart, CamPart, EcuPart, ExhaustPart, FilterPart, HeadPart, IntercoolerPart, ManifoldPart, MechanicalMods, PistonPart, TurboUpgradePart } from './parts';
+import type { BoostControlPart, CamPart, EcuPart, ExhaustPart, FilterPart, HeadPart, IntercoolerPart, ManifoldPart, MechanicalMods, PistonPart, TurboUpgradePart, WastegatePart } from './parts';
 
 /**
  * Tuning of a FACTORY turbocharged engine (resolver v2). The stock WOT curve is the brake torque
@@ -60,6 +60,7 @@ export interface FactoryTurboParts {
   turbo?: TurboUpgradePart;
   intercooler?: IntercoolerPart;
   boostControl?: BoostControlPart;
+  wastegate?: WastegatePart;
   pistons?: PistonPart;
   cam?: CamPart;
   head?: HeadPart;
@@ -83,8 +84,10 @@ export interface FactoryTurboResult {
 }
 
 /** Highest boost target the wastegate of this build can hold (bar). */
-export function wastegateMaxBar(stock: EngineConfig, bc?: BoostControlPart, ecu?: EcuPart): number {
-  return stock.turbo!.maxBoostBar + Math.max(bc?.wastegateHeadroomBar ?? FACTORY_WASTEGATE_HEADROOM_BAR, ecu?.wastegateHeadroomBar ?? 0);
+export function wastegateMaxBar(stock: EngineConfig, bc?: BoostControlPart, ecu?: EcuPart, valve?: WastegatePart): number {
+  const headroom = Math.max(FACTORY_WASTEGATE_HEADROOM_BAR, bc?.wastegateHeadroomBar ?? 0,
+    ecu?.wastegateHeadroomBar ?? 0, valve?.actuatorHeadroomBar ?? 0);
+  return stock.turbo!.maxBoostBar + headroom;
 }
 
 /** Boost target the ECU of this build aims at (bar), before the wastegate limit. */
@@ -104,7 +107,7 @@ export function applyFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboP
   const ratedRpm = powerPeakRpm(stock.torqueCurve, stock.revLimitRpm);
 
   // ---- calibration and hardware ----
-  const wgMax = wastegateMaxBar(stock, parts.boostControl, parts.ecu);
+  const wgMax = wastegateMaxBar(stock, parts.boostControl, parts.ecu, parts.wastegate);
   const target = Math.min(ecuBoostTarget(stock, parts.ecu, parts.boostBar) + (parts.boostBar === undefined ? parts.boostControl?.holdAddBar ?? 0 : 0), wgMax);
   const up = parts.turbo;
   const turboCfg = {

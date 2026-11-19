@@ -49,7 +49,7 @@ const metrics = [
   'Δ cv', 'Δ N·m', 'Δ torque por faixa N·m', 'Δ 0–100 s', 'Δ ¼ milha s',
   'Δ admissão kPa', 'Δ escape kPa', 'Δ borboleta ms', 'Δ combustível g/s',
   'Δ giro seguro rpm', 'Δ inércia kg·m²', 'Δ duração da queima °', 'Δ perda por detonação p.p.',
-  'Δ temperatura da carga no alvo °C', 'Pressão admissível bar',
+  'Δ temperatura da carga no alvo °C', 'Δ limite da wastegate bar', 'Δ resposta do turbo s', 'Pressão admissível bar',
 ];
 const markdown = [
   '# Progressão de estágios da oficina',
@@ -80,6 +80,8 @@ for (const row of rows) {
       delta(m.burnBeforeDeg, m.burnAfterDeg),
       delta(100 * m.knockBefore, 100 * m.knockAfter),
       restrictionDelta(m.chargeTemperatureBeforeK, m.chargeTemperatureAfterK),
+      restrictionDelta(m.wastegateBeforeBar, m.wastegateAfterBar),
+      restrictionDelta(m.spoolTimeBeforeS, m.spoolTimeAfterS),
       m.boostHeadroom ? `${m.boostHeadroom.beforeBar.toFixed(2)} → ${m.boostHeadroom.afterBar.toFixed(2)}` : '—',
     ] : metrics.map(() => '—');
     const figures = values.join(' | ');
