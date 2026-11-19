@@ -16,6 +16,7 @@ import {
   isPartUnlocked,
   nextEvent,
   partStatus,
+  partChapter,
   stockStatus,
   partRequirements,
   unlocksOf,
@@ -35,6 +36,7 @@ import type { BuildTune } from '../game/career/tuning/buildCommon';
 import { failureSpecFor, reconcileTune, tuneReliability } from '../game/career/tuning/TuningCapabilities';
 import { playBlownEngine, playRiskWarning } from '../audio/core/blownEngineSound';
 import { ALL_PARTS, CATEGORY_DESCRIPTION, CATEGORY_LABEL, CATEGORY_ORDER_V1, UNLOCK_LABEL, WORKSHOP_TABS, findPart, type PartCategory, type PartDef } from '../game/career/tuning/parts';
+import { progressionOf } from '../game/career/tuning/partProgression';
 import { RACE_DISTANCES, RaceController, type LaneResult, type RaceLane } from '../game/race/RaceController';
 import { runAccelerationTest } from '../game/race/accelerationTest';
 import type { CameraMode, RenderVehicle, TrackMarker, TreeLights } from '../game/scenes/RaceScene';
@@ -807,10 +809,12 @@ export class CareerMode implements Mode {
       const categoryParts = allInTab.filter((p) => p.category === cat);
       const entries = categoryParts.map((p) => {
         const st = partStatus(s, car, p, familyOf(findCampaignCar(car.baseCarId)!));
+        const progression = progressionOf(p);
         return h('li', {
           class: `ws-part-card ${sel?.id === p.id ? 'sel' : ''} ${st.state}`,
           'data-testid': `ws-part-${p.id}`,
           'data-state': st.state,
+          'data-tier': progression?.tier,
           title: st.detail,
           tabindex: '0', role: 'button',
           onclick: () => { this.selectedPart = p.id; this.show('workshop'); },
@@ -822,7 +826,8 @@ export class CareerMode implements Mode {
             h('span', { class: 'ws-part-name' }, p.name),
             h('span', { class: `pill ${st.state}`, 'data-testid': `ws-pill-${p.id}` }, st.label)),
           h('small', { class: 'ws-part-meta' },
-            'chapter' in p ? `CAP. ${p.chapter} · ` : 'CAP. 1 · ',
+            `CAP. ${partChapter(p)} · `,
+            progression ? `Stage ${progression.tier} · ${progression.specialization} · ` : null,
             st.state === 'locked' ? st.detail : p.physics),
           ('chapter' in p && p.chapter === 1) ? h('span', { class: 'ws-new-tag' }, 'NOVO') : null,
         );
@@ -868,18 +873,13 @@ export class CareerMode implements Mode {
   }
 
   /**
-   * Parts the shop offers for this car: parts of resolver version 2 appear once chapter 2 is open,
-   * and only those that fit the car (engine family, induction, gearbox, driven axles). An AP part
-   * never shows on an N55; a manual clutch never shows on a DSG.
+   * Show hardware that fits this car even before its event or chapter unlock.
    */
   private visibleParts(car: OwnedCar): PartDef[] {
-    const s = this.controller.save!;
     const base = findCampaignCar(car.baseCarId)!;
-    const c2 = isChapterUnlocked(s, CHAPTER_2_ID);
     const v2 = buildVersionFor(car, car.installedParts) === 2;
     return ALL_PARTS.filter((p) => {
       if (car.installedParts.includes(p.id)) return true;
-      if (p.since === 2 && !c2) return false;
       // version 2 compatibility rules apply to the cars resolved by version 2 and to v2 parts
       if ((v2 || p.since === 2) && incompatibility(base, p)) return false;
       return true;

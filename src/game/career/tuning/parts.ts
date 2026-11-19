@@ -1,6 +1,7 @@
 import type { TransmissionKind, TurboConfig } from '../../../data/schema';
 import { CHAPTER2_PARTS } from './chapter2Parts';
 import { CHAPTER3_PARTS } from './chapter3Parts';
+import type { PartProgression } from './partProgression';
 
 /**
  * Career parts. Each part is a discriminated union member by `category` and carries the PHYSICAL
@@ -199,6 +200,7 @@ interface PartBase {
   /** First resolver version that knows the part (absent = 1). */
   since?: 1 | 2;
   compat?: PartCompat;
+  progression?: PartProgression;
   /** Career chapter whose shop sells the part (absent = the chapter of its unlock). */
   chapter?: 1 | 2 | 3;
 }

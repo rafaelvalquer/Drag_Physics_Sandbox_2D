@@ -4,8 +4,10 @@ import { CHAPTER2_CARS } from '../../../src/data/cars/chapter2/index';
 import { CHAPTER3_CARS } from '../../../src/data/cars/chapter3/index';
 import { TRACKS } from '../../../src/data/tracks/index';
 import { resolveBuild } from '../../../src/game/career/tuning/BuildResolver';
+import { incompatibility } from '../../../src/game/career/tuning/BuildResolverV2';
 import { auditPartGain } from '../../../src/game/career/tuning/partGain';
-import { ALL_PARTS } from '../../../src/game/career/tuning/parts';
+import { physicalSlotOf, progressionOf } from '../../../src/game/career/tuning/partProgression';
+import { ALL_PARTS, type PartDef } from '../../../src/game/career/tuning/parts';
 import { careerResolverVersion } from '../../../src/game/career/tuning/resolverVersion';
 
 /**
@@ -57,6 +59,28 @@ describe('textos das peças', () => {
       expect(p.description.length, p.id).toBeGreaterThan(10);
       expect(p.physics.length, p.id).toBeGreaterThan(10);
       expect(p.physics, p.id).not.toBe(p.description);
+    }
+  });
+});
+
+describe('sequências de estágios', () => {
+  it('têm IDs únicos e cada carro aceita apenas uma opção por estágio e grupo', () => {
+    expect(new Set(ALL_PARTS.map((part) => part.id)).size).toBe(ALL_PARTS.length);
+    for (const car of CAREER_CARS) {
+      const sequences = new Map<string, PartDef[]>();
+      for (const part of ALL_PARTS) {
+        const progression = progressionOf(part);
+        if (!progression || incompatibility(car, part)) continue;
+        const sequence = sequences.get(progression.group) ?? [];
+        sequence.push(part);
+        sequences.set(progression.group, sequence);
+      }
+      for (const [group, sequence] of sequences) {
+        const label = `${car.id}/${group}`;
+        expect(new Set(sequence.map((part) => progressionOf(part)!.tier)).size, label).toBe(sequence.length);
+        expect(new Set(sequence.map(physicalSlotOf)).size, label).toBe(1);
+        expect(new Set(sequence.map((part) => progressionOf(part)!.specialization)).size, label).toBe(1);
+      }
     }
   });
 });

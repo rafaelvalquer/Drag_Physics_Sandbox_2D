@@ -11,6 +11,7 @@ import { resolveBuild, type BuildResult } from '../src/game/career/tuning/BuildR
 import { familyOf, transmissionKindOf } from '../src/game/career/tuning/BuildResolverV2';
 import { auditPartGain, WORKSHOP_DISTANCE_M } from '../src/game/career/tuning/partGain';
 import { ALL_PARTS, CATEGORY_ORDER, type PartCategory } from '../src/game/career/tuning/parts';
+import { physicalSlotOf, physicalSlotOfCategory, progressionOf } from '../src/game/career/tuning/partProgression';
 import { careerResolverVersion } from '../src/game/career/tuning/resolverVersion';
 
 const track = TRACKS.find((item) => item.id === 'test-track')!;
@@ -18,19 +19,7 @@ const output = process.argv[2] ?? 'docs/workshop';
 const classicIds = new Set(CHAPTER1_CARS.map((car) => car.id));
 const leagueIds = new Set(CHAPTER2_CARS.map((car) => car.id));
 
-// The old workshop uses separate category IDs for some equivalent physical components.
-const physicalSlots: Partial<Record<PartCategory, PartCategory>> = {
-  'cylinder-head': 'engine-head',
-  pistons: 'engine-internals',
-  flywheel: 'engine-flywheel',
-  ecu: 'electronics-ecu',
-  intercooler: 'turbo-intercooler',
-  'boost-control': 'turbo-boost',
-  gearbox: 'transmission-gearbox',
-  suspension: 'chassis-suspension',
-};
-const slotOf = (category: PartCategory): PartCategory => physicalSlots[category] ?? category;
-const slots = [...new Set(CATEGORY_ORDER.map(slotOf))];
+const slots = [...new Set(CATEGORY_ORDER.map(physicalSlotOfCategory))];
 
 /** Applicability is independent of whether the present catalogue happens to cover the slot. */
 function notApplicable(car: CarConfig, slot: PartCategory, classic: boolean): string | null {
@@ -65,7 +54,8 @@ const cars = CAREER_CARS.map((car) => {
   const parts = ALL_PARTS.map((part) => ({
     id: part.id,
     category: part.category,
-    slot: part.category === 'turbo' && 'upgrade' in part ? 'turbo-turbine' as const : slotOf(part.category),
+    slot: physicalSlotOf(part),
+    progression: progressionOf(part),
     ...auditPartGain(car, part, track, version),
   }));
   const categories = slots.map((slot) => {
@@ -76,6 +66,7 @@ const cars = CAREER_CARS.map((car) => {
       applicable: reason === null,
       reason,
       compatibleOptions: compatible.length,
+      tiers: [...new Set(compatible.flatMap((part) => part.progression ? [part.progression.tier] : []))].sort(),
       optionsWithGain: compatible.filter((part) => part.status === 'gain').length,
     };
   });

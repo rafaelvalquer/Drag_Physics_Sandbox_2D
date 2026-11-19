@@ -1,10 +1,11 @@
 import type { CarConfig, TrackConfig } from '../../../data/schema';
 import { runAccelerationTest } from '../../race/accelerationTest';
 import { RACE_DISTANCES } from '../../race/RaceController';
-import { resolveBuild, type ResolverVersion } from './BuildResolver';
+import { resolveBuild, type BuildResult, type ResolverVersion } from './BuildResolver';
 import { incompatibility } from './BuildResolverV2';
 import { findPart, type PartDef } from './parts';
 import { reliabilityLimits } from './EngineReliability';
+import { physicalSlotOf, progressionOf } from './partProgression';
 
 /**
  * Workshop audit: the gain of one part on one car, measured with the real physics (factory-style
@@ -18,6 +19,12 @@ export interface PartGain {
   context: string[];
   cvBefore: number;
   cvAfter: number;
+  torqueBeforeNm: number;
+  torqueAfterNm: number;
+  redlineBeforeRpm: number;
+  redlineAfterRpm: number;
+  massBeforeKg: number;
+  massAfterKg: number;
   etBefore: number;
   etAfter: number;
   t100Before: number;
@@ -87,6 +94,47 @@ function physicsSignature(car: CarConfig): string {
   return JSON.stringify(physics);
 }
 
+type ValidBuild = Extract<BuildResult, { ok: true }>;
+
+function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, context: string[], track: TrackConfig): PartAudit {
+  let a: ReturnType<typeof measure>;
+  let b: ReturnType<typeof measure>;
+  try {
+    a = measure(base.key, base.car, track);
+    b = measure(after.key, after.car, track);
+  } catch (error) {
+    return { status: 'simulation-failed', reasons: [String(error)] };
+  }
+  if (!Number.isFinite(a.et) || !Number.isFinite(b.et)) {
+    return { status: 'simulation-failed', reasons: ['Uma das provas não completou a distância de referência.'] };
+  }
+  const gain: PartGain = {
+    partId: part.id,
+    carId: base.car.id,
+    context,
+    cvBefore: base.peakPowerCv,
+    cvAfter: after.peakPowerCv,
+    torqueBeforeNm: base.peakTorqueNm,
+    torqueAfterNm: after.peakTorqueNm,
+    redlineBeforeRpm: base.car.engine.revLimitRpm,
+    redlineAfterRpm: after.car.engine.revLimitRpm,
+    massBeforeKg: base.car.massKg,
+    massAfterKg: after.car.massKg,
+    etBefore: a.et,
+    etAfter: b.et,
+    t100Before: a.t100,
+    t100After: b.t100,
+    clutchBeforeNm: base.car.transmission.clutch.maxTorqueNm,
+    clutchAfterNm: after.car.transmission.clutch.maxTorqueNm,
+    safeRpmBefore: reliabilityLimits(base.car, base.parts.map((p) => p.id)).recommendedSafeRpm,
+    safeRpmAfter: reliabilityLimits(after.car, after.parts.map((p) => p.id)).recommendedSafeRpm,
+    launchRpmBefore: base.car.transmission.clutch.launchRpm,
+    launchRpmAfter: after.car.transmission.clutch.launchRpm,
+  };
+  const effect = physicsSignature(base.car) !== physicsSignature(after.car) || gain.safeRpmBefore !== gain.safeRpmAfter;
+  return { status: !effect ? 'no-effect' : isGain(gain) ? 'gain' : 'no-gain', gain };
+}
+
 /** Classifies every attempted pairing, including failures to produce comparable runs. */
 export function auditPartGain(car: CarConfig, part: PartDef, track: TrackConfig, version: ResolverVersion): PartAudit {
   const incompatible = incompatibility(car, part);
@@ -104,36 +152,7 @@ export function auditPartGain(car: CarConfig, part: PartDef, track: TrackConfig,
       for (const error of withPart.errors) errors.add(error);
       continue;
     }
-    let a: ReturnType<typeof measure>;
-    let b: ReturnType<typeof measure>;
-    try {
-      a = measure(base.key, base.car, track);
-      b = measure(withPart.key, withPart.car, track);
-    } catch (error) {
-      return { status: 'simulation-failed', reasons: [String(error)] };
-    }
-    if (!Number.isFinite(a.et) || !Number.isFinite(b.et)) {
-      return { status: 'simulation-failed', reasons: ['Uma das provas não completou a distância de referência.'] };
-    }
-    const gain: PartGain = {
-      partId: part.id,
-      carId: car.id,
-      context: baseIds,
-      cvBefore: base.peakPowerCv,
-      cvAfter: withPart.peakPowerCv,
-      etBefore: a.et,
-      etAfter: b.et,
-      t100Before: a.t100,
-      t100After: b.t100,
-      clutchBeforeNm: base.car.transmission.clutch.maxTorqueNm,
-      clutchAfterNm: withPart.car.transmission.clutch.maxTorqueNm,
-      safeRpmBefore: reliabilityLimits(base.car, baseIds).recommendedSafeRpm,
-      safeRpmAfter: reliabilityLimits(base.car, [...ctx, part.id]).recommendedSafeRpm,
-      launchRpmBefore: base.car.transmission.clutch.launchRpm,
-      launchRpmAfter: withPart.car.transmission.clutch.launchRpm,
-    };
-    const effect = physicsSignature(base.car) !== physicsSignature(withPart.car) || gain.safeRpmBefore !== gain.safeRpmAfter;
-    return { status: !effect ? 'no-effect' : isGain(gain) ? 'gain' : 'no-gain', gain };
+    return compareBuilds(base, withPart, part, baseIds, track);
   }
   const reasons = [...errors];
   // Existing resolvers expose human-readable validation errors rather than structured codes.
@@ -142,6 +161,47 @@ export function auditPartGain(car: CarConfig, part: PartDef, track: TrackConfig,
     status: reasons.length > 0 && reasons.every((reason) => missingSupport.test(reason)) ? 'dependency-blocked' : 'invalid-build',
     reasons: reasons.length ? reasons : ['Nenhum contexto de referência produziu um build válido.'],
   };
+}
+
+export interface StageComparison {
+  previous: string | null;
+  next: string;
+  audit: PartAudit;
+}
+
+/** Uses one support build for all comparisons in a progression group. */
+export function auditPartStages(car: CarConfig, stages: readonly PartDef[], track: TrackConfig, version: ResolverVersion): StageComparison[] {
+  const first = stages[0];
+  if (!first) return [];
+  const slot = physicalSlotOf(first);
+  const specialization = progressionOf(first)?.specialization;
+  const errors = new Set<string>();
+  for (const candidate of CONTEXTS) {
+    const context = candidate.filter((id) => {
+      const support = findPart(id);
+      return support && physicalSlotOf(support) !== slot;
+    });
+    const stock = resolveBuild(car, context, {}, version);
+    if (!stock.ok) continue;
+    if (specialization === 'turbo' && slot !== 'turbo' && stock.car.engine.induction !== 'turbo') continue;
+    const builds: ValidBuild[] = [stock];
+    for (const part of stages) {
+      const result = resolveBuild(car, [...context, part.id], {}, version);
+      if (result.ok) builds.push(result);
+      else for (const error of result.errors) errors.add(error);
+    }
+    if (builds.length !== stages.length + 1) continue;
+    return stages.map((part, index) => ({
+      previous: stages[index - 1]?.id ?? null,
+      next: part.id,
+      audit: compareBuilds(builds[index]!, builds[index + 1]!, part, context, track),
+    }));
+  }
+  return stages.map((part, index) => ({
+    previous: stages[index - 1]?.id ?? null,
+    next: part.id,
+    audit: { status: 'invalid-build', reasons: ['Nenhum contexto de apoio foi aceito por toda a sequência.', ...errors] },
+  }));
 }
 
 /** Tolerances of the gain check (s, cv). NOT_WORSE_S is the run-to-run resolution of the test. */
