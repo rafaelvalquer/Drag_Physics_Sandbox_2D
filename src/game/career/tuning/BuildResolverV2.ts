@@ -58,6 +58,7 @@ export function incompatibility(base: CarConfig, p: PartDef): string | null {
   if ((p.since ?? 1) === 2 && fam === LEGACY_FAMILY) return `${p.name} é para motores modernos`;
   const c = p.compat;
   if (!c) return null;
+  if (c.cars && !c.cars.includes(base.id)) return `${p.name} não é feita para este carro`;
   if (c.families && !c.families.includes(fam)) {
     const label = ENGINE_FAMILIES[fam]?.label ?? 'este motor';
     return `${p.name} não é feita para ${label}`;
@@ -203,17 +204,20 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
         return { ok: false, errors: [`taxa ${cr.toFixed(1).replace('.', ',')}:1 detona com ${fuel === 'ethanol' ? 'etanol' : 'gasolina'} (máximo ${NA_MAX_COMPRESSION[fuel].toFixed(1).replace('.', ',')}:1)`] };
     }
     const family = ENGINE_FAMILIES[fam];
+    const cam = get('camshaft');
+    const ecuRevAdd = ecu ? Math.min(ecu.revLimitAddRpm, family?.valvetrainRevAddRpm ?? 0) : undefined;
     const engineParts: EngineParts = {
       filter: get('intake-filter'),
       manifold: get('intake-manifold'),
-      cam: get('camshaft'),
+      cam,
       exhaust,
       turbo: turboKit,
       boostBar: tune.boostBar,
       head: get('cylinder-head'),
       compressionAdd: pistons?.compressionAdd,
       ignitionGain: ecu?.ignitionGain,
-      revLimitAddRpm: ecu ? Math.min(ecu.revLimitAddRpm, family?.valvetrainRevAddRpm ?? 0) : undefined,
+      // New profiles include the spring limit. A remap may use the larger safe range, not add a second spring kit.
+      revLimitAddRpm: cam?.progression && ecuRevAdd !== undefined ? Math.max(0, ecuRevAdd - cam.revLimitAddRpm) : ecuRevAdd,
       mod: sectionParts.length || pistons?.frictionScale || genericMod.coolingFrictionScale || genericMod.coolingKnockScale
         ? {
             ...exhaustMod,
@@ -251,7 +255,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
             ivoDeg: vc.high.ivoDeg + cam.ivoDeltaDeg,
             ivcDeg: vc.high.ivcDeg + cam.ivcDeltaDeg,
             intakeLiftMm: vc.high.intakeLiftMm + cam.liftAddMm,
-            exhaustLiftMm: vc.high.exhaustLiftMm + cam.liftAddMm,
+            exhaustLiftMm: vc.high.exhaustLiftMm + (cam.exhaustLiftAddMm ?? cam.liftAddMm),
           },
         };
       }

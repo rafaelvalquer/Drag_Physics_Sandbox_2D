@@ -55,7 +55,7 @@ const cars = CAREER_CARS.map((car) => {
     id: part.id,
     category: part.category,
     slot: physicalSlotOf(part),
-    progression: progressionOf(part),
+    progression: progressionOf(part, familyOf(car)),
     ...auditPartGain(car, part, track, version),
   }));
   const categories = slots.map((slot) => {

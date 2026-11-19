@@ -750,6 +750,7 @@ export class CareerMode implements Mode {
   private workshopScreen(): HTMLElement {
     const s = this.controller.save!;
     const car = this.controller.activeCar!;
+    const family = familyOf(findCampaignCar(car.baseCarId)!);
     const visible = this.visibleParts(car);
     // a category is shown when it has parts for this car; a car of resolver version 1 keeps every
     // chapter 1 slot (its factory part), exactly as the chapter 1 workshop showed it
@@ -809,8 +810,8 @@ export class CareerMode implements Mode {
       const inSlot = equipped.find((p) => p.category === cat);
       const categoryParts = allInTab.filter((p) => p.category === cat);
       const entries = categoryParts.map((p) => {
-        const st = partStatus(s, car, p, familyOf(findCampaignCar(car.baseCarId)!));
-        const progression = progressionOf(p);
+        const st = partStatus(s, car, p, family);
+        const progression = progressionOf(p, family);
         return h('li', {
           class: `ws-part-card ${sel?.id === p.id ? 'sel' : ''} ${st.state}`,
           'data-testid': `ws-part-${p.id}`,
@@ -882,7 +883,7 @@ export class CareerMode implements Mode {
     return ALL_PARTS.filter((p) => {
       if (car.installedParts.includes(p.id)) return true;
       // version 2 compatibility rules apply to the cars resolved by version 2 and to v2 parts
-      if ((v2 || p.since === 2) && incompatibility(base, p)) return false;
+      if ((v2 || p.since === 2 || p.compat?.cars) && incompatibility(base, p)) return false;
       return true;
     });
   }

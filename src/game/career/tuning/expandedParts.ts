@@ -11,14 +11,18 @@ const specs: Spec[] = [
   ['filter-cone', 'intake-filter', 'Filtro cônico premium', 2, 780, 'part-filter', { filterDropKPa: 0.6 }, 'Filtro cônico de algodão fora da caixa original: respira mais ar em plena carga.'],
   ['filter-direct', 'intake-filter', 'Admissão direta', 3, 1450, 'part-filter', { filterDropKPa: 0.35, throttleResponseScale: 0.96 }, 'Tomada de ar de competição com duto curto até a borboleta.', 'Mais ruído de admissão.'],
   ['manifold-highflow', 'intake-manifold', 'Coletor de alto fluxo', 2, 1700, 'part-manifold', { runnerLengthScale: 0.75, runnerDiameterAddMm: 5, plenumScale: 1.42 }, 'Coletor de admissão de dutos curtos e largos, plenum grande.', 'A ressonância sobe de rotação: ganha em cima, perde um pouco embaixo.'],
+  ['manifold-classic-race', 'intake-manifold', 'Coletor para giro alto', 3, 2550, 'part-manifold', { runnerLengthScale: 0.69, runnerDiameterAddMm: 7, plenumScale: 1.52 }, 'Dutos dimensionados para os motores clássicos em alto giro.'],
   ['throttle-rework', 'intake-throttle', 'Borboleta retrabalhada', 1, 530, 'part-manifold', { throttleDiameterAddMm: 2, throttleResponseScale: 0.96 }, 'Corpo de borboleta original alargado e polido.'],
   ['throttle-large', 'intake-throttle', 'Borboleta ampliada', 2, 1280, 'part-manifold', { throttleDiameterAddMm: 6, throttleResponseScale: 0.93 }, 'Corpo de borboleta de diâmetro maior, com eixo afinado.'],
+  ['throttle-classic-competition', 'intake-throttle', 'Borboleta com acionamento de competição', 3, 1840, 'part-manifold', { throttleDiameterAddMm: 8, throttleResponseScale: 0.89 }, 'Corpo de maior seção com menor atraso de acionamento entre os regimes.'],
   ['airbox-performance', 'intake-airbox', 'Caixa de ar esportiva', 1, 460, 'part-filter', { filterDropReductionKPa: 0.3, airboxVolumeScale: 1.12 }, 'Caixa de ar original com bocal maior e entrada direcionada ao ar frio.'],
+  ['airbox-classic-sport', 'intake-airbox', 'Caixa de ar de entrada ampliada', 2, 860, 'part-filter', { filterDropReductionKPa: 0.4, airboxVolumeScale: 1.23 }, 'Tomada frontal com seção intermediária entre o bocal esportivo e o conjunto de competição.'],
   ['airbox-race', 'intake-airbox', 'Caixa de ar competição', 3, 1450, 'part-filter', { filterDropReductionKPa: 0.5, airboxVolumeScale: 1.35 }, 'Caixa de fibra de grande volume, alimentada pelo para-choque.'],
   ['cam-street-strong', 'camshaft', 'Comando street forte', 2, 1580, 'part-cam', { camIvoDeltaDeg: -8, camIvcDeltaDeg: 16, camEvoDeltaDeg: -10, camEvcDeltaDeg: 11, camLiftAddMm: 1.65, revLimitAddRpm: 500 }, 'Comando de rua bravo, para quem quer giro alto sem abrir mão de andar na cidade.', 'Ganha da média rotação para cima; a marcha lenta fica irregular e perde um pouco embaixo.'],
   ['cam-na-race', 'camshaft', 'Comando aspirado agressivo', 3, 2500, 'part-cam', { camIvoDeltaDeg: -12, camIvcDeltaDeg: 23, camEvoDeltaDeg: -13, camEvcDeltaDeg: 15, camLiftAddMm: 2.1, revLimitAddRpm: 650 }, 'Comando de competição para motor aspirado preparado.', 'Muito cruzamento: forte em alta, fraco abaixo da faixa de torque.'],
   ['cam-turbo', 'camshaft', 'Comando turbo', 3, 2350, 'part-cam', { camIvoDeltaDeg: -3, camIvcDeltaDeg: 9, camEvoDeltaDeg: -6, camEvcDeltaDeg: 5, camLiftAddMm: 1.4, revLimitAddRpm: 450 }, 'Comando de pouco cruzamento, feito para motor sobrealimentado.', 'Pouco cruzamento: não deixa o ar pressurizado escapar pela válvula de escape.'],
   ['head-street', 'engine-head', 'Cabeçote retrabalhado leve', 2, 1900, 'part-cam', { headFlowScale: 1.045 }, 'Dutos de admissão e escape limpos e casados com as juntas.'],
+  ['head-classic-street', 'engine-head', 'Cabeçote com sedes retrabalhadas', 1, 1050, 'part-cam', { headFlowScale: 1.022 }, 'Retrabalho das sedes mantendo a seção original dos dutos.'],
   ['head-race', 'engine-head', 'Cabeçote retrabalhado completo', 3, 3400, 'part-cam', { headFlowScale: 1.09 }, 'Cabeçote de competição: dutos alargados, sedes retrabalhadas e válvulas maiores.'],
   ['compression-high', 'engine-compression', 'Taxa alta aspirada', 3, 2200, 'part-cam', { compressionRatioDelta: 0.7 }, 'Cabeçote rebaixado para motor aspirado.', 'Ciclo Otto mais eficiente em toda a faixa; não aceita turbo com gasolina.'],
   ['compression-low', 'engine-compression', 'Taxa baixa turbo', 3, 2400, 'part-turbo', { compressionRatioDelta: -1.2, wastegateHoldAddBar: 0.12 }, 'Pistões de cabeça rebaixada para motor turbo de pressão alta.', 'Com menos taxa o motor aceita mais pressão sem detonar, e o mapa segura a pressão mais alta. Só para motor com kit turbo.'],
@@ -26,6 +30,7 @@ const specs: Spec[] = [
   ['pistons-forged', 'engine-internals', 'Pistões forjados', 3, 3500, 'part-turbo', { internalTorqueLimitNm: 340, coolingFrictionScale: 0.975 }, 'Pistões forjados leves com anéis de baixa tensão.', 'Base para turbo de pressão alta; sozinhos, ganham pelo atrito menor dos anéis.'],
   ['forged-kit', 'engine-internals', 'Kit forjado completo', 3, 6600, 'part-turbo', { internalTorqueLimitNm: 460, coolingFrictionScale: 0.96 }, 'Pistões, bielas e virabrequim forjados e balanceados.', 'Base para os kits turbo fortes; sozinho, ganha pelo conjunto balanceado e de baixo atrito.'],
   ['flywheel-light', 'engine-flywheel', 'Volante aliviado leve', 1, 800, 'part-clutch', { flywheelInertiaScale: 0.93 }, 'Volante original usinado para tirar massa da borda.'],
+  ['flywheel-classic-balanced', 'engine-flywheel', 'Volante de aço balanceado', 2, 1260, 'part-clutch', { flywheelInertiaScale: 0.905 }, 'Volante de aço com distribuição de massa intermediária.'],
   ['flywheel-sport', 'engine-flywheel', 'Volante aliviado esportivo', 3, 1750, 'part-clutch', { flywheelInertiaScale: 0.88 }, 'Volante de aço forjado leve.', 'Sobe de giro rápido; guarda menos energia para a largada.'],
   ['header-4x1', 'exhaust-header', 'Coletor 4×1', 1, 700, 'part-exhaust', { backPressureReductionKPa: 1.3, headerDiameterScale: 1.05 }, 'Coletor de escape de tubos de aço com os quatro primários juntando num só.'],
   ['header-421', 'exhaust-header', 'Coletor 4×2×1', 2, 1200, 'part-exhaust', { backPressureReductionKPa: 2, headerDiameterScale: 1.07 }, 'Coletor em dois estágios, que junta os cilindros aos pares antes do tubo único.'],
@@ -146,4 +151,19 @@ export const EXPANDED_PARTS: readonly ExpandedPart[] = specs.map(([id, category,
     : category === 'chassis-weight' || category.startsWith('cooling-')
       ? { modernUnlock: 'c2-generic-chassis' as const }
       : {}),
+}));
+
+/** The VHC can prepare for boost before installing the kit. */
+export const CELTA_TURBO_COMPRESSION: readonly ExpandedPart[] = ([1, 2, 3] as const).map((tier) => ({
+  id: tier === 1 ? 'compression-celta-turbo' : `compression-celta-turbo-s${tier}`,
+  name: `Pistões de baixa compressão VHC Stage ${tier}`,
+  category: 'engine-compression',
+  chapter: tier,
+  unlock: 'part-turbo',
+  price: [1650, 2500, 3450][tier - 1]!,
+  compat: { cars: ['gm-celta-2003'] },
+  mod: { compressionRatioDelta: [-2.2, -2.7, -3.4][tier - 1]! },
+  progression: { tier, group: 'celta-turbo-compression', specialization: 'turbo', objective: 'boost-headroom' },
+  description: 'Pistões de cabeça rebaixada para preparar o motor VHC para receber pressão.',
+  physics: `Reduz a taxa de 12,6:1 para ${['10,4', '9,9', '9,2'][tier - 1]}:1. A redução abre margem para sobrealimentação e diminui a potência enquanto o motor permanece aspirado.`,
 }));

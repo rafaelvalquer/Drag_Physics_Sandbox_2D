@@ -101,6 +101,10 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
       errors.push(`peça desconhecida: ${id}`);
       continue;
     }
+    if (p.compat?.cars && !p.compat.cars.includes(base.id)) {
+      errors.push(`${p.name} não é feita para este carro`);
+      continue;
+    }
     const prev = bySlot.get(p.category);
     if (prev) errors.push(`só cabe uma peça em ${CATEGORY_LABEL[p.category]}: ${prev.name} e ${p.name}`);
     else bySlot.set(p.category, p);

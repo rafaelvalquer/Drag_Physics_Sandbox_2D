@@ -17,9 +17,10 @@ if (!cars.length) throw new Error(`Carro desconhecido: ${carId}`);
 const track = TRACKS.find((item) => item.id === 'test-track')!;
 const tiers: PartTier[] = [1, 2, 3];
 const rows = cars.flatMap((car) => {
+  const family = familyOf(car);
   const groups = new Map<string, Map<PartTier, PartDef>>();
   for (const part of ALL_PARTS) {
-    const progression = progressionOf(part);
+    const progression = progressionOf(part, family);
     if (!progression || (selectedGroups.size && !selectedGroups.has(progression.group)) || incompatibility(car, part)) continue;
     const group = groups.get(progression.group) ?? new Map<PartTier, PartDef>();
     if (group.has(progression.tier)) throw new Error(`${car.id}: ${progression.group} tem mais de uma peça compatível no Stage ${progression.tier}.`);
@@ -31,7 +32,7 @@ const rows = cars.flatMap((car) => {
     const contiguous = stages.filter((part, index) => progressionOf(part)!.tier === index + 1);
     return {
       carId: car.id,
-      family: familyOf(car),
+      family,
       group,
       slot: physicalSlotOf(stages[0]!),
       specialization: progressionOf(stages[0]!)!.specialization,
@@ -49,17 +50,18 @@ const markdown = [
   '',
   `Comparações adjacentes na mesma configuração de apoio, na pista de testes a ${WORKSHOP_DISTANCE_M.toFixed(3)} m. As séries com estágio ausente ou sem contexto comum ficam explícitas.`,
   '',
-  '| Carro | Família | Grupo | Antes | Depois | Δ cv | Δ N·m | Δ 0–100 s | Δ ¼ milha s | Δ admissão kPa | Δ escape kPa | Δ borboleta ms | Δ combustível g/s | Resultado |',
-  '|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|',
+  '| Carro | Família | Grupo | Antes | Depois | Δ cv | Δ N·m | Δ torque por faixa N·m | Δ 0–100 s | Δ ¼ milha s | Δ admissão kPa | Δ escape kPa | Δ borboleta ms | Δ combustível g/s | Pressão admissível bar | Resultado |',
+  '|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|',
 ];
 for (const row of rows) {
   const prefix = `| ${row.carId} | ${row.family} | ${row.group} |`;
-  if (row.missingTiers.length) markdown.push(`${prefix} — | — | — | — | — | — | — | — | — | — | Faltam stages ${row.missingTiers.join(', ')} |`);
+  if (row.missingTiers.length) markdown.push(`${prefix} ${Array<string>(12).fill('—').join(' | ')} | Faltam stages ${row.missingTiers.join(', ')} |`);
   for (const { previous, next, audit } of row.comparisons) {
     const m = 'gain' in audit ? audit.gain : null;
     const values = m ? [
       delta(m.cvBefore, m.cvAfter),
       delta(m.torqueBeforeNm, m.torqueAfterNm),
+      m.torqueBands.map((band) => delta(band.beforeNm, band.afterNm)).join(' / '),
       delta(m.t100Before, m.t100After),
       delta(m.etBefore, m.etAfter),
       restrictionDelta(m.intakeRestrictionBeforeKPa, m.intakeRestrictionAfterKPa),
@@ -67,7 +69,8 @@ for (const row of rows) {
       delta(1000 * m.throttleBeforeS, 1000 * m.throttleAfterS),
       m.fuelCapacityBeforeKgS !== null && m.fuelCapacityAfterKgS !== null
         ? delta(1000 * m.fuelCapacityBeforeKgS, 1000 * m.fuelCapacityAfterKgS) : '—',
-    ] : Array<string>(8).fill('—');
+      m.boostHeadroom ? `${m.boostHeadroom.beforeBar.toFixed(2)} → ${m.boostHeadroom.afterBar.toFixed(2)}` : '—',
+    ] : Array<string>(10).fill('—');
     const figures = values.join(' | ');
     markdown.push(`${prefix} ${previous ?? 'Original'} | ${next} | ${figures} | ${audit.status} |`);
   }

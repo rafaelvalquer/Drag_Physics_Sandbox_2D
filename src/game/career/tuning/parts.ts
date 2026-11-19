@@ -4,6 +4,7 @@ import { CHAPTER3_PARTS } from './chapter3Parts';
 import { MODERN_BREATHING_PARTS } from './modernBreathingParts';
 import { MODERN_DRIVELINE_PARTS } from './modernDrivelineParts';
 import { MODERN_FUEL_PARTS } from './modernFuelParts';
+import { MODERN_TOP_END_PARTS } from './modernTopEndParts';
 import type { PartProgression } from './partProgression';
 
 /**
@@ -14,7 +15,7 @@ import type { PartProgression } from './partProgression';
  * One slot per category: installing a part of an occupied category replaces the previous one
  * (e.g. semi-slick tyres replace sport tyres; nothing stacks).
  */
-import { EXPANDED_PARTS } from './expandedParts';
+import { CELTA_TURBO_COMPRESSION, EXPANDED_PARTS } from './expandedParts';
 
 export type PartCategory =
   | 'intake-filter' | 'intake-manifold' | 'intake-throttle' | 'intake-airbox'
@@ -176,6 +177,8 @@ export const LEGACY_FAMILY = 'legacy';
  * rules exactly as they were). An absent list means "fits everything".
  */
 export interface PartCompat {
+  /** Vehicle-specific fitment when a family or architecture alone is too broad. */
+  cars?: readonly string[];
   /** Engine families the part is made for (LEGACY_FAMILY = engines without a family). */
   families?: readonly string[];
   /** Induction the part needs. */
@@ -749,10 +752,13 @@ const DYNO_LAB_PARTS: readonly PartDef[] = [
   },
 ];
 
-export const PARTS: readonly PartDef[] = [...BASE_PARTS, ...EXPANDED_PARTS, ...DYNO_LAB_PARTS];
+export const PARTS: readonly PartDef[] = [...BASE_PARTS, ...EXPANDED_PARTS, ...DYNO_LAB_PARTS, ...CELTA_TURBO_COMPRESSION];
 
 /** Every part of every resolver version (ids are unique across versions). */
-export const ALL_PARTS: readonly PartDef[] = [...PARTS, ...CHAPTER2_PARTS, ...CHAPTER3_PARTS, ...MODERN_BREATHING_PARTS, ...MODERN_DRIVELINE_PARTS, ...MODERN_FUEL_PARTS];
+export const ALL_PARTS: readonly PartDef[] = [
+  ...PARTS, ...CHAPTER2_PARTS, ...CHAPTER3_PARTS, ...MODERN_BREATHING_PARTS,
+  ...MODERN_DRIVELINE_PARTS, ...MODERN_FUEL_PARTS, ...MODERN_TOP_END_PARTS,
+];
 
 export function findPart(id: string): PartDef | undefined {
   return ALL_PARTS.find((p) => p.id === id);

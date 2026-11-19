@@ -1,7 +1,8 @@
 import type { CarConfig, TrackConfig } from '../../../data/schema';
+import { MonotoneCubic } from '../../../core/math';
 import { runAccelerationTest } from '../../race/accelerationTest';
 import { RACE_DISTANCES } from '../../race/RaceController';
-import { resolveBuild, type BuildResult, type ResolverVersion } from './BuildResolver';
+import { boostRangeForParts, resolveBuild, type BuildResult, type ResolverVersion } from './BuildResolver';
 import { incompatibility } from './BuildResolverV2';
 import { findPart, type PartDef } from './parts';
 import { reliabilityLimits } from './EngineReliability';
@@ -22,6 +23,7 @@ export interface PartGain {
   cvAfter: number;
   torqueBeforeNm: number;
   torqueAfterNm: number;
+  torqueBands: { fromRpm: number; toRpm: number; beforeNm: number; afterNm: number }[];
   redlineBeforeRpm: number;
   redlineAfterRpm: number;
   massBeforeKg: number;
@@ -52,6 +54,7 @@ export interface PartGain {
   /** Launch speed of the clutch logic before / after (rpm). */
   launchRpmBefore: number;
   launchRpmAfter: number;
+  boostHeadroom?: { beforeBar: number; afterBar: number };
 }
 
 export const WORKSHOP_DISTANCE_M = RACE_DISTANCES.quarter.m;
@@ -79,6 +82,10 @@ const CONTEXTS: readonly string[][] = [
   ['downpipe-catless', 'intercooler-race', 'pistons-forged-modern', 'clutch-reinforced'],
   ['downpipe-catless', 'intercooler-race', 'pistons-forged-modern', 'dct-upgrade'],
   ['downpipe-catless', 'intercooler-race', 'pistons-forged-modern', 'at-upgrade'],
+  ['compression-celta-turbo', 'clutch-reinforced'],
+  ['compression-celta-turbo', 'turbo-basic', 'clutch-reinforced'],
+  ['compression-celta-turbo-s2', 'turbo-medium', 'clutch-ceramic-race', 'injectors', 'rods-reinforced', 'ecu-race', 'ignition-race'],
+  ['compression-celta-turbo-s3', 'turbo-strong', 'clutch-ceramic-race', 'fuel-pump', 'forged-kit', 'ecu-race', 'ignition-race'],
 ];
 
 const requiresTurbo = (id: string): boolean => {
@@ -111,6 +118,23 @@ function physicsSignature(car: CarConfig): string {
 
 type ValidBuild = Extract<BuildResult, { ok: true }>;
 
+function torqueBands(base: CarConfig['engine'], after: CarConfig['engine']): PartGain['torqueBands'] {
+  const a = new MonotoneCubic(base.torqueCurve.rpm, base.torqueCurve.torqueNm);
+  const b = new MonotoneCubic(after.torqueCurve.rpm, after.torqueCurve.torqueNm);
+  const floor = 1.5 * Math.max(base.idleRpm, after.idleRpm);
+  const span = Math.min(base.revLimitRpm, after.revLimitRpm) - floor;
+  return [0, 1, 2].map((index) => {
+    const fromRpm = Math.round(floor + span * index / 3);
+    const toRpm = Math.round(floor + span * (index + 1) / 3);
+    const mean = (curve: MonotoneCubic): number => {
+      let sum = 0;
+      for (let i = 0; i < 16; i++) sum += curve.evaluate(fromRpm + (toRpm - fromRpm) * (i + 0.5) / 16);
+      return sum / 16;
+    };
+    return { fromRpm, toRpm, beforeNm: mean(a), afterNm: mean(b) };
+  });
+}
+
 function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, context: string[], track: TrackConfig): PartAudit {
   let a: ReturnType<typeof measure>;
   let b: ReturnType<typeof measure>;
@@ -131,6 +155,7 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     cvAfter: after.peakPowerCv,
     torqueBeforeNm: base.peakTorqueNm,
     torqueAfterNm: after.peakTorqueNm,
+    torqueBands: torqueBands(base.car.engine, after.car.engine),
     redlineBeforeRpm: base.car.engine.revLimitRpm,
     redlineAfterRpm: after.car.engine.revLimitRpm,
     massBeforeKg: base.car.massKg,
@@ -165,22 +190,34 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     gain.safeRpmBefore !== gain.safeRpmAfter || gain.exhaustRestrictionBeforeKPa !== gain.exhaustRestrictionAfterKPa;
   const fuelGain = 'fuelCapacityScale' in part && gain.fuelCapacityBeforeKgS !== null && gain.fuelCapacityAfterKgS !== null &&
     gain.fuelCapacityAfterKgS - gain.fuelCapacityBeforeKgS >= 0.0001 && gain.etAfter - gain.etBefore <= 0.05;
-  const improvement = isGain(gain) || (isModernBreathingPart(part) && breathingGain(part, gain)) || drivelineGain(part, gain) || fuelGain;
+  const improvement = isGain(gain) || breathingGain(part, gain) || drivelineGain(part, gain) ||
+    topEndGain(part, gain) || fuelGain;
   return { status: !effect ? 'no-effect' : improvement ? 'gain' : 'no-gain', gain };
 }
 
+function topEndGain(part: PartDef, gain: PartGain): boolean {
+  if (part.since !== 2 || !part.progression || gain.etAfter - gain.etBefore > 0.08) return false;
+  if (part.category !== 'camshaft' && part.category !== 'cylinder-head' && part.category !== 'intake-manifold') return false;
+  const high = gain.torqueBands.at(-1)!;
+  return gain.cvAfter - gain.cvBefore >= 0.2 || high.afterNm - high.beforeNm >= 0.2;
+}
+
 function drivelineGain(part: PartDef, gain: PartGain): boolean {
-  if (!part.progression || part.since !== 2 || gain.etAfter - gain.etBefore > 0.05) return false;
+  const progression = progressionOf(part);
+  if (!progression || gain.etAfter - gain.etBefore > 0.05) return false;
+  if (part.category === 'flywheel' || part.category === 'engine-flywheel')
+    return gain.engineInertiaBeforeKgM2 - gain.engineInertiaAfterKgM2 >= 0.001;
+  if (part.since !== 2) return false;
   if (part.category === 'clutch' || part.category === 'gearbox') return gain.clutchAfterNm - gain.clutchBeforeNm >= GAIN_CLUTCH_NM;
   if (part.category === 'awd')
     return gain.couplingAfterNm !== null && gain.couplingBeforeNm !== null && gain.couplingAfterNm - gain.couplingBeforeNm >= 10;
   if (part.category === 'differential' || part.category === 'transmission-gearbox')
     return gain.drivelineEfficiencyAfter - gain.drivelineEfficiencyBefore >= 0.001;
-  if (part.category === 'flywheel') return gain.engineInertiaBeforeKgM2 - gain.engineInertiaAfterKgM2 >= 0.001;
   return false;
 }
 
 function breathingGain(part: PartDef, gain: PartGain): boolean {
+  if (!isModernBreathingPart(part) && progressionOf(part)?.group !== 'classic-throttle') return false;
   // These street parts should not worsen the reference pass enough to outweigh the hardware gain.
   if (gain.etAfter - gain.etBefore > 0.05) return false;
   const reduction = (before: number | null, after: number | null): boolean =>
@@ -195,6 +232,8 @@ export function auditPartGain(car: CarConfig, part: PartDef, track: TrackConfig,
   const incompatible = incompatibility(car, part);
   if (incompatible) return { status: 'incompatible', reasons: [incompatible] };
   if (version === 1 && part.since === 2) return { status: 'incompatible', reasons: ['Peça requer resolver 2.'] };
+  if (progressionOf(part)?.objective === 'boost-headroom')
+    return auditBoostHeadroom(car, [part], track, version)[0]!.audit;
   const errors = new Set<string>();
   for (const ctx0 of CONTEXTS) {
     const ctx = ctx0.filter((id) => findPart(id)?.category !== part.category);
@@ -224,10 +263,40 @@ export interface StageComparison {
   audit: PartAudit;
 }
 
+function auditBoostHeadroom(car: CarConfig, stages: readonly PartDef[], track: TrackConfig, version: ResolverVersion): StageComparison[] {
+  const context = ['turbo-strong', 'clutch-ceramic-race', 'fuel-pump', 'forged-kit', 'ecu-race', 'ignition-race'];
+  const [minimum, maximum] = boostRangeForParts(context)!;
+  const supported = (part?: PartDef): { bar: number; build: ValidBuild | null } => {
+    const parts = part ? [...context, part.id] : context;
+    for (let step = Math.floor(maximum * 20 + 1e-6); step >= Math.ceil(minimum * 20); step--) {
+      const bar = step / 20;
+      const build = resolveBuild(car, parts, { boostBar: bar }, version);
+      if (build.ok) return { bar, build };
+    }
+    return { bar: 0, build: null };
+  };
+  const limits = [supported(), ...stages.map(supported)];
+  return stages.map((part, index): StageComparison => {
+    const previous = stages[index - 1]?.id ?? null;
+    const a = limits[index]!;
+    const b = limits[index + 1]!;
+    const reference = a.build ?? (index === 0 ? build(car, [], version) : null);
+    if (!reference || !b.build)
+      return { previous, next: part.id, audit: { status: 'invalid-build', reasons: ['O conjunto não aceitou pressão na faixa testada.'] } };
+    const audit = compareBuilds(reference, b.build, part, context, track);
+    if ('gain' in audit) {
+      audit.gain.boostHeadroom = { beforeBar: a.bar, afterBar: b.bar };
+      return { previous, next: part.id, audit: { status: b.bar > a.bar ? 'gain' : 'no-gain', gain: audit.gain } };
+    }
+    return { previous, next: part.id, audit };
+  });
+}
+
 /** Uses one support build for all comparisons in a progression group. */
 export function auditPartStages(car: CarConfig, stages: readonly PartDef[], track: TrackConfig, version: ResolverVersion): StageComparison[] {
   const first = stages[0];
   if (!first) return [];
+  if (progressionOf(first)?.objective === 'boost-headroom') return auditBoostHeadroom(car, stages, track, version);
   const slot = physicalSlotOf(first);
   const specialization = progressionOf(first)?.specialization;
   const errors = new Set<string>();
