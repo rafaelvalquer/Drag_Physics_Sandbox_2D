@@ -46,6 +46,7 @@ import { VehicleViews } from '../app/vehicleView';
 import { clear, downloadText, h, pickTextFile, toast } from '../ui/dom';
 import { Hud } from '../ui/Hud';
 import { GarageVehiclePreview } from '../ui/garage/GarageVehiclePreview';
+import { openGarage } from '../ui/garage/GarageDialog';
 import { portraitSvg } from '../ui/career/portraits';
 import { SHIFT_MESSAGES } from './SandboxMode';
 import '../ui/career/career.css';
@@ -652,14 +653,24 @@ export class CareerMode implements Mode {
     void this.deliverPrizes(() => this.show(back));
   }
 
-  private async buyCarConfirmed(baseCarId: string, price: number): Promise<void> {
+  private openPurchase(o: Offer): void {
     if (!this.guard()) return;
-    const car = findCampaignCar(baseCarId)!;
-    if (!confirm(`Comprar ${car.name} por ${cr(price)}?`)) return;
-    const r = await this.controller.buyCar(baseCarId);
-    if (!r.ok) toast(r.error, 'error');
-    else toast(`${car.name} comprado. Selecione-o na garagem.`);
-    this.show('market');
+    openGarage({
+      cars: [o.cfg],
+      current: null,
+      useLabel: `Comprar por ${cr(o.price)}`,
+      purchase: {
+        confirm: async (id, paint) => {
+          if (this.readOnly) return 'Campanha aberta em outra aba: só leitura.';
+          const result = await this.controller.buyCar(id, paint ?? undefined);
+          return result.ok ? null : result.error;
+        },
+        onPurchased: () => {
+          toast(`${o.name} comprado. Selecione-o na garagem.`);
+          this.show('market');
+        },
+      },
+    });
   }
 
   private marketScreen(): HTMLElement {
@@ -687,7 +698,7 @@ export class CareerMode implements Mode {
       };
     };
     const offers: Offer[] = [
-      ...STARTER_CARS.map((o) => mk(o.baseCarId, o.price, 'street', true, null, false)),
+      ...STARTER_CARS.map((o) => mk(o.baseCarId, o.price, 'street', true, null, s.ownedCars.some((c) => c.baseCarId === o.baseCarId))),
       ...(leagueOpen
         ? DEALER_CARS.filter((o) => o.chapter !== 3 || eliteOpen).map((o) => {
             const a = offerAvailability(s, o);
@@ -702,17 +713,7 @@ export class CareerMode implements Mode {
       eliteOpen,
       fleet: s.ownedCars.map((c) => ({ id: c.id, nickname: c.nickname, value: resaleValue(c), paid: c.purchasePrice ?? null, parts: c.installedParts.length, trophy: !!c.prizeEventId, active: c.id === s.activeCarId, cfg: ownedCarBuild(c).ok ? ownedCarConfig(c) : null })),
       makePreview: (c, w, hh) => this.preview(c, w, hh, 'plain', 0.86),
-      buy: (o) => {
-        if (o.source !== 'street') void this.buyCarConfirmed(o.id, o.price);
-        else
-          void (async () => {
-            if (!this.guard()) return;
-            const r = await this.controller.buyCar(o.id);
-            if (!r.ok) toast(r.error, 'error');
-            else toast(`${o.name} comprado. Selecione-o na garagem.`);
-            this.show('market');
-          })();
-      },
+      buy: (o) => this.openPurchase(o),
       sell: (id) => void this.sellActive(id, 'market'),
       onBack: () => this.show('garage'),
     });

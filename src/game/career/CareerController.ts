@@ -12,6 +12,7 @@ import { computeReward, type Reward } from './CareerRewards';
 import {
   MAX_GARAGE,
   MAX_RESULTS,
+  OwnedCarSchema,
   STARTER_CARS,
   exportCareer,
   importCareer,
@@ -374,7 +375,7 @@ export class CareerController {
    * with its reputation / progress requirements). Credits are debited in the same transaction
    * that delivers the car; a failed write changes nothing.
    */
-  async buyCar(baseCarId: string): Promise<OpResult> {
+  async buyCar(baseCarId: string, paint?: OwnedCar['paint']): Promise<OpResult> {
     const s = this.save;
     const starter = STARTER_CARS.find((c) => c.baseCarId === baseCarId);
     const dealer = DEALER_CARS.find((c) => c.baseCarId === baseCarId);
@@ -388,6 +389,8 @@ export class CareerController {
     const price = (dealer ?? starter)!.price;
     if (s.credits < price) return fail(`créditos insuficientes: ${price.toLocaleString('pt-BR')} CR`);
     if (s.ownedCars.length >= MAX_GARAGE) return fail('garagem cheia');
+    const chosenPaint = OwnedCarSchema.shape.paint.safeParse(paint ?? { color: base.visual.color, accent: base.visual.accent });
+    if (!chosenPaint.success) return fail('Pintura inválida.');
     try {
       return {
         ok: true,
@@ -399,7 +402,7 @@ export class CareerController {
             id: newCarId(n, baseCarId),
             baseCarId,
             nickname: shortName(base.name),
-            paint: { color: base.visual.color, accent: base.visual.accent },
+            paint: chosenPaint.data,
             installedParts: [],
             buildVersion: CHAPTER2_CAR_IDS.has(baseCarId) ? 2 : 1,
             purchasePrice: price,

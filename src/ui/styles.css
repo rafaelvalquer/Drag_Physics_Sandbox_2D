@@ -991,6 +991,9 @@ details.fold[open] > summary {
   min-width: 0;
   min-height: 0;
 }
+.garage-main:not(:has(.garage-thumbs)) {
+  grid-template-rows: minmax(0, 1fr);
+}
 .garage-stage {
   position: relative;
   min-height: 0;

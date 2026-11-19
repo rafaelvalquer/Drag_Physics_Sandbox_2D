@@ -131,11 +131,13 @@ test('capítulo 3: liberação, cenários, rivais, revenda Elite, oficina dos V6
   await expect(page.getByTestId('dealer-buy-nissan-gtr-r35-2015')).toBeDisabled();
   await expect(page.getByTestId('dealer-reason-nissan-gtr-r35-2015')).toBeVisible();
   await shot(page, 'e2e-06-revenda-elite');
-  page.once('dialog', (d) => void d.dismiss());
   await page.getByTestId('dealer-buy-nissan-350z-2006').click();
+  const purchase = page.getByTestId('garage-purchase');
+  await expect(purchase.getByTestId('garage-use')).toHaveText('Comprar por 45.000 CR');
+  await purchase.getByTestId('garage-close').click();
   expect(await mode<number>(page, 'm.controller.save.credits')).toBe(400000);
-  page.once('dialog', (d) => void d.accept());
   await page.getByTestId('dealer-buy-nissan-350z-2006').click();
+  await purchase.getByTestId('garage-use').click();
   await expect.poll(() => mode<number>(page, 'm.controller.save.credits')).toBe(355000);
   await expect(page.getByTestId('dealer-buy-nissan-350z-2006')).toBeDisabled();
   await boot(page);

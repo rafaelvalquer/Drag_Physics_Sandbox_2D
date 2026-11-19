@@ -56,6 +56,53 @@ async function shots(page: Page, name: string): Promise<void> {
   await page.setViewportSize({ width: 1400, height: 860 });
 }
 
+test('classificados: ficha, pintura, recusa e compra no modal', async ({ page }) => {
+  await startCampaign(page);
+  await page.getByTestId('nav-market').click();
+  const credits = await mode<number>(page, 'm.controller.save.credits');
+  const fleetSize = await mode<number>(page, 'm.controller.save.ownedCars.length');
+  const purchase = page.getByTestId('garage-purchase');
+  const carId = 'gm-chevette-sl-1988';
+  await page.getByTestId(`market-buy-${carId}`).click();
+  await expect(purchase.getByTestId('garage-name')).toContainText('Chevette');
+  await expect(purchase.getByTestId('garage-specs')).toContainText('72 cv');
+  await expect(purchase.getByTestId('garage-use')).toHaveText('Comprar por 1.400 CR');
+  await expect(purchase.locator('.garage-thumbs')).toHaveCount(0);
+  await purchase.getByRole('button', { name: 'cor azul' }).click();
+  await page.keyboard.press('Escape');
+  await expect(purchase).toBeHidden();
+  expect(await mode<number>(page, 'm.controller.save.credits')).toBe(credits);
+  expect(await mode<number>(page, 'm.controller.save.ownedCars.length')).toBe(fleetSize);
+
+  await page.getByTestId(`market-card-${carId}`).getByRole('button', { name: /Ver detalhes/ }).click();
+  await page.getByTestId(`market-detail-buy-${carId}`).click();
+  await expect(purchase.getByRole('button', { name: 'cor original' })).toHaveAttribute('aria-pressed', 'true');
+  const canvas = purchase.getByTestId('garage-preview');
+  const preview = () => canvas.evaluate((node: HTMLCanvasElement) => node.toDataURL());
+  const originalPreview = await preview();
+  const blue = purchase.getByRole('button', { name: 'cor azul' });
+  await blue.click();
+  await expect(blue).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(preview).not.toBe(originalPreview);
+
+  await mode(page, `m.controller.commit((s) => void (s.credits = 100))`);
+  await purchase.getByTestId('garage-use').click();
+  await expect(purchase.getByRole('alert')).toContainText('créditos insuficientes');
+  await expect(blue).toHaveAttribute('aria-pressed', 'true');
+  expect(await mode<number>(page, 'm.controller.save.ownedCars.length')).toBe(fleetSize);
+  await mode(page, `m.controller.commit((s) => void (s.credits = ${credits}))`);
+  await purchase.getByTestId('garage-use').click();
+  await expect(purchase).toBeHidden();
+  await expect(page.getByTestId(`market-buy-${carId}`)).toBeDisabled();
+
+  await boot(page, false);
+  await page.locator('button.tab[data-mode=career]').click();
+  await expect(page.getByTestId('career-menu')).toBeVisible();
+  expect(await mode<number>(page, 'm.controller.save.credits')).toBe(credits - 1400);
+  expect(await mode(page, `m.controller.save.ownedCars.filter((c) => c.baseCarId === '${carId}').map((c) => c.paint)`))
+    .toEqual([{ color: '#1f5fbf', accent: '#f2c230' }]);
+});
+
 
 test('shell and the first screens: garage, events, chapters', async ({ page }) => {
   test.setTimeout(240_000);

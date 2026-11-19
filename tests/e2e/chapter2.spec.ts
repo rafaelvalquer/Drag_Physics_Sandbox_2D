@@ -132,17 +132,24 @@ test('capítulo 2: liberação, Caio, cenários, rivais, revenda, oficina compat
   await expect(page.getByTestId('career-dealer')).toBeVisible();
   await expect(page.getByTestId('dealer-buy-bmw-335i-f30-2013')).toBeDisabled();
   await shot(page, '07-revenda');
-  page.once('dialog', (d) => void d.dismiss());
   await page.getByTestId('dealer-buy-gm-astra-2011').click();
+  const purchase = page.getByTestId('garage-purchase');
+  await expect(purchase.getByTestId('garage-use')).toHaveText('Comprar por 6.000 CR');
+  await purchase.getByTestId('garage-close').click();
+  await expect(purchase).toBeHidden();
   expect(await mode<number>(page, 'm.controller.save.credits')).toBe(30000);
-  page.once('dialog', (d) => void d.accept());
   await page.getByTestId('dealer-buy-gm-astra-2011').click();
+  await expect(purchase.getByRole('button', { name: 'cor original' })).toHaveAttribute('aria-pressed', 'true');
+  await purchase.getByTestId('garage-use').click();
   await expect.poll(() => mode<number>(page, 'm.controller.save.credits')).toBe(24000);
   await expect(page.getByTestId('dealer-buy-gm-astra-2011')).toBeDisabled();
   await boot(page); // navigates again: a fresh load of the app and of the save
   await openCareer(page);
   expect(await mode<number>(page, `m.controller.save.ownedCars.filter((c) => c.baseCarId === 'gm-astra-2011').length`)).toBe(1);
   expect(await mode<number>(page, 'm.controller.save.credits')).toBe(24000);
+  expect(await mode(page, `m.controller.save.ownedCars.find((c) => c.baseCarId === 'gm-astra-2011').paint`)).toEqual(
+    { color: '#5b6066', accent: '#c9ced3' },
+  );
 
   // first league race through the visible path, with the Astra
   const astraId = await mode<string>(page, `m.controller.save.ownedCars.find((c) => c.baseCarId === 'gm-astra-2011').id`);

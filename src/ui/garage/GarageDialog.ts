@@ -7,13 +7,23 @@ import { GarageVehiclePreview } from './GarageVehiclePreview';
  * Garage: a large studio preview of each car (the same artwork as on the track), a visual car
  * picker, the technical sheet read from the car's real configuration and a paint preview.
  */
-export interface GarageOptions {
+type Paint = { color: string; accent: string };
+
+export type GarageOptions = {
   cars: readonly CarConfig[];
   current: CarConfig | null;
   /** Label of the button that applies the choice (depends on the active mode). */
   useLabel: string;
-  onUse(carId: string, paint: { color: string; accent: string } | null): void;
-}
+} & (
+  | { onUse(carId: string, paint: Paint | null): void; purchase?: never }
+  | {
+    purchase: {
+      confirm(carId: string, paint: Paint | null): Promise<string | null>;
+      onPurchased(): void;
+    };
+    onUse?: never;
+  }
+);
 
 /** Paint choices offered in the garage (the car's own colour is always the first). */
 export const PAINTS: { name: string; color: string; accent: string }[] = [
@@ -57,6 +67,9 @@ export function specRows(car: CarConfig): [string, string][] {
 }
 
 export function openGarage(opts: GarageOptions): void {
+  const purchase = opts.purchase;
+  const opener = document.activeElement;
+  let pending = false;
   let car: CarConfig = opts.current ? (opts.cars.find((c) => c.id === opts.current!.id) ?? opts.cars[0]!) : opts.cars[0]!;
   // start from the paint the mode's car already has
   let paint: { color: string; accent: string } | null = opts.current && opts.current.id === car.id && opts.current.visual.color !== car.visual.color ? { color: opts.current.visual.color, accent: opts.current.visual.accent } : null;
@@ -76,16 +89,28 @@ export function openGarage(opts: GarageOptions): void {
     },
   });
   const painted = (): CarConfig => (paint ? { ...car, visual: { ...car.visual, ...paint } } : car);
+  const error = h('p', { class: 'hint warn', role: 'alert', 'data-testid': 'garage-purchase-error', hidden: true });
 
   const close = (): void => {
+    if (pending) return;
     ro.disconnect();
     window.removeEventListener('keydown', onKey, true);
     backdrop.remove();
+    if (purchase && opener instanceof HTMLElement && opener.isConnected) opener.focus();
   };
   const onKey = (e: KeyboardEvent): void => {
     if (e.key === 'Escape') {
       e.stopPropagation();
       close();
+    } else if (purchase && e.key === 'Tab') {
+      const controls = [...backdrop.querySelectorAll<HTMLElement>('button:enabled, input:enabled')];
+      const first = controls[0];
+      const last = controls.at(-1);
+      const active = document.activeElement;
+      if (!backdrop.contains(active) || active === (e.shiftKey ? first : last)) {
+        e.preventDefault();
+        (e.shiftKey ? last : first)?.focus();
+      }
     }
   };
 
@@ -99,6 +124,7 @@ export function openGarage(opts: GarageOptions): void {
           class: `swatch${active ? ' active' : ''}`,
           title: p.name,
           'aria-label': `cor ${p.name}`,
+          'aria-pressed': String(active),
           'data-testid': 'garage-swatch',
           style: `background:${p.color}`,
           onclick: () => {
@@ -121,7 +147,7 @@ export function openGarage(opts: GarageOptions): void {
     void preview.setCar(painted());
   };
 
-  for (const c of opts.cars) {
+  for (const c of purchase ? [] : opts.cars) {
     const mini = new GarageVehiclePreview('plain');
     mini.fill = 0.9;
     mini.resize(132, 58);
@@ -145,13 +171,53 @@ export function openGarage(opts: GarageOptions): void {
     );
   }
 
+  const closeButton = h('button', { 'data-testid': 'garage-close', onclick: close }, 'Fechar');
+  const useButton = h('button', {
+    class: 'primary',
+    'data-testid': 'garage-use',
+    onclick: () => {
+      if (purchase) void confirmPurchase();
+      else {
+        opts.onUse?.(car.id, paint);
+        close();
+      }
+    },
+  }, opts.useLabel);
+  const setPending = (value: boolean): void => {
+    pending = value;
+    useButton.disabled = value;
+    closeButton.disabled = value;
+    for (const button of swatches.querySelectorAll('button')) button.disabled = value;
+  };
+  async function confirmPurchase(): Promise<void> {
+    if (!purchase || pending) return;
+    setPending(true);
+    error.hidden = true;
+    let message: string | null;
+    try {
+      message = await purchase.confirm(car.id, paint);
+    } catch {
+      message = 'Não foi possível concluir a compra. Tente novamente.';
+    } finally {
+      setPending(false);
+    }
+    if (message !== null) {
+      error.textContent = message;
+      error.hidden = false;
+      useButton.focus();
+      return;
+    }
+    close();
+    purchase.onPurchased();
+  }
+
   const backdrop: HTMLDivElement = h(
     'div',
     { class: 'modal-backdrop', onclick: (e: Event) => e.target === backdrop && close() },
     h(
       'div',
-      { class: 'modal garage', role: 'dialog', 'aria-label': 'Garagem', 'data-testid': 'garage' },
-      h('div', { class: 'garage-main' }, stageEl, thumbs),
+      { class: 'modal garage', role: 'dialog', 'aria-modal': purchase ? 'true' : undefined, 'aria-label': purchase ? 'Comprar carro' : 'Garagem', 'data-testid': purchase ? 'garage-purchase' : 'garage' },
+      h('div', { class: 'garage-main' }, stageEl, purchase ? null : thumbs),
       h(
         'div',
         { class: 'garage-side' },
@@ -162,23 +228,8 @@ export function openGarage(opts: GarageOptions): void {
         h('h3', {}, 'Pintura'),
         swatches,
         h('label', { class: 'row check' }, lamps, h('span', {}, 'faróis e lanternas acesos')),
-        h(
-          'div',
-          { class: 'row garage-actions' },
-          h(
-            'button',
-            {
-              class: 'primary',
-              'data-testid': 'garage-use',
-              onclick: () => {
-                opts.onUse(car.id, paint);
-                close();
-              },
-            },
-            opts.useLabel,
-          ),
-          h('button', { 'data-testid': 'garage-close', onclick: close }, 'Fechar'),
-        ),
+        purchase ? error : null,
+        h('div', { class: 'row garage-actions' }, useButton, closeButton),
       ),
     ),
   );
@@ -193,4 +244,5 @@ export function openGarage(opts: GarageOptions): void {
   });
   ro.observe(stageEl);
   show();
+  if (purchase) closeButton.focus();
 }
