@@ -1,6 +1,7 @@
 import type { CarConfig } from '../../data/schema';
 import { buildBodyArt } from './art/bodyArt';
 import { DESIGNS } from './art/designs';
+import { rasterBodyFor, rasterMetaFor } from './art/raster';
 import { buildWheelArt } from './art/wheelArt';
 
 /**
@@ -83,6 +84,8 @@ export function buildVehicleLayers(car: CarConfig, pxPerM: number): VehicleLayer
   const r = car.tires.radiusM;
   const wb = car.wheelbaseM;
   const frame = { w: body.w, h: body.h };
+  // painted body styles place their own lamps and exhaust
+  const raster = rasterMetaFor(car);
   return {
     layers: [
       { name: 'under', svg: body.under, ...frame },
@@ -104,9 +107,9 @@ export function buildVehicleLayers(car: CarConfig, pxPerM: number): VehicleLayer
       bodyOriginPx: { x: body.originX, y: body.originY },
       wheelCentres: { rear: { x: -wb, y: r }, front: { x: 0, y: r } },
       groundY: 0,
-      exhausts: body.exhausts,
-      headlight: body.headlight,
-      taillight: body.taillight,
+      exhausts: raster?.exhausts ?? body.exhausts,
+      headlight: raster?.headlight ?? body.headlight,
+      taillight: raster?.taillight ?? body.taillight,
       contact: { rear: { x: -wb, y: 0 }, front: { x: 0, y: 0 } },
       centre: { x: -wb / 2, y: r + 0.22 },
       rearX: body.rearX,
@@ -191,6 +194,13 @@ export function assembleVehicleSprites(car: CarConfig, pxPerM: number): Promise<
     const rasters = await Promise.all(layers.map((l) => rasterise(l.svg, l.w, l.h)));
     const byName = new Map<FrameName, HTMLCanvasElement>();
     layers.forEach((l, i) => byName.set(l.name, rasters[i]!));
+    // painted body styles replace the vector body, wells, lamps and wheel (same frame sizes)
+    const paintBody = rasterBodyFor(car.visual.bodyStyle);
+    if (paintBody) {
+      const b = byName.get('body')!;
+      const painted = paintBody(car, pxPerM, { w: b.width, h: b.height }, byName.get('wheel')!.width, newCanvas);
+      for (const n of ['body', 'gloss', 'under', 'lights', 'brake', 'wheel'] as const) byName.set(n, painted[n]);
+    }
     const wheel = byName.get('wheel')!;
     byName.set('wheelSoft', spinBlur(wheel, 0.55, 14));
     byName.set('wheelFull', spinBlur(wheel, Math.PI * 2, 72));
