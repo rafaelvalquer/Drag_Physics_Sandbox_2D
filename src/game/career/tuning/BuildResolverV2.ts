@@ -4,7 +4,7 @@ import { applyEngineParts, curvePeakCv, engineFuel, powerPeakRpm, TURBO_MAX_COMP
 import { applyGenericChassisMods, applyTyre, CLUTCH_TORQUE_MARGIN, combineMods, deepFreeze, fmtBar, workshopFinalDrive, workshopGearRatios, MAX_KNOCK_LOSS, type BuildResult, type BuildTune } from './buildCommon';
 import { ENGINE_FAMILIES } from './chapter2Parts';
 import { applyFactoryTurboParts, wastegateMaxBar } from './factoryTurboModel';
-import { factoryFuelSupply, peakFuelDemandKgS } from './fuelDelivery';
+import { factoryFuelSupply, fuelMixtureRatio, peakFuelDemandKgS } from './fuelDelivery';
 import { exhaustPressureAfterSections, isModernBreathingPart } from './modernBreathing';
 import {
   CATEGORY_LABEL,
@@ -136,6 +136,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   };
   const turboSlot = get('turbo');
   const turboKit = turboSlot && !('upgrade' in turboSlot) ? (turboSlot as TurboPart) : undefined;
+  const conversion = turboKit?.conversion;
   const turboUp = turboSlot && 'upgrade' in turboSlot ? (turboSlot as TurboUpgradePart) : undefined;
   const compressionAdd = (pistons?.compressionAdd ?? 0) + (get('engine-compression')?.compressionAdd ?? 0);
   let steadyBoostBar: { rpm: number; bar: number }[] = [];
@@ -195,13 +196,23 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
     if (tune.boostBar !== undefined && !turboKit) return { ok: false, errors: ['ajuste de pressão sem turbo instalado'] };
     if (turboKit) {
       const fuel = engineFuel(base.engine);
-      const max = TURBO_MAX_COMPRESSION[fuel];
+      const max = Math.min(TURBO_MAX_COMPRESSION[fuel], conversion?.maxCompressionRatio ?? Infinity);
       const cr = base.engine.compressionRatio + compressionAdd;
-      if (cr > max + 1e-9) return { ok: false, errors: [`taxa de compressão ${cr.toFixed(1).replace('.', ',')}:1 não aceita o kit turbo sem detonar`] };
+      if (cr > max + 1e-9) errors.push(`o kit turbo exige taxa de compressão até ${fmtBar(max)}:1 para limitar a detonação`);
+      if (conversion) {
+        if ((fuelSupply?.fuelCapacityScale ?? 1) < conversion.minFuelCapacityScale)
+          errors.push('a conversão exige bomba e injetores de maior vazão');
+        if ((ignition?.progression?.tier ?? 0) < conversion.minIgnitionTier)
+          errors.push(`a conversão exige ignição Stage ${conversion.minIgnitionTier} ou superior`);
+        if ((pistons?.torqueLimitScale ?? 1) < conversion.minInternalsTorqueScale)
+          errors.push('a conversão exige pistões e bielas com maior capacidade de torque');
+        if (!bySlot.has('cooling-oil')) errors.push('a conversão exige arrefecimento de óleo reforçado');
+      }
       if (tune.boostBar !== undefined) {
         const [lo, hi] = turboKit.boostRangeBar;
         if (!(tune.boostBar >= lo && tune.boostBar <= hi)) return { ok: false, errors: [`pressão fora da faixa do kit (${fmtBar(lo)} a ${fmtBar(hi)} bar)`] };
       }
+      if (errors.length) return { ok: false, errors };
     }
     if (compressionAdd > 0) {
       const fuel = engineFuel(base.engine);
@@ -267,7 +278,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
         };
       }
       // mechanical limit of the NA internals
-      if (family) {
+      if (family && !conversion) {
         const lim = family.internalsTorqueNm * (pistons?.torqueLimitScale ?? 1);
         car.engine.torqueCurve = { ...car.engine.torqueCurve, torqueNm: car.engine.torqueCurve.torqueNm.map((t) => Math.min(t, lim)) };
       }
@@ -281,12 +292,15 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   if (fuelSupply) {
     const original = factoryFuelSupply(base.engine);
     const maxFuelKgS = original.maxFuelKgS * fuelSupply.fuelCapacityScale;
-    if (engineModified && peakFuelDemandKgS(car.engine, original.airFuelRatio) > maxFuelKgS)
+    const airFuelRatio = conversion ? fuelMixtureRatio(car.engine) : original.airFuelRatio;
+    if (engineModified && peakFuelDemandKgS(car.engine, airFuelRatio) > maxFuelKgS)
       errors.push('Alimentação insuficiente para a mistura em plena carga. Instale uma bomba e injetores com maior vazão.');
-    car.engine.fueling = { ...original, maxFuelKgS };
+    car.engine.fueling = { airFuelRatio, maxFuelKgS };
   }
 
   const peakTorqueNm = Math.max(...car.engine.torqueCurve.torqueNm.filter((_, i) => car.engine.torqueCurve.rpm[i]! <= car.engine.revLimitRpm));
+  if (conversion && peakTorqueNm > ENGINE_FAMILIES[fam]!.internalsTorqueNm * (pistons?.torqueLimitScale ?? 1))
+    errors.push('o torque da conversão exige um conjunto alternado de maior capacidade ou pressão menor');
   const peakPowerCv = curvePeakCv(car.engine.torqueCurve, car.engine.revLimitRpm);
   car.engine.ratedPowerCv = Math.round(peakPowerCv);
 

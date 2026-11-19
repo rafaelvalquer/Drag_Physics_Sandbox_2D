@@ -13,13 +13,17 @@ export function peakFuelDemandKgS(engine: EngineConfig, airFuelRatio: number): n
   return Math.max(...points.map((rpm) => model.wotOperatingPoint(rpm).flow)) / airFuelRatio;
 }
 
+export function fuelMixtureRatio(engine: EngineConfig): number {
+  const boosted = engine.induction === 'turbo';
+  return engineFuel(engine) === 'ethanol' ? (boosted ? 7.5 : 8.1) : (boosted ? 11.8 : 12.8);
+}
+
 /** Estimated production capacity based on the original air curve and an injector duty reserve. */
 export function factoryFuelSupply(engine: EngineConfig): Supply {
   if (engine.fueling) return engine.fueling;
   const cached = originalSupplies.get(engine);
   if (cached) return cached;
-  const boosted = engine.induction === 'turbo';
-  const airFuelRatio = engineFuel(engine) === 'ethanol' ? (boosted ? 7.5 : 8.1) : (boosted ? 11.8 : 12.8);
+  const airFuelRatio = fuelMixtureRatio(engine);
   const stock = withStockBreathing(engine, powerPeakRpm(engine.torqueCurve, engine.revLimitRpm));
   const maxFuelKgS = peakFuelDemandKgS(stock, airFuelRatio) * 1.12;
   const supply = { maxFuelKgS, airFuelRatio };

@@ -3,11 +3,12 @@ import { MonotoneCubic } from '../../../core/math';
 import { runAccelerationTest } from '../../race/accelerationTest';
 import { RACE_DISTANCES } from '../../race/RaceController';
 import { boostRangeForParts, resolveBuild, type BuildResult, type ResolverVersion } from './BuildResolver';
-import { incompatibility } from './BuildResolverV2';
+import { familyOf, incompatibility, transmissionKindOf } from './BuildResolverV2';
 import { findPart, type PartDef } from './parts';
 import { reliabilityLimits } from './EngineReliability';
 import { physicalSlotOf, progressionOf } from './partProgression';
 import { isModernBreathingPart } from './modernBreathing';
+import { MODERN_CONVERSION_PARTS } from './modernConversionParts';
 
 /**
  * Workshop audit: the gain of one part on one car, measured with the real physics (factory-style
@@ -251,8 +252,11 @@ export function auditPartGain(car: CarConfig, part: PartDef, track: TrackConfig,
   if (version === 1 && part.since === 2) return { status: 'incompatible', reasons: ['Peça requer resolver 2.'] };
   if (progressionOf(part)?.objective === 'boost-headroom')
     return auditBoostHeadroom(car, [part], track, version)[0]!.audit;
+  if ('conversionPreparation' in part && part.conversionPreparation)
+    return auditConversionCompression(car, part, track, version);
   const errors = new Set<string>();
-  for (const ctx0 of CONTEXTS) {
+  const candidates = 'conversion' in part && part.conversion ? [conversionSupport(car)] : CONTEXTS;
+  for (const ctx0 of candidates) {
     const ctx = ctx0.filter((id) => findPart(id)?.category !== part.category);
     // a turbo kit is compared with the same build without any turbo hardware
     const baseIds = part.category === 'turbo' ? ctx.filter((id) => !requiresTurbo(id) && findPart(id)?.category !== 'turbo') : ctx;
@@ -278,6 +282,36 @@ export interface StageComparison {
   previous: string | null;
   next: string;
   audit: PartAudit;
+}
+
+function conversionSupport(car: CarConfig): string[] {
+  const family = familyOf(car);
+  const chamber = MODERN_CONVERSION_PARTS.find((part) =>
+    part.category === 'engine-compression' && !incompatibility(car, part));
+  const kind = transmissionKindOf(car);
+  const transmission = kind === 'manual' ? 'clutch-reinforced' : kind === 'dual-clutch' ? 'dct-upgrade' : 'at-upgrade';
+  return [
+    ...(chamber ? [chamber.id] : []),
+    `conversion-oil-${family}`, `fuel-${family}-s3`, `ignition-${family}-s3`, `rotating-assembly-${family}-s3`, transmission,
+  ];
+}
+
+function auditConversionCompression(car: CarConfig, part: PartDef, track: TrackConfig, version: ResolverVersion): PartAudit {
+  const kit = MODERN_CONVERSION_PARTS.find((option) =>
+    option.category === 'turbo' && option.progression?.tier === 3 && !incompatibility(car, option));
+  const context = conversionSupport(car).filter((id) => id !== part.id);
+  if (!kit) return { status: 'dependency-blocked', reasons: ['A família ainda não possui conversão compatível.'] };
+  const aspirated = build(car, context, version);
+  const withoutChamber = resolveBuild(car, [...context, kit.id], {}, version);
+  const converted = resolveBuild(car, [...context, part.id, kit.id], {}, version);
+  if (!aspirated || !converted.ok)
+    return { status: 'invalid-build', reasons: converted.ok ? ['Referência aspirada inválida.'] : converted.errors };
+  const audit = compareBuilds(withoutChamber.ok ? withoutChamber : aspirated, converted, part, context, track);
+  if (!('gain' in audit)) return audit;
+  const beforeBar = withoutChamber.ok ? withoutChamber.car.engine.turbo?.maxBoostBar ?? 0 : 0;
+  const afterBar = converted.car.engine.turbo?.maxBoostBar ?? 0;
+  audit.gain.boostHeadroom = { beforeBar, afterBar };
+  return { status: afterBar > beforeBar ? 'gain' : audit.status, gain: audit.gain };
 }
 
 function auditBoostHeadroom(car: CarConfig, stages: readonly PartDef[], track: TrackConfig, version: ResolverVersion): StageComparison[] {
@@ -317,7 +351,8 @@ export function auditPartStages(car: CarConfig, stages: readonly PartDef[], trac
   const slot = physicalSlotOf(first);
   const specialization = progressionOf(first)?.specialization;
   const errors = new Set<string>();
-  for (const candidate of CONTEXTS) {
+  const candidates = 'conversion' in first && first.conversion ? [conversionSupport(car)] : CONTEXTS;
+  for (const candidate of candidates) {
     const context = candidate.filter((id) => {
       const support = findPart(id);
       return support && physicalSlotOf(support) !== slot;

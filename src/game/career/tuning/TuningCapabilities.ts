@@ -124,6 +124,7 @@ export function tuningCapabilities(base: CarConfig, partIds: readonly string[], 
   let boost: RangeControl;
   const programmable = parts.find((p) => p.id === 'ecu-programmable') as EcuPart | undefined;
   const factoryBoost = base.engine.induction === 'turbo' ? base.engine.turbo?.maxBoostBar : undefined;
+  const conversion = parts.find((p) => p.category === 'turbo' && 'conversion' in p && p.conversion);
   const classicRange = boostRangeForParts(partIds.filter((id) => (findPart(id)?.since ?? 1) === 1));
   if (factoryBoost !== undefined && modern) {
     if (!programmable) boost = off('Exige ECU programável.', factoryBoost);
@@ -135,6 +136,9 @@ export function tuningCapabilities(base: CarConfig, partIds: readonly string[], 
       const max = Math.floor(Math.min(factoryBoost + hi, wg) * 100 + 1e-6) / 100;
       boost = { enabled: true, reason: null, min: round(factoryBoost + lo, 0.01), max, step: 0.05, default: Math.min(max, round(def, 0.01)) };
     }
+  } else if (conversion && 'boostRangeBar' in conversion) {
+    const [min, max] = conversion.boostRangeBar;
+    boost = { enabled: true, reason: null, min, max, step: 0.01, default: max };
   } else if (classicRange) {
     const def = e.turbo?.maxBoostBar ?? 0.6;
     boost =

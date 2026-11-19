@@ -7,6 +7,7 @@ import { MODERN_FUEL_PARTS } from './modernFuelParts';
 import { MODERN_TOP_END_PARTS } from './modernTopEndParts';
 import { MODERN_INTERNAL_PARTS } from './modernInternalParts';
 import { MODERN_IGNITION_PARTS } from './modernIgnitionParts';
+import { MODERN_CONVERSION_PARTS } from './modernConversionParts';
 import type { PartProgression } from './partProgression';
 
 /**
@@ -271,6 +272,13 @@ export interface TurboPart extends PartBase {
   massAddKg: number;
   /** Intercooler effectiveness (fraction of the compressor temperature rise removed). */
   intercoolerEffectiveness: number;
+  /** Minimum supporting hardware for a modern NA conversion. */
+  conversion?: {
+    maxCompressionRatio: number;
+    minFuelCapacityScale: number;
+    minInternalsTorqueScale: number;
+    minIgnitionTier: 1 | 2 | 3;
+  };
 }
 
 export interface ClutchPart extends PartBase {
@@ -416,6 +424,7 @@ export interface CompressionPart extends PartBase {
   category: 'engine-compression';
   /** Change in compression ratio from machining the combustion chambers to a measured volume. */
   compressionAdd: number;
+  conversionPreparation?: true;
 }
 
 export interface FlywheelPart extends PartBase {
@@ -783,6 +792,7 @@ export const ALL_PARTS: readonly PartDef[] = [
   ...PARTS, ...CHAPTER2_PARTS, ...CHAPTER3_PARTS, ...MODERN_BREATHING_PARTS,
   ...MODERN_DRIVELINE_PARTS, ...MODERN_FUEL_PARTS, ...MODERN_TOP_END_PARTS, ...MODERN_INTERNAL_PARTS,
   ...MODERN_IGNITION_PARTS,
+  ...MODERN_CONVERSION_PARTS,
 ];
 
 export function findPart(id: string): PartDef | undefined {
