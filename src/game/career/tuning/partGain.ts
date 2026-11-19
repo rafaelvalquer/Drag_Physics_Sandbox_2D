@@ -45,6 +45,12 @@ export interface PartGain {
   wastegateAfterBar: number | null;
   spoolTimeBeforeS: number | null;
   spoolTimeAfterS: number | null;
+  boostTargetBeforeBar: number | null;
+  boostTargetAfterBar: number | null;
+  fuelTargetBeforeAfr: number | null;
+  fuelTargetAfterAfr: number | null;
+  mappedTorqueLimitBeforeNm: number | null;
+  mappedTorqueLimitAfterNm: number | null;
   fuelCapacityBeforeKgS: number | null;
   fuelCapacityAfterKgS: number | null;
   etBefore: number;
@@ -189,6 +195,12 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     wastegateAfterBar: wastegateLimit(after),
     spoolTimeBeforeS: base.car.engine.turbo?.spoolTimeS ?? null,
     spoolTimeAfterS: after.car.engine.turbo?.spoolTimeS ?? null,
+    boostTargetBeforeBar: base.car.engine.turbo?.maxBoostBar ?? null,
+    boostTargetAfterBar: after.car.engine.turbo?.maxBoostBar ?? null,
+    fuelTargetBeforeAfr: base.car.engine.fueling?.airFuelRatio ?? null,
+    fuelTargetAfterAfr: after.car.engine.fueling?.airFuelRatio ?? null,
+    mappedTorqueLimitBeforeNm: base.mappedTorqueLimitNm ?? null,
+    mappedTorqueLimitAfterNm: after.mappedTorqueLimitNm ?? null,
     fuelCapacityBeforeKgS: base.car.engine.fueling?.maxFuelKgS ??
       ('fuelCapacityScale' in part && after.car.engine.fueling ? after.car.engine.fueling.maxFuelKgS / part.fuelCapacityScale : null),
     fuelCapacityAfterKgS: after.car.engine.fueling?.maxFuelKgS ?? null,
@@ -219,7 +231,7 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     gain.engineInertiaAfterKgM2 < gain.engineInertiaBeforeKgM2 && gain.etAfter - gain.etBefore <= 0.05;
   const compressionGain = group === 'modern-na-compression' &&
     gain.cvAfter - gain.cvBefore >= 0.15 && gain.etAfter - gain.etBefore <= NOT_WORSE_S;
-  const ignitionGain = group === 'modern-ignition' && gain.burnBeforeDeg - gain.burnAfterDeg >= 0.1 &&
+  const ignitionGain = (group === 'modern-ignition' || group === 'classic-ecu') && gain.burnBeforeDeg - gain.burnAfterDeg >= 0.1 &&
     gain.etAfter - gain.etBefore <= 0.05;
   // Track time can trade off against high-flow output, as for the high-rpm cylinder-head series.
   const turboFlowGain = group === 'modern-factory-turbo' && gain.etAfter - gain.etBefore <= 0.08 &&
@@ -344,6 +356,13 @@ function conversionSupport(car: CarConfig): string[] {
 
 function auditContexts(car: CarConfig, part: PartDef): readonly string[][] {
   if ('conversion' in part && part.conversion) return [conversionSupport(car)];
+  if (part.category === 'ecu' && part.fuelTargetScale !== undefined) {
+    const family = familyOf(car);
+    return [[
+      `fuel-${family}-s3`, supportedTransmission(car),
+      ...(car.engine.induction === 'turbo' ? [`rotating-assembly-${family}-s3`, `charge-cooler-${family}-s3`] : []),
+    ]];
+  }
   if ('factoryTurboStage' in part && part.factoryTurboStage) {
     const family = familyOf(car);
     return [[

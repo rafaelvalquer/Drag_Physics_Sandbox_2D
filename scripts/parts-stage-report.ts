@@ -50,6 +50,7 @@ const metrics = [
   'Δ admissão kPa', 'Δ escape kPa', 'Δ borboleta ms', 'Δ combustível g/s',
   'Δ giro seguro rpm', 'Δ inércia kg·m²', 'Δ duração da queima °', 'Δ perda por detonação p.p.',
   'Δ temperatura da carga no alvo °C', 'Δ limite da wastegate bar', 'Δ resposta do turbo s', 'Pressão admissível bar',
+  'Δ pressão alvo bar', 'Δ corte rpm', 'Δ alvo ar/combustível', 'Δ limite de torque do mapa N·m',
 ];
 const markdown = [
   '# Progressão de estágios da oficina',
@@ -83,6 +84,10 @@ for (const row of rows) {
       restrictionDelta(m.wastegateBeforeBar, m.wastegateAfterBar),
       restrictionDelta(m.spoolTimeBeforeS, m.spoolTimeAfterS),
       m.boostHeadroom ? `${m.boostHeadroom.beforeBar.toFixed(2)} → ${m.boostHeadroom.afterBar.toFixed(2)}` : '—',
+      restrictionDelta(m.boostTargetBeforeBar, m.boostTargetAfterBar),
+      delta(m.redlineBeforeRpm, m.redlineAfterRpm),
+      restrictionDelta(m.fuelTargetBeforeAfr, m.fuelTargetAfterAfr),
+      restrictionDelta(m.mappedTorqueLimitBeforeNm, m.mappedTorqueLimitAfterNm),
     ] : metrics.map(() => '—');
     const figures = values.join(' | ');
     markdown.push(`${prefix} ${previous ?? 'Original'} | ${next} | ${figures} | ${audit.status} |`);

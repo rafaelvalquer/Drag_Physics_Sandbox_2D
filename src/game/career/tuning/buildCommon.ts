@@ -82,6 +82,8 @@ export type BuildResult =
       chargeTemperatureAtTargetK?: number;
       /** Maximum pressure the installed actuator can hold. Other build limits still apply. */
       wastegateLimitBar?: number;
+      /** Maximum torque permitted by the map and supported mechanical hardware. */
+      mappedTorqueLimitNm?: number;
       knockLoss: number;
       /** Resolver version that produced the build. */
       version: ResolverVersion;

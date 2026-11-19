@@ -40,10 +40,12 @@ const existing: Readonly<Record<string, PartProgression>> = {
   'boost-street': { tier: 1, group: 'classic-boost-control', specialization: 'turbo' },
   'boost-classic-sport': { tier: 2, group: 'classic-boost-control', specialization: 'turbo' },
   'boost-race': { tier: 3, group: 'classic-boost-control', specialization: 'turbo' },
+  'ecu-remap': { tier: 1, group: 'classic-ecu', specialization: 'rua' },
+  'ecu-street': { tier: 2, group: 'classic-ecu', specialization: 'rua' },
+  'ecu-race': { tier: 3, group: 'classic-ecu', specialization: 'rua' },
   'ecu-stage1': { tier: 1, group: 'factory-turbo-ecu', specialization: 'turbo' },
   'ecu-stage2': { tier: 2, group: 'factory-turbo-ecu', specialization: 'turbo' },
   'ecu-stage3': { tier: 3, group: 'factory-turbo-ecu', specialization: 'turbo' },
-  'ecu-stage1-na': { tier: 1, group: 'modern-na-ecu', specialization: 'aspirado' },
 };
 
 export function progressionOf(part: PartDef, family?: string): PartProgression | undefined {

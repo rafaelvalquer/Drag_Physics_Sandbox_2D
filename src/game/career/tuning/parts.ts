@@ -10,6 +10,7 @@ import { MODERN_IGNITION_PARTS } from './modernIgnitionParts';
 import { MODERN_CONVERSION_PARTS } from './modernConversionParts';
 import { MODERN_INTERCOOLER_PARTS, MODERN_TURBO_PARTS } from './modernTurboParts';
 import { MODERN_PRESSURE_PARTS } from './modernPressureParts';
+import { MODERN_ECU_PARTS } from './modernEcuParts';
 import type { PartProgression } from './partProgression';
 
 /**
@@ -363,6 +364,10 @@ export interface EcuPart extends PartBase {
   minTurboFlowScale?: number;
   /** Minimum fraction of the compressor heat that the charge cooler must remove. */
   minIntercoolerEffectiveness?: number;
+  /** Minimum fuel flow as a multiple of the original system capacity. */
+  minFuelCapacityScale?: number;
+  /** Full-load air/fuel ratio relative to the stock map for this induction and fuel. */
+  fuelTargetScale?: number;
   /** Above this fraction of the factory internals' torque, forged pistons/rods are required. */
   forgedAboveFraction?: number;
   /** Staged map: torque target at most this multiple of the factory peak torque. */
@@ -812,6 +817,7 @@ export const ALL_PARTS: readonly PartDef[] = [
   ...MODERN_CONVERSION_PARTS,
   ...MODERN_TURBO_PARTS, ...MODERN_INTERCOOLER_PARTS,
   ...MODERN_PRESSURE_PARTS,
+  ...MODERN_ECU_PARTS,
 ];
 
 export function findPart(id: string): PartDef | undefined {

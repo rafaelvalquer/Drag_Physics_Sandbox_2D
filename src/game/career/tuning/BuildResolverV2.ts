@@ -118,9 +118,10 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   const ignitionMod = ignition && { burnDurationScale: ignition.burnDurationScale, knockRetardScale: ignition.knockRetardScale };
   const exhaust = get('exhaust');
   const fuelSupply = get('electronics-fuel');
+  const meteredFuel = fuelSupply || ecu?.fuelTargetScale !== undefined;
   const ratedRpm = powerPeakRpm(base.engine.torqueCurve, base.engine.revLimitRpm);
   // Meter the new supply against the air demand before any previous fuel cut.
-  const stockInput = fuelSupply && base.engine.fueling ? { ...base.engine, fueling: undefined } : base.engine;
+  const stockInput = meteredFuel && base.engine.fueling ? { ...base.engine, fueling: undefined } : base.engine;
   const stockEngine = withStockBreathing(stockInput, ratedRpm);
   const stockBackPressure = stockEngine.breathing!.exhaustBackPressureKPa;
   const exhaustMod = sectionMod.backPressureReductionKPa === undefined ? sectionMod : {
@@ -144,6 +145,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   let exhaustRestrictionKPa: number | undefined;
   let chargeTemperatureAtTargetK: number | undefined;
   let wastegateLimitBar: number | undefined;
+  let mappedTorqueLimitNm: number | undefined;
   let engineModified = false;
 
   // ---- engine ----
@@ -155,8 +157,9 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
     const wastegate = get('turbo-wastegate');
     const wg = wastegateMaxBar(stockEngine, boostControl, ecu, wastegate);
     wastegateLimitBar = wg;
-    if (turboUp && turboUp.factoryTurboStage !== 1 && ecu?.level !== 'programmable' && ecu?.level !== 'stage3')
-      errors.push('a turbina de maior fluxo exige ECU programável ou mapa Stage 3');
+    const matchedHybrid = turboUp?.factoryTurboStage === 2 && ecu?.level === 'stage2' && ecu.fuelTargetScale !== undefined;
+    if (turboUp && turboUp.factoryTurboStage !== 1 && !matchedHybrid && ecu?.level !== 'programmable' && ecu?.level !== 'stage3')
+      errors.push('a turbina de maior fluxo exige ECU programável ou remap compatível');
     if (turboUp?.factoryTurboStage === 3) {
       if ((pistons?.torqueLimitScale ?? 1) < 1.45) errors.push('a turbina de competição exige pistões e bielas forjados');
       if ((get('intercooler')?.effectiveness ?? 0.6) < 0.8) errors.push('a turbina de competição exige intercooler de maior capacidade');
@@ -179,6 +182,8 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
       errors.push(`${ecu.name} exige a turbina de maior fluxo`);
     if (ecu?.minIntercoolerEffectiveness && (get('intercooler')?.effectiveness ?? 0.6) < ecu.minIntercoolerEffectiveness)
       errors.push(`${ecu.name} exige o intercooler de maior capacidade`);
+    if (ecu?.minFuelCapacityScale && (fuelSupply?.fuelCapacityScale ?? 1) < ecu.minFuelCapacityScale)
+      errors.push(`${ecu.name} exige alimentação de maior vazão`);
     if (errors.length) return { ok: false, errors };
     const cam = get('camshaft');
     const head = get('cylinder-head');
@@ -207,6 +212,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
       knockLoss = r.knockLoss;
       exhaustRestrictionKPa = r.exhaustRestrictionKPa;
       chargeTemperatureAtTargetK = r.chargeTemperatureAtTargetK;
+      if (Number.isFinite(r.torqueLimitNm)) mappedTorqueLimitNm = r.torqueLimitNm;
     } else {
       car.engine = structuredClone(stockEngine);
       chargeTemperatureAtTargetK = factoryChargeTemperatureK(stockEngine.turbo!.maxBoostBar);
@@ -215,6 +221,8 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
     // NA engine (or a Chapter 1 engine with a v2 part): breathing model
     if (tune.boostBar !== undefined && !turboKit) return { ok: false, errors: ['ajuste de pressão sem turbo instalado'] };
     if (turboKit) {
+      if (conversion && ecu?.fuelTargetScale !== undefined && ecu.compat?.induction === 'NA')
+        errors.push('a conversão turbo exige remover o remap aspirado');
       const fuel = engineFuel(base.engine);
       const max = Math.min(TURBO_MAX_COMPRESSION[fuel], conversion?.maxCompressionRatio ?? Infinity);
       const cr = base.engine.compressionRatio + compressionAdd;
@@ -299,7 +307,9 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
       }
       // mechanical limit of the NA internals
       if (family && !conversion) {
-        const lim = family.internalsTorqueNm * (pistons?.torqueLimitScale ?? 1);
+        const mapLimit = ecu?.fuelTargetScale !== undefined ? ecu.torqueLimitFraction : 1;
+        const lim = family.internalsTorqueNm * (pistons?.torqueLimitScale ?? 1) * mapLimit;
+        if (ecu) mappedTorqueLimitNm = lim;
         car.engine.torqueCurve = { ...car.engine.torqueCurve, torqueNm: car.engine.torqueCurve.torqueNm.map((t) => Math.min(t, lim)) };
       }
     } else car.engine = structuredClone(stockEngine);
@@ -309,10 +319,10 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   // lighter reciprocating/rotating parts of a forged set
   if (pistons?.inertiaScale) car.engine.inertiaKgM2 = Math.round(car.engine.inertiaKgM2 * pistons.inertiaScale * 10000) / 10000;
 
-  if (fuelSupply) {
+  if (meteredFuel) {
     const original = factoryFuelSupply(base.engine);
-    const maxFuelKgS = original.maxFuelKgS * fuelSupply.fuelCapacityScale;
-    const airFuelRatio = conversion ? fuelMixtureRatio(car.engine) : original.airFuelRatio;
+    const maxFuelKgS = original.maxFuelKgS * (fuelSupply?.fuelCapacityScale ?? 1);
+    const airFuelRatio = (conversion ? fuelMixtureRatio(car.engine) : original.airFuelRatio) * (ecu?.fuelTargetScale ?? 1);
     if (engineModified && peakFuelDemandKgS(car.engine, airFuelRatio) > maxFuelKgS)
       errors.push('Alimentação insuficiente para a mistura em plena carga. Instale uma bomba e injetores com maior vazão.');
     car.engine.fueling = { airFuelRatio, maxFuelKgS };
@@ -444,7 +454,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   if (errors.length) return { ok: false, errors };
   return {
     ok: true, car: deepFreeze(v.value!), parts, key, peakTorqueNm, peakPowerCv, steadyBoostBar, knockLoss,
-    exhaustRestrictionKPa, chargeTemperatureAtTargetK, wastegateLimitBar, version: 2,
+    exhaustRestrictionKPa, chargeTemperatureAtTargetK, wastegateLimitBar, mappedTorqueLimitNm, version: 2,
   };
 }
 

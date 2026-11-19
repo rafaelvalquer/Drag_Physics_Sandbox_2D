@@ -2,7 +2,7 @@
 
 Os 13 carros modernos com turbo de fábrica têm três estágios de turbina e três de intercooler, com encaixe por família. Nos V6 biturbo, a preparação substitui o par de turbinas e preserva a operação de um rotor por bancada. Os perfis são estimativas para a simulação.
 
-O primeiro estágio da turbina revisa rotor e carcaça e funciona com o mapa original. O segundo usa um conjunto híbrido e exige ECU programável ou mapa Stage 3. O conjunto de competição exige também internos forjados, intercooler com remoção de pelo menos 80% do aquecimento do compressor e alimentação de maior vazão. A capacidade da transmissão continua verificada em todos os estágios. Os remaps aceitam peças que atingem os mesmos requisitos de vazão e arrefecimento das peças legadas.
+O primeiro estágio da turbina revisa rotor e carcaça e funciona com o mapa original. O segundo usa um conjunto híbrido e aceita ECU programável, mapa Stage 3 ou o remap Stage 2 da família. O conjunto de competição exige também internos forjados, intercooler com remoção de pelo menos 80% do aquecimento do compressor e alimentação de maior vazão. A capacidade da transmissão continua verificada em todos os estágios. Os remaps aceitam peças que atingem os mesmos requisitos de vazão e arrefecimento das peças legadas.
 
 O modelo recalcula o limite de vazão, a contrapressão no fluxo de referência e a temperatura da carga. O turbo em corrida usa o novo tempo de resposta e a necessidade de vazão de escape para encher. A pressão alvo segue a ECU e a wastegate. A temperatura relatada é estimada à pressão alvo, sob as mesmas condições de referência. Ela complementa o resultado de pista e o torque medido nas três faixas de rotação.
 
