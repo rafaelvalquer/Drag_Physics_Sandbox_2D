@@ -345,7 +345,7 @@ export class EngineModel {
       if (!this.turbo) return { map, flow, target: 0 };
       const e = this.cfg.egt;
       const load = map / this.referencePressure;
-      const egt = e.idleK + (e.maxK - e.idleK) * clamp01(load * (0.3 + 0.7 * (rpm / this.cfg.redlineRpm)));
+      const egt = e.idleK + (e.maxK - e.idleK) * clamp01(load * this.fueledFraction(flow) * (0.3 + 0.7 * (rpm / this.cfg.redlineRpm)));
       return { map, flow, target: this.turbo.steadyBoost(flow, egt / e.maxK) };
     };
     if (!this.turbo) {
@@ -427,7 +427,7 @@ export class EngineModel {
     const op = this.steadyWot(rpm);
     const w = rpmToRadS(rpm);
     const back = this.backPressureFor(ATMOSPHERIC_PRESSURE, op.flow, op.boost);
-    const indicatedNm = this.wotIndicatedTorque(rpm) * this.willansFactor(op.map);
+    const indicatedNm = this.wotIndicatedTorque(rpm) * this.willansFactor(op.map) * this.fueledFraction(op.flow);
     const frictionNm = this.frictionTorque(w) + this.cfg.accessoriesNm;
     const pumpingNm = this.pumpingLoss(op.map, back);
     return { ...op, back, indicatedNm, frictionNm, pumpingNm, brakeNm: indicatedNm - frictionNm - pumpingNm };
@@ -447,7 +447,14 @@ export class EngineModel {
     }
     const back = this.backPressureFor(this.ambient.pressurePa, flow, boostPa);
     const pumping = this.pumpingLoss(p, back);
-    return this.wotIndicatedTorque(rpm) * this.willansFactor(p) - this.frictionTorque(w) - this.cfg.accessoriesNm - pumping;
+    return this.wotIndicatedTorque(rpm) * this.willansFactor(p) * this.fueledFraction(flow) - this.frictionTorque(w) - this.cfg.accessoriesNm - pumping;
+  }
+
+  /** Fraction of the trapped air the fuel system can serve at the commanded mixture. */
+  private fueledFraction(airKgS: number): number {
+    const fueling = this.cfg.fueling;
+    if (!fueling || airKgS <= 0) return 1;
+    return Math.min(1, (fueling.maxFuelKgS * fueling.airFuelRatio) / airKgS);
   }
 
   /**
@@ -614,7 +621,7 @@ export class EngineModel {
     this.load = clamp(this.manifoldPressure / this.referencePressure, 0, 1.8);
     const indicated = this.wotIndicatedTorque(Math.max(rpm, cfg.torqueCurve.rpm[0]!));
     const willans = this.willansFactor(this.manifoldPressure);
-    this.torqueCombustion = omega > 0 ? indicated * willans * burn : 0;
+    this.torqueCombustion = omega > 0 ? indicated * willans * burn * this.fueledFraction(this.airMassFlow) : 0;
 
     // ----- losses -----
     const back = this.backPressure();
@@ -678,7 +685,7 @@ export class EngineModel {
     // exhaust gas temperature (first order, approximate)
     const burning = burningState && !this.fuelCut && !limiter && rpm > 200;
     const target = burning
-      ? cfg.egt.idleK + (cfg.egt.maxK - cfg.egt.idleK) * clamp01(this.load * (0.3 + 0.7 * (rpm / cfg.redlineRpm)))
+      ? cfg.egt.idleK + (cfg.egt.maxK - cfg.egt.idleK) * clamp01(this.load * this.fueledFraction(this.airMassFlow) * (0.3 + 0.7 * (rpm / cfg.redlineRpm)))
       : this.ambient.temperatureK + (rpm > 100 ? 120 : 0);
     this.exhaustTempK = firstOrder(this.exhaustTempK, target, h, target > this.exhaustTempK ? 0.7 : 2.5);
 

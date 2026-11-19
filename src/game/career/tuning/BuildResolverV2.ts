@@ -4,6 +4,7 @@ import { applyEngineParts, curvePeakCv, engineFuel, powerPeakRpm, TURBO_MAX_COMP
 import { applyGenericChassisMods, applyTyre, CLUTCH_TORQUE_MARGIN, combineMods, deepFreeze, fmtBar, workshopFinalDrive, workshopGearRatios, MAX_KNOCK_LOSS, type BuildResult, type BuildTune } from './buildCommon';
 import { ENGINE_FAMILIES } from './chapter2Parts';
 import { applyFactoryTurboParts, wastegateMaxBar } from './factoryTurboModel';
+import { factoryFuelSupply, peakFuelDemandKgS } from './fuelDelivery';
 import { exhaustPressureAfterSections, isModernBreathingPart } from './modernBreathing';
 import {
   CATEGORY_LABEL,
@@ -112,8 +113,11 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   const get = <C extends PartCategory>(c: C): Extract<PartDef, { category: C }> | undefined => bySlot.get(c) as Extract<PartDef, { category: C }> | undefined;
   const ecu = get('ecu');
   const exhaust = get('exhaust');
+  const fuelSupply = get('electronics-fuel');
   const ratedRpm = powerPeakRpm(base.engine.torqueCurve, base.engine.revLimitRpm);
-  const stockEngine = withStockBreathing(base.engine, ratedRpm);
+  // Meter the new supply against the air demand before any previous fuel cut.
+  const stockInput = fuelSupply && base.engine.fueling ? { ...base.engine, fueling: undefined } : base.engine;
+  const stockEngine = withStockBreathing(stockInput, ratedRpm);
   const stockBackPressure = stockEngine.breathing!.exhaustBackPressureKPa;
   const exhaustMod = sectionMod.backPressureReductionKPa === undefined ? sectionMod : {
     ...sectionMod,
@@ -132,6 +136,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   let steadyBoostBar: { rpm: number; bar: number }[] = [];
   let knockLoss = 0;
   let exhaustRestrictionKPa: number | undefined;
+  let engineModified = false;
 
   // ---- engine ----
   const factoryTurbo = base.engine.induction === 'turbo' && fam !== LEGACY_FAMILY;
@@ -157,6 +162,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
     const manifold = get('intake-manifold');
     const anyEngine = genericMod.coolingFrictionScale || genericMod.coolingKnockScale || ecu || turboUp || get('intercooler') || get('boost-control') || get('pistons') || get('intake-filter') || exhaust || cam || head || manifold || sectionParts.length > 0;
     if (anyEngine) {
+      engineModified = true;
       const r = applyFactoryTurboParts(stockEngine, {
         family,
         filter: get('intake-filter'),
@@ -218,6 +224,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
     };
     const any = Object.values(engineParts).some((v) => v !== undefined);
     if (any) {
+      engineModified = true;
       const r = applyEngineParts(stockEngine, engineParts);
       car.engine = r.engine;
       steadyBoostBar = r.steadyBoostBar;
@@ -260,6 +267,14 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   // lighter reciprocating/rotating parts of a forged set
   const pist = get('pistons');
   if (pist?.inertiaScale) car.engine.inertiaKgM2 = Math.round(car.engine.inertiaKgM2 * pist.inertiaScale * 10000) / 10000;
+
+  if (fuelSupply) {
+    const original = factoryFuelSupply(base.engine);
+    const maxFuelKgS = original.maxFuelKgS * fuelSupply.fuelCapacityScale;
+    if (engineModified && peakFuelDemandKgS(car.engine, original.airFuelRatio) > maxFuelKgS)
+      errors.push('Alimentação insuficiente para a mistura em plena carga. Instale uma bomba e injetores com maior vazão.');
+    car.engine.fueling = { ...original, maxFuelKgS };
+  }
 
   const peakTorqueNm = Math.max(...car.engine.torqueCurve.torqueNm.filter((_, i) => car.engine.torqueCurve.rpm[i]! <= car.engine.revLimitRpm));
   const peakPowerCv = curvePeakCv(car.engine.torqueCurve, car.engine.revLimitRpm);

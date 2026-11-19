@@ -49,12 +49,12 @@ const markdown = [
   '',
   `Comparações adjacentes na mesma configuração de apoio, na pista de testes a ${WORKSHOP_DISTANCE_M.toFixed(3)} m. As séries com estágio ausente ou sem contexto comum ficam explícitas.`,
   '',
-  '| Carro | Família | Grupo | Antes | Depois | Δ cv | Δ N·m | Δ 0–100 s | Δ ¼ milha s | Δ admissão kPa | Δ escape kPa | Δ borboleta ms | Resultado |',
-  '|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|',
+  '| Carro | Família | Grupo | Antes | Depois | Δ cv | Δ N·m | Δ 0–100 s | Δ ¼ milha s | Δ admissão kPa | Δ escape kPa | Δ borboleta ms | Δ combustível g/s | Resultado |',
+  '|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|',
 ];
 for (const row of rows) {
   const prefix = `| ${row.carId} | ${row.family} | ${row.group} |`;
-  if (row.missingTiers.length) markdown.push(`${prefix} — | — | — | — | — | — | — | — | — | Faltam stages ${row.missingTiers.join(', ')} |`);
+  if (row.missingTiers.length) markdown.push(`${prefix} — | — | — | — | — | — | — | — | — | — | Faltam stages ${row.missingTiers.join(', ')} |`);
   for (const { previous, next, audit } of row.comparisons) {
     const m = 'gain' in audit ? audit.gain : null;
     const values = m ? [
@@ -65,7 +65,9 @@ for (const row of rows) {
       restrictionDelta(m.intakeRestrictionBeforeKPa, m.intakeRestrictionAfterKPa),
       restrictionDelta(m.exhaustRestrictionBeforeKPa, m.exhaustRestrictionAfterKPa),
       delta(1000 * m.throttleBeforeS, 1000 * m.throttleAfterS),
-    ] : Array<string>(7).fill('—');
+      m.fuelCapacityBeforeKgS !== null && m.fuelCapacityAfterKgS !== null
+        ? delta(1000 * m.fuelCapacityBeforeKgS, 1000 * m.fuelCapacityAfterKgS) : '—',
+    ] : Array<string>(8).fill('—');
     const figures = values.join(' | ');
     markdown.push(`${prefix} ${previous ?? 'Original'} | ${next} | ${figures} | ${audit.status} |`);
   }

@@ -3,6 +3,7 @@ import { CHAPTER2_PARTS } from './chapter2Parts';
 import { CHAPTER3_PARTS } from './chapter3Parts';
 import { MODERN_BREATHING_PARTS } from './modernBreathingParts';
 import { MODERN_DRIVELINE_PARTS } from './modernDrivelineParts';
+import { MODERN_FUEL_PARTS } from './modernFuelParts';
 import type { PartProgression } from './partProgression';
 
 /**
@@ -293,6 +294,12 @@ export interface ManualGearsetPart extends PartBase {
   efficiencyAdd: number;
 }
 
+export interface FuelSystemPart extends PartBase {
+  category: 'electronics-fuel';
+  /** Continuous metered fuel delivery relative to the factory hardware estimate. */
+  fuelCapacityScale: number;
+}
+
 export interface TirePart extends PartBase {
   category: 'tires';
   grade: 'sport' | 'semiSlick' | 'slick';
@@ -470,6 +477,7 @@ export type PartDef =
   | ClutchPart
   | DifferentialPart
   | ManualGearsetPart
+  | FuelSystemPart
   | TirePart
   | ExpandedPart
   | EcuPart
@@ -744,7 +752,7 @@ const DYNO_LAB_PARTS: readonly PartDef[] = [
 export const PARTS: readonly PartDef[] = [...BASE_PARTS, ...EXPANDED_PARTS, ...DYNO_LAB_PARTS];
 
 /** Every part of every resolver version (ids are unique across versions). */
-export const ALL_PARTS: readonly PartDef[] = [...PARTS, ...CHAPTER2_PARTS, ...CHAPTER3_PARTS, ...MODERN_BREATHING_PARTS, ...MODERN_DRIVELINE_PARTS];
+export const ALL_PARTS: readonly PartDef[] = [...PARTS, ...CHAPTER2_PARTS, ...CHAPTER3_PARTS, ...MODERN_BREATHING_PARTS, ...MODERN_DRIVELINE_PARTS, ...MODERN_FUEL_PARTS];
 
 export function findPart(id: string): PartDef | undefined {
   return ALL_PARTS.find((p) => p.id === id);

@@ -154,6 +154,11 @@ export const EngineSchema = z
     family: z.string().min(1).max(32).optional(),
     /** Fuel (display + knock limit of boosted builds). */
     fuel: z.enum(['gasoline', 'ethanol']).optional(),
+    /** Metered fuel capacity and commanded mixture for hardware that models fuel delivery. */
+    fueling: z.object({
+      maxFuelKgS: finite(0.001, 0.5),
+      airFuelRatio: finite(5, 20),
+    }).optional(),
     combustion: z.object({
       burnDurationDeg: finite(25, 100),
       /** Cycle-to-cycle variation (coefficient of variation of the combustion pressure rise). */

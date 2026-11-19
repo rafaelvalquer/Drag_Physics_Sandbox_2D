@@ -32,6 +32,8 @@ export interface PartGain {
   exhaustRestrictionAfterKPa: number | null;
   throttleBeforeS: number;
   throttleAfterS: number;
+  fuelCapacityBeforeKgS: number | null;
+  fuelCapacityAfterKgS: number | null;
   etBefore: number;
   etAfter: number;
   t100Before: number;
@@ -139,6 +141,9 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     exhaustRestrictionAfterKPa: after.exhaustRestrictionKPa ?? after.car.engine.breathing?.exhaustBackPressureKPa ?? null,
     throttleBeforeS: base.car.engine.throttle.responseTimeS,
     throttleAfterS: after.car.engine.throttle.responseTimeS,
+    fuelCapacityBeforeKgS: base.car.engine.fueling?.maxFuelKgS ??
+      ('fuelCapacityScale' in part && after.car.engine.fueling ? after.car.engine.fueling.maxFuelKgS / part.fuelCapacityScale : null),
+    fuelCapacityAfterKgS: after.car.engine.fueling?.maxFuelKgS ?? null,
     etBefore: a.et,
     etAfter: b.et,
     t100Before: a.t100,
@@ -158,7 +163,9 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
   };
   const effect = physicsSignature(base.car) !== physicsSignature(after.car) ||
     gain.safeRpmBefore !== gain.safeRpmAfter || gain.exhaustRestrictionBeforeKPa !== gain.exhaustRestrictionAfterKPa;
-  const improvement = isGain(gain) || (isModernBreathingPart(part) && breathingGain(part, gain)) || drivelineGain(part, gain);
+  const fuelGain = 'fuelCapacityScale' in part && gain.fuelCapacityBeforeKgS !== null && gain.fuelCapacityAfterKgS !== null &&
+    gain.fuelCapacityAfterKgS - gain.fuelCapacityBeforeKgS >= 0.0001 && gain.etAfter - gain.etBefore <= 0.05;
+  const improvement = isGain(gain) || (isModernBreathingPart(part) && breathingGain(part, gain)) || drivelineGain(part, gain) || fuelGain;
   return { status: !effect ? 'no-effect' : improvement ? 'gain' : 'no-gain', gain };
 }
 

@@ -101,4 +101,7 @@ test('oficina moderna: libera, substitui e guarda estágios da mesma peça', asy
   await expect(page.getByTestId('ws-compare')).toContainText('Capacidade do câmbio');
   await expect(page.getByTestId('ws-compare')).toContainText('Fase de torque da troca');
   await expect(page.getByTestId('ws-compare')).toContainText('Travamento do conversor');
+  await page.getByTestId('ws-tab-electronics').click();
+  await page.getByTestId('ws-part-fuel-bmw-n20-s1').click();
+  await expect(page.getByTestId('ws-compare')).toContainText('Vazão de combustível');
 });

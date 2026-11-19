@@ -37,6 +37,7 @@ import { failureSpecFor, reconcileTune, tuneReliability } from '../game/career/t
 import { playBlownEngine, playRiskWarning } from '../audio/core/blownEngineSound';
 import { ALL_PARTS, CATEGORY_DESCRIPTION, CATEGORY_LABEL, CATEGORY_ORDER_V1, UNLOCK_LABEL, WORKSHOP_TABS, findPart, type PartCategory, type PartDef } from '../game/career/tuning/parts';
 import { progressionOf } from '../game/career/tuning/partProgression';
+import { factoryFuelSupply } from '../game/career/tuning/fuelDelivery';
 import { RACE_DISTANCES, RaceController, type LaneResult, type RaceLane } from '../game/race/RaceController';
 import { runAccelerationTest } from '../game/race/accelerationTest';
 import type { CameraMode, RenderVehicle, TrackMarker, TreeLights } from '../game/scenes/RaceScene';
@@ -1000,6 +1001,10 @@ export class CareerMode implements Mode {
       const t1 = after.car.transmission;
       const torque = (n: number): string => `${f1(n)} N·m`;
       const ms = (n: number): string => `${f1(n * 1000)} ms`;
+      const fuel0 = before.car.engine.fueling;
+      const fuel1 = after.car.engine.fueling;
+      const fuelBase = fuel0 || fuel1 ? findCampaignCar(before.car.id) : undefined;
+      const originalFuelRate = fuelBase ? factoryFuelSupply(fuelBase.engine).maxFuelKgS : undefined;
       cmpHost.append(
         h(
           'table',
@@ -1013,6 +1018,7 @@ export class CareerMode implements Mode {
           changed('Travamento do conversor', t0.torqueConverter?.lockup.maxTorqueNm, t1.torqueConverter?.lockup.maxTorqueNm, torque, 'higher'),
           changed('Acoplamento central AWD', before.car.awd?.centerCouplingNm, after.car.awd?.centerCouplingNm, torque, 'higher'),
           changed('Eficiência da transmissão', t0.efficiency, t1.efficiency, (n) => `${f1(n * 100)} %`, 'higher'),
+          changed('Vazão de combustível', fuel0?.maxFuelKgS ?? originalFuelRate, fuel1?.maxFuelKgS ?? originalFuelRate, (n) => `${f1(n * 1000)} g/s`, 'higher'),
           changed('Corte', before.car.engine.revLimitRpm, after.car.engine.revLimitRpm, (n) => `${n} rpm`, 'neutral'),
           changed('Massa', before.car.massKg, after.car.massKg, (n) => `${f1(n)} kg`, 'lower'),
           row('Aderência (μ pico)', f2(before.car.tires.muPeak), f2(after.car.tires.muPeak), before.car.tires.muPeak, after.car.tires.muPeak, 'higher', 0.005),
