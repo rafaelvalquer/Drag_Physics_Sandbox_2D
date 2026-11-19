@@ -92,7 +92,6 @@ export const FINAL_DRIVE_OPTIONS: readonly { value: FinalDrivePreset; label: str
 /** ECUs that move the ignition cut (programmable, or the NA remap). */
 const REV_ECUS = new Set(['ecu-programmable', 'ecu-stage1-na', 'ecu-street', 'ecu-race']);
 const CLASSIC_THROTTLES = new Set(['throttle-rework', 'throttle-large']);
-const GEARBOX_TCU = new Set(['dct-upgrade', 'at-upgrade']);
 /** Parts whose effect is applied by the overlay (no resolver knows them). */
 export const OVERLAY_PARTS = new Set(['valve-springs', 'launch-control']);
 
@@ -156,7 +155,7 @@ export function tuningCapabilities(base: CarConfig, partIds: readonly string[], 
     kind === 'manual'
       ? has((p) => p.category === 'clutch' || p.id === 'launch-control')
       : kind === 'dual-clutch'
-        ? has((p) => p.id === 'launch-control' || p.id === 'dct-upgrade')
+        ? has((p) => p.id === 'launch-control' || p.category === 'gearbox')
         : false;
   const launch: RangeControl =
     kind === 'torque-converter-auto'
@@ -189,7 +188,7 @@ export function tuningCapabilities(base: CarConfig, partIds: readonly string[], 
   const shift: RangeControl =
     kind === 'manual' || !auto
       ? off('Câmbio manual: o ponto de troca é do piloto.', shiftDef)
-      : has((p) => GEARBOX_TCU.has(p.id))
+      : has((p) => p.category === 'gearbox')
         ? { enabled: true, reason: null, min: round(e.revLimitRpm * 0.75, 50), max: Math.max(...[revLimit.max, e.revLimitRpm]) - 50, step: 50, default: shiftDef }
         : off('Exige upgrade do câmbio (TCU reprogramada).', shiftDef);
 

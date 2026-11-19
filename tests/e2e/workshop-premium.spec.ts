@@ -96,4 +96,9 @@ test('oficina moderna: libera, substitui e guarda estágios da mesma peça', asy
   await expect(page.getByTestId('ws-stock-intake-airbox')).toHaveAttribute('data-state', 'installed');
   await expect(stage(1)).toHaveAttribute('data-state', 'owned');
   await expect(stage(2)).toHaveAttribute('data-state', 'owned');
+  await page.getByTestId('ws-tab-transmission').click();
+  await page.getByTestId('ws-part-automatic-bmw-n20-s1').click();
+  await expect(page.getByTestId('ws-compare')).toContainText('Capacidade do câmbio');
+  await expect(page.getByTestId('ws-compare')).toContainText('Fase de torque da troca');
+  await expect(page.getByTestId('ws-compare')).toContainText('Travamento do conversor');
 });

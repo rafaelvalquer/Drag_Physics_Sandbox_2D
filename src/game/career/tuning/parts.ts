@@ -2,6 +2,7 @@ import type { TransmissionKind, TurboConfig } from '../../../data/schema';
 import { CHAPTER2_PARTS } from './chapter2Parts';
 import { CHAPTER3_PARTS } from './chapter3Parts';
 import { MODERN_BREATHING_PARTS } from './modernBreathingParts';
+import { MODERN_DRIVELINE_PARTS } from './modernDrivelineParts';
 import type { PartProgression } from './partProgression';
 
 /**
@@ -285,6 +286,13 @@ export interface DifferentialPart extends PartBase {
   efficiencyAdd?: number;
 }
 
+export interface ManualGearsetPart extends PartBase {
+  category: 'transmission-gearbox';
+  /** Target spread for the intermediate gears, relative to the original ratios. */
+  gearSpreadScale: number;
+  efficiencyAdd: number;
+}
+
 export interface TirePart extends PartBase {
   category: 'tires';
   grade: 'sport' | 'semiSlick' | 'slick';
@@ -393,7 +401,7 @@ export interface GearboxPart extends PartBase {
   capacityScale: number;
   shiftTimeScale: number;
   launchRpmAdd: number;
-  /** Torque converter: lockup capacity and K factor (lower K = higher stall) scales. */
+  /** Torque converter: lockup capacity and K factor (higher K = higher stall at the same torque) scales. */
   lockupScale?: number;
   converterKScale?: number;
   /** Efficiency gained by the new clutch packs / pump (fraction). */
@@ -461,6 +469,7 @@ export type PartDef =
   | TurboPart
   | ClutchPart
   | DifferentialPart
+  | ManualGearsetPart
   | TirePart
   | ExpandedPart
   | EcuPart
@@ -735,7 +744,7 @@ const DYNO_LAB_PARTS: readonly PartDef[] = [
 export const PARTS: readonly PartDef[] = [...BASE_PARTS, ...EXPANDED_PARTS, ...DYNO_LAB_PARTS];
 
 /** Every part of every resolver version (ids are unique across versions). */
-export const ALL_PARTS: readonly PartDef[] = [...PARTS, ...CHAPTER2_PARTS, ...CHAPTER3_PARTS, ...MODERN_BREATHING_PARTS];
+export const ALL_PARTS: readonly PartDef[] = [...PARTS, ...CHAPTER2_PARTS, ...CHAPTER3_PARTS, ...MODERN_BREATHING_PARTS, ...MODERN_DRIVELINE_PARTS];
 
 export function findPart(id: string): PartDef | undefined {
   return ALL_PARTS.find((p) => p.id === id);

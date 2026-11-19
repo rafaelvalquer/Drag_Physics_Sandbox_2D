@@ -38,6 +38,12 @@ export interface PartGain {
   t100After: number;
   clutchBeforeNm: number;
   clutchAfterNm: number;
+  couplingBeforeNm: number | null;
+  couplingAfterNm: number | null;
+  drivelineEfficiencyBefore: number;
+  drivelineEfficiencyAfter: number;
+  engineInertiaBeforeKgM2: number;
+  engineInertiaAfterKgM2: number;
   /** Recommended safe engine speed (EngineReliability) before / after (rpm). */
   safeRpmBefore: number;
   safeRpmAfter: number;
@@ -139,6 +145,12 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     t100After: b.t100,
     clutchBeforeNm: base.car.transmission.clutch.maxTorqueNm,
     clutchAfterNm: after.car.transmission.clutch.maxTorqueNm,
+    couplingBeforeNm: base.car.awd?.centerCouplingNm ?? null,
+    couplingAfterNm: after.car.awd?.centerCouplingNm ?? null,
+    drivelineEfficiencyBefore: base.car.transmission.efficiency * (base.car.awd?.transferEfficiency ?? 1),
+    drivelineEfficiencyAfter: after.car.transmission.efficiency * (after.car.awd?.transferEfficiency ?? 1),
+    engineInertiaBeforeKgM2: base.car.engine.inertiaKgM2,
+    engineInertiaAfterKgM2: after.car.engine.inertiaKgM2,
     safeRpmBefore: reliabilityLimits(base.car, base.parts.map((p) => p.id)).recommendedSafeRpm,
     safeRpmAfter: reliabilityLimits(after.car, after.parts.map((p) => p.id)).recommendedSafeRpm,
     launchRpmBefore: base.car.transmission.clutch.launchRpm,
@@ -146,8 +158,19 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
   };
   const effect = physicsSignature(base.car) !== physicsSignature(after.car) ||
     gain.safeRpmBefore !== gain.safeRpmAfter || gain.exhaustRestrictionBeforeKPa !== gain.exhaustRestrictionAfterKPa;
-  const improvement = isGain(gain) || (isModernBreathingPart(part) && breathingGain(part, gain));
+  const improvement = isGain(gain) || (isModernBreathingPart(part) && breathingGain(part, gain)) || drivelineGain(part, gain);
   return { status: !effect ? 'no-effect' : improvement ? 'gain' : 'no-gain', gain };
+}
+
+function drivelineGain(part: PartDef, gain: PartGain): boolean {
+  if (!part.progression || part.since !== 2 || gain.etAfter - gain.etBefore > 0.05) return false;
+  if (part.category === 'clutch' || part.category === 'gearbox') return gain.clutchAfterNm - gain.clutchBeforeNm >= GAIN_CLUTCH_NM;
+  if (part.category === 'awd')
+    return gain.couplingAfterNm !== null && gain.couplingBeforeNm !== null && gain.couplingAfterNm - gain.couplingBeforeNm >= 10;
+  if (part.category === 'differential' || part.category === 'transmission-gearbox')
+    return gain.drivelineEfficiencyAfter - gain.drivelineEfficiencyBefore >= 0.001;
+  if (part.category === 'flywheel') return gain.engineInertiaBeforeKgM2 - gain.engineInertiaAfterKgM2 >= 0.001;
+  return false;
 }
 
 function breathingGain(part: PartDef, gain: PartGain): boolean {

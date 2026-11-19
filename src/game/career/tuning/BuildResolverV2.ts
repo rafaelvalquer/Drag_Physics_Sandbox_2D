@@ -1,7 +1,7 @@
 import { validateCar, type CarConfig, type TransmissionKind } from '../../../data/schema';
 import { exhaustPreset } from '../../../data/exhaustPresets';
 import { applyEngineParts, curvePeakCv, engineFuel, powerPeakRpm, TURBO_MAX_COMPRESSION, withStockBreathing, type EngineParts } from './breathingModel';
-import { applyGenericChassisMods, applyTyre, CLUTCH_TORQUE_MARGIN, combineMods, deepFreeze, fmtBar, workshopFinalDrive, MAX_KNOCK_LOSS, type BuildResult, type BuildTune } from './buildCommon';
+import { applyGenericChassisMods, applyTyre, CLUTCH_TORQUE_MARGIN, combineMods, deepFreeze, fmtBar, workshopFinalDrive, workshopGearRatios, MAX_KNOCK_LOSS, type BuildResult, type BuildTune } from './buildCommon';
 import { ENGINE_FAMILIES } from './chapter2Parts';
 import { applyFactoryTurboParts, wastegateMaxBar } from './factoryTurboModel';
 import { exhaustPressureAfterSections, isModernBreathingPart } from './modernBreathing';
@@ -347,6 +347,11 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   applyGenericChassisMods(car, genericMod);
   if (susp?.massRemoveKg) car.massKg = Math.max(500, car.massKg - susp.massRemoveKg);
   if (fly?.massRemoveKg) car.massKg = Math.max(500, car.massKg - fly.massRemoveKg);
+  const gearset = get('transmission-gearbox');
+  if (gearset) {
+    car.transmission.gearRatios = workshopGearRatios(car, base.transmission.gearRatios, gearset.gearSpreadScale);
+    car.transmission.efficiency = Math.min(0.97, Math.round((car.transmission.efficiency + gearset.efficiencyAdd) * 1000) / 1000);
+  }
   // crown and pinion chosen for the finished car (engine, tyres, mass above)
   if (diff) {
     car.transmission.finalDrive = workshopFinalDrive(car, base.transmission.finalDrive, diff.finalDriveScale);

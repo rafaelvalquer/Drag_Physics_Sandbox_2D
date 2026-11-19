@@ -994,6 +994,12 @@ export class CareerMode implements Mode {
         const [lo, hi] = band(x);
         return hi - lo;
       };
+      const changed = (label: string, a: number | undefined, b: number | undefined, format: (n: number) => string, better: 'higher' | 'lower' | 'neutral') =>
+        a === undefined || b === undefined || Math.abs(b - a) < 1e-6 ? null : row(label, format(a), format(b), a, b, better);
+      const t0 = before.car.transmission;
+      const t1 = after.car.transmission;
+      const torque = (n: number): string => `${f1(n)} N·m`;
+      const ms = (n: number): string => `${f1(n * 1000)} ms`;
       cmpHost.append(
         h(
           'table',
@@ -1002,7 +1008,13 @@ export class CareerMode implements Mode {
           row('Potência', `${f1(before.peakPowerCv)} cv`, `${f1(after.peakPowerCv)} cv`, before.peakPowerCv, after.peakPowerCv, 'higher', 0.05),
           row('Torque', `${f1(before.peakTorqueNm)} N·m`, `${f1(after.peakTorqueNm)} N·m`, before.peakTorqueNm, after.peakTorqueNm, 'higher', 0.05),
           row('Faixa útil (90 % do torque)', range(before), range(after), width(before), width(after), 'higher'),
-          row('Embreagem', `${before.car.transmission.clutch.maxTorqueNm} N·m`, `${after.car.transmission.clutch.maxTorqueNm} N·m`, before.car.transmission.clutch.maxTorqueNm, after.car.transmission.clutch.maxTorqueNm, 'higher'),
+          row(t0.powershift ? 'Capacidade do câmbio' : 'Embreagem', torque(t0.clutch.maxTorqueNm), torque(t1.clutch.maxTorqueNm), t0.clutch.maxTorqueNm, t1.clutch.maxTorqueNm),
+          changed('Fase de torque da troca', t0.powershift?.torquePhaseS, t1.powershift?.torquePhaseS, ms, 'lower'),
+          changed('Travamento do conversor', t0.torqueConverter?.lockup.maxTorqueNm, t1.torqueConverter?.lockup.maxTorqueNm, torque, 'higher'),
+          changed('Acoplamento central AWD', before.car.awd?.centerCouplingNm, after.car.awd?.centerCouplingNm, torque, 'higher'),
+          changed('Eficiência da transmissão', t0.efficiency, t1.efficiency, (n) => `${f1(n * 100)} %`, 'higher'),
+          changed('Corte', before.car.engine.revLimitRpm, after.car.engine.revLimitRpm, (n) => `${n} rpm`, 'neutral'),
+          changed('Massa', before.car.massKg, after.car.massKg, (n) => `${f1(n)} kg`, 'lower'),
           row('Aderência (μ pico)', f2(before.car.tires.muPeak), f2(after.car.tires.muPeak), before.car.tires.muPeak, after.car.tires.muPeak, 'higher', 0.005),
           row('Relação final', f3(before.car.transmission.finalDrive), f3(after.car.transmission.finalDrive), before.car.transmission.finalDrive, after.car.transmission.finalDrive, 'neutral', 0.0005),
           row('0–100 km/h (estimativa)', eb ? `${f2(eb.t100)} s` : '…', ea ? `${f2(ea.t100)} s` : '…', eb?.t100 ?? undefined, ea?.t100 ?? undefined, 'lower', 0.005),

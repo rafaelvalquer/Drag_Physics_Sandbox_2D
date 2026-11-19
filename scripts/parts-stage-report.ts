@@ -10,6 +10,7 @@ import { careerResolverVersion } from '../src/game/career/tuning/resolverVersion
 
 const args = process.argv.slice(2);
 const carId = args.find((arg) => arg.startsWith('--car='))?.slice('--car='.length);
+const selectedGroups = new Set(args.find((arg) => arg.startsWith('--groups='))?.slice('--groups='.length).split(/[,\s]+/).filter(Boolean) ?? []);
 const output = args.find((arg) => arg.startsWith('--out='))?.slice('--out='.length) ?? 'docs/workshop';
 const cars = CAREER_CARS.filter((car) => !carId || car.id === carId);
 if (!cars.length) throw new Error(`Carro desconhecido: ${carId}`);
@@ -19,7 +20,7 @@ const rows = cars.flatMap((car) => {
   const groups = new Map<string, Map<PartTier, PartDef>>();
   for (const part of ALL_PARTS) {
     const progression = progressionOf(part);
-    if (!progression || incompatibility(car, part)) continue;
+    if (!progression || (selectedGroups.size && !selectedGroups.has(progression.group)) || incompatibility(car, part)) continue;
     const group = groups.get(progression.group) ?? new Map<PartTier, PartDef>();
     if (group.has(progression.tier)) throw new Error(`${car.id}: ${progression.group} tem mais de uma peça compatível no Stage ${progression.tier}.`);
     group.set(progression.tier, part);
@@ -70,9 +71,12 @@ for (const row of rows) {
   }
 }
 mkdirSync(output, { recursive: true });
-const suffix = carId ? `-${carId}` : '';
+const missingGroups = [...selectedGroups].filter((group) => !rows.some((row) => row.group === group));
+if (missingGroups.length) throw new Error(`Nenhuma série compatível para: ${missingGroups.join(', ')}`);
+const suffix = [carId, selectedGroups.size ? 'selection' : undefined].filter(Boolean).map((item) => `-${item}`).join('');
 writeFileSync(join(output, `parts-stage${suffix}.json`), JSON.stringify({ distanceM: WORKSHOP_DISTANCE_M, rows }, null, 2) + '\n');
 writeFileSync(join(output, `parts-stage${suffix}.md`), markdown.join('\n') + '\n');
 const issues = rows.filter((row) => row.missingTiers.length || row.comparisons.some(({ audit }) => audit.status !== 'gain'));
 console.log(`${rows.length} grupos em ${cars.length} carros. ${issues.length} grupos com lacunas, falhas ou ganhos não comprovados.`);
-if (args.includes('--fail') && (issues.length || cars.some((car) => !rows.some((row) => row.carId === car.id)))) process.exitCode = 1;
+const uncoveredCar = !selectedGroups.size && cars.some((car) => !rows.some((row) => row.carId === car.id));
+if (args.includes('--fail') && (issues.length || uncoveredCar)) process.exitCode = 1;
