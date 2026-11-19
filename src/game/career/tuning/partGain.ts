@@ -8,6 +8,7 @@ import { findPart, type PartDef } from './parts';
 import { reliabilityLimits } from './EngineReliability';
 import { physicalSlotOf, progressionOf } from './partProgression';
 import { EngineThermalModel } from '../../../physics/engine/EngineThermalModel';
+import { TireModel } from '../../../physics/vehicle/TireModel';
 import { isModernBreathingPart } from './modernBreathing';
 import { MODERN_CONVERSION_PARTS } from './modernConversionParts';
 
@@ -30,6 +31,12 @@ export interface PartGain {
   redlineAfterRpm: number;
   massBeforeKg: number;
   massAfterKg: number;
+  gripBefore: number;
+  gripAfter: number;
+  rollingBefore: number;
+  rollingAfter: number;
+  axleLoadTransferBefore: number;
+  axleLoadTransferAfter: number;
   intakeRestrictionBeforeKPa: number | null;
   intakeRestrictionAfterKPa: number | null;
   exhaustRestrictionBeforeKPa: number | null;
@@ -168,6 +175,12 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
   if (!Number.isFinite(a.et) || !Number.isFinite(b.et)) {
     return { status: 'simulation-failed', reasons: ['Uma das provas não completou a distância de referência.'] };
   }
+  const grip = (car: CarConfig): number => {
+    const tire = new TireModel(car.tires);
+    tire.temperatureC = track.surfaceTempC;
+    return car.tires.muPeak * tire.gripFactor;
+  };
+  const loadTransfer = (car: CarConfig): number => (car.drivenAxle === 'front' ? -1 : 1) * car.cgHeightM / car.wheelbaseM;
   const gain: PartGain = {
     partId: part.id,
     carId: base.car.id,
@@ -181,6 +194,12 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     redlineAfterRpm: after.car.engine.revLimitRpm,
     massBeforeKg: base.car.massKg,
     massAfterKg: after.car.massKg,
+    gripBefore: grip(base.car),
+    gripAfter: grip(after.car),
+    rollingBefore: base.car.tires.rollingResistance,
+    rollingAfter: after.car.tires.rollingResistance,
+    axleLoadTransferBefore: loadTransfer(base.car),
+    axleLoadTransferAfter: loadTransfer(after.car),
     intakeRestrictionBeforeKPa: base.car.engine.breathing?.airFilterDropKPa ?? null,
     intakeRestrictionAfterKPa: after.car.engine.breathing?.airFilterDropKPa ?? null,
     exhaustRestrictionBeforeKPa: base.exhaustRestrictionKPa ?? base.car.engine.breathing?.exhaustBackPressureKPa ?? null,
@@ -259,8 +278,17 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     gain.chargeTemperatureBeforeK - gain.chargeTemperatureAfterK >= 0.5;
   const improvement = isGain(gain) || breathingGain(part, gain) || drivelineGain(part, gain) ||
     topEndGain(part, gain) || fuelGain || internalGain || compressionGain || ignitionGain || turboFlowGain || chargeCoolingGain ||
-    pressureControlGain(group, gain) || coolingGain;
+    pressureControlGain(group, gain) || coolingGain || chassisGain(group, gain);
   return { status: !effect ? 'no-effect' : improvement ? 'gain' : 'no-gain', gain };
+}
+
+function chassisGain(group: string | undefined, gain: PartGain): boolean {
+  if (gain.etAfter - gain.etBefore > 0.08) return false;
+  if (group === 'tire-compound' || group === 'tire-width') return gain.gripAfter - gain.gripBefore >= 0.01;
+  if (group === 'tire-pressure') return gain.rollingBefore - gain.rollingAfter >= 0.0001;
+  if (group === 'weight-reduction') return gain.massBeforeKg - gain.massAfterKg >= 10;
+  if (group === 'launch-suspension') return gain.axleLoadTransferAfter - gain.axleLoadTransferBefore >= 0.002;
+  return false;
 }
 
 function wastegateLimit(build: ValidBuild): number | null {
@@ -372,6 +400,10 @@ function conversionSupport(car: CarConfig): string[] {
 }
 
 function auditContexts(car: CarConfig, part: PartDef): readonly string[][] {
+  const group = progressionOf(part)?.group;
+  if (car.engine.family === 'toyota-2gr-fse' && group === 'weight-reduction') return [['tires-sport']];
+  if (car.engine.family === 'mercedes-m276' && (group === 'tire-compound' || group === 'tire-width'))
+    return [['at-upgrade']];
   if ('conversion' in part && part.conversion) return [conversionSupport(car)];
   if (part.category === 'ecu' && part.fuelTargetScale !== undefined) {
     const family = familyOf(car);

@@ -47,7 +47,9 @@ const specs: Spec[] = [
   ['tires-slick-light', 'tires', 'Slick leve', 3, 3200, 'part-tires-semislick', { tireMuScale: 1.55, tireInertiaAddKgM2: -0.05, tireOptimalTempC: 95, tireTempSensitivity: 0.004 }, 'Slick de arrancada em roda leve.', 'Aderência máxima quando quente.'],
   ['tires-width-1', 'tires-width', 'Largura +1', 1, 1000, 'part-tires-sport', { tireMuScale: 1.035, tireInertiaAddKgM2: 0.01, tireRollingScale: 0.97 }, 'Pneu e roda um número mais largos.'],
   ['tires-width-2', 'tires-width', 'Largura +2', 2, 2000, 'part-tires-sport', { tireMuScale: 1.075, tireInertiaAddKgM2: 0.02, tireRollingScale: 0.95 }, 'Pneu e roda dois números mais largos.'],
+  ['tires-width-3', 'tires-width', 'Largura +3', 3, 3150, 'part-tires-semislick', { tireMuScale: 1.11, tireInertiaAddKgM2: 0.033, tireRollingScale: 0.93 }, 'Rodas e pneus ainda mais largos para distribuir a carga da arrancada.'],
   ['tires-pressure-street', 'tires-pressure', 'Pressão ajustada rua', 1, 250, 'part-tires-sport', { tireStiffnessScale: 1.05, tireTempSensitivityScale: 0.95, tireRollingScale: 0.93 }, 'Calibragem dos pneus feita para arrancada de rua.'],
+  ['tires-pressure-sport', 'tires-pressure', 'Pressão ajustada esportiva', 2, 350, 'part-tires-sport', { tireStiffnessScale: 1.075, tireTempSensitivityScale: 0.9, tireRollingScale: 0.915 }, 'Calibragem intermediária para reduzir a deformação do pneu.'],
   ['tires-pressure-track', 'tires-pressure', 'Pressão ajustada pista', 3, 460, 'part-tires-semislick', { tireStiffnessScale: 1.1, tireTempSensitivityScale: 0.85, tireRollingScale: 0.9 }, 'Calibragem de pista, feita para composto quente.'],
   ['turbo-street', 'turbo', 'Kit turbo street', 2, 7200, 'part-turbo', { turboBoostBar: 0.75, turboSpoolScale: 1.12, turboMassAddKg: 22, intercoolerEffectiveness: 0.65 }, 'Kit turbo de rua com turbina maior que a do kit básico.', 'Exige embreagem reforçada.'],
   ['turbo-medium', 'turbo', 'Kit turbo médio', 3, 11000, 'part-turbo', { turboBoostBar: 1.05, turboSpoolScale: 1.32, turboMassAddKg: 25, intercoolerEffectiveness: 0.7 }, 'Kit turbo de preparação média.', 'Exige embreagem forte, bicos maiores e internos reforçados.'],
@@ -78,7 +80,9 @@ const specs: Spec[] = [
   ['weight-light', 'chassis-weight', 'Alívio de peso leve', 1, 1350, 'workshop-basic', { massRemoveKg: 18 }, 'Retirada de estepe, macaco, tapetes e bancos traseiros.', 'Menos massa para acelerar e menos resistência ao rolamento; o motor não muda.'],
   ['weight-medium', 'chassis-weight', 'Alívio de peso médio', 2, 2800, 'workshop-basic', { massRemoveKg: 48 }, 'Retirada do acabamento interno e banco de fibra.', 'Menos massa para acelerar e menos resistência ao rolamento; o motor não muda.'],
   ['weight-race', 'chassis-weight', 'Alívio de peso forte', 3, 5500, 'workshop-basic', { massRemoveKg: 83 }, 'Preparação de competição: vidros de policarbonato, capô de fibra e interior vazio.', 'Menos massa para acelerar e menos resistência ao rolamento; o motor não muda.'],
+  ['suspension-classic-street', 'chassis-suspension', 'Suspensão de largada leve', 1, 1350, 'workshop-basic', { launchCgDeltaM: 0.02, massRemoveKg: 2 }, 'Molas e amortecedores de rua com a transferência de carga ajustada ao eixo de tração.'],
   ['suspension-drag', 'chassis-suspension', 'Suspensão de arrancada', 2, 2800, 'workshop-basic', { launchCgDeltaM: 0.04, massRemoveKg: 5 }, 'Molas e amortecedores de arrancada em alumínio, acertados para o eixo de tração do carro.'],
+  ['suspension-classic-race', 'chassis-suspension', 'Suspensão de largada de competição', 3, 4550, 'workshop-basic', { launchCgDeltaM: 0.061, massRemoveKg: 9 }, 'Conjunto mais leve e ajustado para o carregamento do eixo motriz na largada.'],
 ];
 
 const n = (v: number, d = 0): string => v.toFixed(d).replace('.', ',');

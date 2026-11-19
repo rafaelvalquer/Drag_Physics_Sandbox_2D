@@ -52,6 +52,7 @@ const metrics = [
   'Δ temperatura da carga no alvo °C', 'Δ limite da wastegate bar', 'Δ resposta do turbo s', 'Pressão admissível bar',
   'Δ pressão alvo bar', 'Δ corte rpm', 'Δ alvo ar/combustível', 'Δ limite de torque do mapa N·m',
   'Δ temperatura sob carga sustentada °C',
+  'Δ massa kg', 'Δ aderência de largada', 'Δ resistência ao rolamento', 'Δ transferência de carga',
 ];
 const markdown = [
   '# Progressão de estágios da oficina',
@@ -90,6 +91,10 @@ for (const row of rows) {
       restrictionDelta(m.fuelTargetBeforeAfr, m.fuelTargetAfterAfr),
       restrictionDelta(m.mappedTorqueLimitBeforeNm, m.mappedTorqueLimitAfterNm),
       m.sustainedTemperature ? delta(m.sustainedTemperature.beforeC, m.sustainedTemperature.afterC) : '—',
+      delta(m.massBeforeKg, m.massAfterKg),
+      delta(m.gripBefore, m.gripAfter),
+      (m.rollingAfter - m.rollingBefore).toFixed(5),
+      delta(m.axleLoadTransferBefore, m.axleLoadTransferAfter),
     ] : metrics.map(() => '—');
     const figures = values.join(' | ');
     markdown.push(`${prefix} ${previous ?? 'Original'} | ${next} | ${figures} | ${audit.status} |`);

@@ -12,6 +12,7 @@ import { MODERN_INTERCOOLER_PARTS, MODERN_TURBO_PARTS } from './modernTurboParts
 import { MODERN_PRESSURE_PARTS } from './modernPressureParts';
 import { MODERN_ECU_PARTS } from './modernEcuParts';
 import { COOLING_PARTS } from './coolingParts';
+import { MODERN_SUSPENSION_PARTS } from './modernSuspensionParts';
 import type { PartProgression } from './partProgression';
 
 /**
@@ -812,7 +813,17 @@ const DYNO_LAB_PARTS: readonly PartDef[] = [
   },
 ];
 
-export const PARTS: readonly PartDef[] = [...BASE_PARTS, ...EXPANDED_PARTS, ...DYNO_LAB_PARTS, ...CELTA_TURBO_COMPRESSION];
+const modernSlick = CHAPTER2_PARTS.find((part): part is TirePart => part.id === 'tires-slick' && 'grade' in part)!;
+const classicSlick: TirePart = {
+  ...modernSlick,
+  id: 'tires-classic-slick',
+  since: 1,
+  chapter: 3,
+  unlock: 'part-tires-semislick',
+  compat: { families: [LEGACY_FAMILY] },
+};
+
+export const PARTS: readonly PartDef[] = [...BASE_PARTS, ...EXPANDED_PARTS, ...DYNO_LAB_PARTS, ...CELTA_TURBO_COMPRESSION, classicSlick];
 
 /** Every part of every resolver version (ids are unique across versions). */
 export const ALL_PARTS: readonly PartDef[] = [
@@ -824,6 +835,7 @@ export const ALL_PARTS: readonly PartDef[] = [
   ...MODERN_PRESSURE_PARTS,
   ...MODERN_ECU_PARTS,
   ...COOLING_PARTS,
+  ...MODERN_SUSPENSION_PARTS,
 ];
 
 export function findPart(id: string): PartDef | undefined {
