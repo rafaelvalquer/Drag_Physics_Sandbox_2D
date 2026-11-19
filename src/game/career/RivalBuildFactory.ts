@@ -33,6 +33,17 @@ export function ownedCarBuild(o: OwnedCar): BuildResult {
   return resolveBuild(base, o.installedParts, o.tune ?? {}, buildVersionFor(o, o.installedParts));
 }
 
+/**
+ * The car as it looks in lists and thumbnails: its build when it resolves, otherwise the painted
+ * catalogue car, so an invalid build (e.g. a part from a newer version) never loses the picture.
+ */
+export function ownedCarLook(o: OwnedCar): CarConfig | null {
+  const b = ownedCarBuild(o);
+  if (b.ok) return painted(b.car, o.paint);
+  const base = findCampaignCar(o.baseCarId);
+  return base ? painted(base, o.paint) : null;
+}
+
 export function ownedCarConfig(o: OwnedCar): CarConfig {
   const b = ownedCarBuild(o);
   if (!b.ok) throw new Error(b.errors.join('; '));
