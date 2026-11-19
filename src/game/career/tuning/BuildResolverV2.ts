@@ -3,7 +3,7 @@ import { exhaustPreset } from '../../../data/exhaustPresets';
 import { applyEngineParts, curvePeakCv, engineFuel, powerPeakRpm, TURBO_MAX_COMPRESSION, withStockBreathing, type EngineParts } from './breathingModel';
 import { applyGenericChassisMods, applyTyre, CLUTCH_TORQUE_MARGIN, combineMods, deepFreeze, fmtBar, workshopFinalDrive, workshopGearRatios, MAX_KNOCK_LOSS, type BuildResult, type BuildTune } from './buildCommon';
 import { ENGINE_FAMILIES } from './chapter2Parts';
-import { applyFactoryTurboParts, wastegateMaxBar } from './factoryTurboModel';
+import { applyFactoryTurboParts, factoryChargeTemperatureK, wastegateMaxBar } from './factoryTurboModel';
 import { factoryFuelSupply, fuelMixtureRatio, peakFuelDemandKgS } from './fuelDelivery';
 import { exhaustPressureAfterSections, isModernBreathingPart } from './modernBreathing';
 import {
@@ -142,6 +142,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   let steadyBoostBar: { rpm: number; bar: number }[] = [];
   let knockLoss = 0;
   let exhaustRestrictionKPa: number | undefined;
+  let chargeTemperatureAtTargetK: number | undefined;
   let engineModified = false;
 
   // ---- engine ----
@@ -149,7 +150,13 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   if (factoryTurbo) {
     const family = ENGINE_FAMILIES[fam];
     if (!family) return { ok: false, errors: [`família de motor sem dados de preparação: ${fam}`] };
-    if (turboUp && ecu?.level !== 'programmable' && ecu?.level !== 'stage3') return { ok: false, errors: ['a turbina de maior fluxo exige ECU programável'] };
+    if (turboUp && turboUp.factoryTurboStage !== 1 && ecu?.level !== 'programmable' && ecu?.level !== 'stage3')
+      errors.push('a turbina de maior fluxo exige ECU programável ou mapa Stage 3');
+    if (turboUp?.factoryTurboStage === 3) {
+      if ((pistons?.torqueLimitScale ?? 1) < 1.45) errors.push('a turbina de competição exige pistões e bielas forjados');
+      if ((get('intercooler')?.effectiveness ?? 0.6) < 0.8) errors.push('a turbina de competição exige intercooler de maior capacidade');
+      if ((fuelSupply?.fuelCapacityScale ?? 1) < 1.32) errors.push('a turbina de competição exige alimentação de maior vazão');
+    }
     if (tune.boostBar !== undefined) {
       if (ecu?.level !== 'programmable') return { ok: false, errors: ['ajuste de pressão exige ECU programável'] };
       const b0 = base.engine.turbo!.maxBoostBar;
@@ -164,6 +171,10 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
       if (!req.ids.some((id) => partIds.includes(id))) errors.push(`${ecu!.name} exige ${req.label}`);
     if (ecu?.minInternalsTorqueScale && (pistons?.torqueLimitScale ?? 1) < ecu.minInternalsTorqueScale)
       errors.push(`${ecu.name} exige pistões e bielas forjados`);
+    if (ecu?.minTurboFlowScale && (turboUp?.flowScale ?? 1) < ecu.minTurboFlowScale)
+      errors.push(`${ecu.name} exige a turbina de maior fluxo`);
+    if (ecu?.minIntercoolerEffectiveness && (get('intercooler')?.effectiveness ?? 0.6) < ecu.minIntercoolerEffectiveness)
+      errors.push(`${ecu.name} exige o intercooler de maior capacidade`);
     if (errors.length) return { ok: false, errors };
     const cam = get('camshaft');
     const head = get('cylinder-head');
@@ -190,7 +201,11 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
       steadyBoostBar = r.steadyBoostBar;
       knockLoss = r.knockLoss;
       exhaustRestrictionKPa = r.exhaustRestrictionKPa;
-    } else car.engine = structuredClone(stockEngine);
+      chargeTemperatureAtTargetK = r.chargeTemperatureAtTargetK;
+    } else {
+      car.engine = structuredClone(stockEngine);
+      chargeTemperatureAtTargetK = factoryChargeTemperatureK(stockEngine.turbo!.maxBoostBar);
+    }
   } else {
     // NA engine (or a Chapter 1 engine with a v2 part): breathing model
     if (tune.boostBar !== undefined && !turboKit) return { ok: false, errors: ['ajuste de pressão sem turbo instalado'] };
@@ -422,7 +437,10 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   const v = validateCar(car);
   if (!v.ok) errors.push(...v.errors);
   if (errors.length) return { ok: false, errors };
-  return { ok: true, car: deepFreeze(v.value!), parts, key, peakTorqueNm, peakPowerCv, steadyBoostBar, knockLoss, exhaustRestrictionKPa, version: 2 };
+  return {
+    ok: true, car: deepFreeze(v.value!), parts, key, peakTorqueNm, peakPowerCv, steadyBoostBar, knockLoss,
+    exhaustRestrictionKPa, chargeTemperatureAtTargetK, version: 2,
+  };
 }
 
 function interp(xs: readonly number[], ys: readonly number[], x: number): number {

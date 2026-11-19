@@ -79,6 +79,7 @@ export type BuildResult =
       steadyBoostBar: { rpm: number; bar: number }[];
       /** Modelled exhaust restriction at reference flow. Factory turbo keeps its turbine-side live calibration. */
       exhaustRestrictionKPa?: number;
+      chargeTemperatureAtTargetK?: number;
       knockLoss: number;
       /** Resolver version that produced the build. */
       version: ResolverVersion;

@@ -8,6 +8,7 @@ import { MODERN_TOP_END_PARTS } from './modernTopEndParts';
 import { MODERN_INTERNAL_PARTS } from './modernInternalParts';
 import { MODERN_IGNITION_PARTS } from './modernIgnitionParts';
 import { MODERN_CONVERSION_PARTS } from './modernConversionParts';
+import { MODERN_INTERCOOLER_PARTS, MODERN_TURBO_PARTS } from './modernTurboParts';
 import type { PartProgression } from './partProgression';
 
 /**
@@ -357,6 +358,10 @@ export interface EcuPart extends PartBase {
   requiresParts?: readonly { ids: readonly string[]; label: string }[];
   /** Minimum relative torque rating of the fitted rotating assembly. */
   minInternalsTorqueScale?: number;
+  /** Minimum compressor capacity of the turbo hardware required by this map. */
+  minTurboFlowScale?: number;
+  /** Minimum fraction of the compressor heat that the charge cooler must remove. */
+  minIntercoolerEffectiveness?: number;
   /** Above this fraction of the factory internals' torque, forged pistons/rods are required. */
   forgedAboveFraction?: number;
   /** Staged map: torque target at most this multiple of the factory peak torque. */
@@ -376,6 +381,10 @@ export interface TurboUpgradePart extends PartBase {
   massAddKg: number;
   /** Larger turbine housing: exhaust back pressure removed at the reference flow (kPa). */
   backPressureReductionKPa?: number;
+  /** Compressor isentropic efficiency in this operating range. */
+  compressorEfficiency?: number;
+  /** Stage-specific supporting hardware. The legacy hybrid keeps its prior requirements. */
+  factoryTurboStage?: 1 | 2 | 3;
 }
 
 export interface IntercoolerPart extends PartBase {
@@ -793,6 +802,7 @@ export const ALL_PARTS: readonly PartDef[] = [
   ...MODERN_DRIVELINE_PARTS, ...MODERN_FUEL_PARTS, ...MODERN_TOP_END_PARTS, ...MODERN_INTERNAL_PARTS,
   ...MODERN_IGNITION_PARTS,
   ...MODERN_CONVERSION_PARTS,
+  ...MODERN_TURBO_PARTS, ...MODERN_INTERCOOLER_PARTS,
 ];
 
 export function findPart(id: string): PartDef | undefined {

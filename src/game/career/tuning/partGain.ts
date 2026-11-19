@@ -39,6 +39,8 @@ export interface PartGain {
   burnAfterDeg: number;
   knockBefore: number;
   knockAfter: number;
+  chargeTemperatureBeforeK: number | null;
+  chargeTemperatureAfterK: number | null;
   fuelCapacityBeforeKgS: number | null;
   fuelCapacityAfterKgS: number | null;
   etBefore: number;
@@ -175,6 +177,8 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     burnAfterDeg: after.car.engine.combustion.burnDurationDeg,
     knockBefore: base.knockLoss,
     knockAfter: after.knockLoss,
+    chargeTemperatureBeforeK: base.chargeTemperatureAtTargetK ?? null,
+    chargeTemperatureAfterK: after.chargeTemperatureAtTargetK ?? null,
     fuelCapacityBeforeKgS: base.car.engine.fueling?.maxFuelKgS ??
       ('fuelCapacityScale' in part && after.car.engine.fueling ? after.car.engine.fueling.maxFuelKgS / part.fuelCapacityScale : null),
     fuelCapacityAfterKgS: after.car.engine.fueling?.maxFuelKgS ?? null,
@@ -206,8 +210,15 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     gain.cvAfter - gain.cvBefore >= 0.15 && gain.etAfter - gain.etBefore <= NOT_WORSE_S;
   const ignitionGain = group === 'modern-ignition' && gain.burnBeforeDeg - gain.burnAfterDeg >= 0.1 &&
     gain.etAfter - gain.etBefore <= 0.05;
+  // Track time can trade off against high-flow output, as for the high-rpm cylinder-head series.
+  const turboFlowGain = group === 'modern-factory-turbo' && gain.etAfter - gain.etBefore <= 0.08 &&
+    gain.cvAfter - gain.cvBefore >= 0.5 && gain.exhaustRestrictionBeforeKPa !== null && gain.exhaustRestrictionAfterKPa !== null &&
+    gain.exhaustRestrictionBeforeKPa - gain.exhaustRestrictionAfterKPa >= 0.1;
+  const chargeCoolingGain = group === 'modern-intercooler' && gain.etAfter - gain.etBefore <= 0.05 &&
+    gain.chargeTemperatureBeforeK !== null && gain.chargeTemperatureAfterK !== null &&
+    gain.chargeTemperatureBeforeK - gain.chargeTemperatureAfterK >= 0.5;
   const improvement = isGain(gain) || breathingGain(part, gain) || drivelineGain(part, gain) ||
-    topEndGain(part, gain) || fuelGain || internalGain || compressionGain || ignitionGain;
+    topEndGain(part, gain) || fuelGain || internalGain || compressionGain || ignitionGain || turboFlowGain || chargeCoolingGain;
   return { status: !effect ? 'no-effect' : improvement ? 'gain' : 'no-gain', gain };
 }
 
@@ -255,7 +266,7 @@ export function auditPartGain(car: CarConfig, part: PartDef, track: TrackConfig,
   if ('conversionPreparation' in part && part.conversionPreparation)
     return auditConversionCompression(car, part, track, version);
   const errors = new Set<string>();
-  const candidates = 'conversion' in part && part.conversion ? [conversionSupport(car)] : CONTEXTS;
+  const candidates = auditContexts(car, part);
   for (const ctx0 of candidates) {
     const ctx = ctx0.filter((id) => findPart(id)?.category !== part.category);
     // a turbo kit is compared with the same build without any turbo hardware
@@ -284,16 +295,31 @@ export interface StageComparison {
   audit: PartAudit;
 }
 
+function supportedTransmission(car: CarConfig): string {
+  const kind = transmissionKindOf(car);
+  return kind === 'manual' ? 'clutch-reinforced' : kind === 'dual-clutch' ? 'dct-upgrade' : 'at-upgrade';
+}
+
 function conversionSupport(car: CarConfig): string[] {
   const family = familyOf(car);
   const chamber = MODERN_CONVERSION_PARTS.find((part) =>
     part.category === 'engine-compression' && !incompatibility(car, part));
-  const kind = transmissionKindOf(car);
-  const transmission = kind === 'manual' ? 'clutch-reinforced' : kind === 'dual-clutch' ? 'dct-upgrade' : 'at-upgrade';
   return [
     ...(chamber ? [chamber.id] : []),
-    `conversion-oil-${family}`, `fuel-${family}-s3`, `ignition-${family}-s3`, `rotating-assembly-${family}-s3`, transmission,
+    `conversion-oil-${family}`, `fuel-${family}-s3`, `ignition-${family}-s3`, `rotating-assembly-${family}-s3`, supportedTransmission(car),
   ];
+}
+
+function auditContexts(car: CarConfig, part: PartDef): readonly string[][] {
+  if ('conversion' in part && part.conversion) return [conversionSupport(car)];
+  if ('factoryTurboStage' in part && part.factoryTurboStage) {
+    const family = familyOf(car);
+    return [[
+      'ecu-programmable', 'intercooler-race', `fuel-${family}-s3`,
+      `rotating-assembly-${family}-s3`, supportedTransmission(car),
+    ]];
+  }
+  return CONTEXTS;
 }
 
 function auditConversionCompression(car: CarConfig, part: PartDef, track: TrackConfig, version: ResolverVersion): PartAudit {
@@ -351,7 +377,7 @@ export function auditPartStages(car: CarConfig, stages: readonly PartDef[], trac
   const slot = physicalSlotOf(first);
   const specialization = progressionOf(first)?.specialization;
   const errors = new Set<string>();
-  const candidates = 'conversion' in first && first.conversion ? [conversionSupport(car)] : CONTEXTS;
+  const candidates = auditContexts(car, first);
   for (const candidate of candidates) {
     const context = candidate.filter((id) => {
       const support = findPart(id);

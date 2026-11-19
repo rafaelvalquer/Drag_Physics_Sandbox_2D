@@ -41,6 +41,17 @@ export const FACTORY_WASTEGATE_HEADROOM_BAR = 0.35;
 const FACTORY_COMPRESSOR_MARGIN = 1.12;
 const KNOCK_LOSS_PER_BAR = 0.07;
 
+/** Outlet temperature of the charge circuit at a given boost and heat rejection. */
+export function factoryChargeTemperatureK(
+  bar: number,
+  coolerEffectiveness = FACTORY_INTERCOOLER,
+  compressorEfficiency = COMPRESSOR_EFFICIENCY,
+): number {
+  const pressureRatio = 1 + bar * 1e5 / ATMOSPHERIC_PRESSURE;
+  const compressorRiseK = STANDARD_TEMPERATURE_K * (Math.pow(pressureRatio, 0.2857) - 1) / compressorEfficiency;
+  return STANDARD_TEMPERATURE_K + compressorRiseK * (1 - coolerEffectiveness);
+}
+
 export interface FactoryTurboParts {
   family: EngineFamilyDef;
   filter?: FilterPart;
@@ -68,6 +79,7 @@ export interface FactoryTurboResult {
   wastegateMaxBar: number;
   torqueLimitNm: number;
   exhaustRestrictionKPa: number;
+  chargeTemperatureAtTargetK: number;
 }
 
 /** Highest boost target the wastegate of this build can hold (bar). */
@@ -157,10 +169,6 @@ export function applyFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboP
   const stockPeakNm = Math.max(...stockCurve);
   const flowRated = stockModel.wotOperatingPoint(ratedRpm).flow;
   const flowCap = flowRated * FACTORY_COMPRESSOR_MARGIN * (fam.compressorMarginScale ?? 1) * (up?.flowScale ?? 1);
-  const chargeT = (pr: number, eff: number): number => {
-    const t2 = STANDARD_TEMPERATURE_K * (1 + (Math.pow(pr, 0.2857) - 1) / COMPRESSOR_EFFICIENCY);
-    return t2 - eff * (t2 - STANDARD_TEMPERATURE_K);
-  };
   const willans = (p: number): number => p - WILLANS_OFFSET * ATMOSPHERIC_PRESSURE;
 
   let curve = stockCurve.slice();
@@ -191,7 +199,8 @@ export function applyFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboP
       const pr1 = (ATMOSPHERIC_PRESSURE + boostPa) / ATMOSPHERIC_PRESSURE;
       const filterRatio = (ATMOSPHERIC_PRESSURE - filterDrop * 1000 * r * r) / (ATMOSPHERIC_PRESSURE - b0.airFilterDropKPa * 1000 * r * r);
       const pressureRatio = (pr1 / pr0) * filterRatio * runnerRatio;
-      const density = pressureRatio * (chargeT(pr0, FACTORY_INTERCOOLER) / chargeT(pr1, icEff)) * valveCharge * tunedCharge;
+      const density = pressureRatio * (factoryChargeTemperatureK(op0.boost / 1e5) /
+        factoryChargeTemperatureK(boostPa / 1e5, icEff, up?.compressorEfficiency)) * valveCharge * tunedCharge;
       const kl = knockAt(boostPa / 1e5);
       knockLoss = Math.max(knockLoss, kl);
       const knock = (1 - kl) / (1 - knockStock(op0.boost / 1e5));
@@ -245,6 +254,7 @@ export function applyFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboP
     wastegateMaxBar: wgMax,
     torqueLimitNm: limitNm,
     exhaustRestrictionKPa: backRef,
+    chargeTemperatureAtTargetK: factoryChargeTemperatureK(target, icEff, up?.compressorEfficiency),
   };
 }
 

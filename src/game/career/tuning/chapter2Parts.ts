@@ -126,9 +126,9 @@ export const CHAPTER2_PARTS: readonly PartDef[] = [
     ignitionGain: 0.03,
     revLimitAddRpm: 200,
     wastegateHeadroomBar: 0.7,
+    minIntercoolerEffectiveness: 0.8,
     requiresParts: [
       { ids: ['downpipe-catless'], label: 'o downpipe sem catalisador' },
-      { ids: ['intercooler-race'], label: 'o intercooler de maior capacidade' },
     ],
     forgedAboveFraction: 0.85,
     stockTorqueGainMax: 1.28,
@@ -179,10 +179,10 @@ export const CHAPTER2_PARTS: readonly PartDef[] = [
     revLimitAddRpm: 200,
     wastegateHeadroomBar: 0.9,
     minInternalsTorqueScale: 1.45,
+    minTurboFlowScale: 1.4,
+    minIntercoolerEffectiveness: 0.8,
     requiresParts: [
-      { ids: ['turbo-hybrid'], label: 'a turbina de maior fluxo' },
       { ids: ['downpipe-catless'], label: 'o downpipe sem catalisador' },
-      { ids: ['intercooler-race'], label: 'o intercooler de maior capacidade' },
     ],
   },
   {
