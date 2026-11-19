@@ -1,4 +1,5 @@
 import type { BodyStyle, CarConfig } from '../../../../data/schema';
+import { bmw320iF30Meta, paintBmw320iF30 } from './bmw320iF30';
 import { golGts88Meta, paintGolGts88 } from './golGts88';
 import type { RasterBody, RasterMeta } from './types';
 
@@ -9,6 +10,7 @@ import type { RasterBody, RasterMeta } from './types';
  */
 const RASTER: Partial<Record<BodyStyle, { paint: RasterBody; meta: (car: CarConfig) => RasterMeta }>> = {
   golGts88: { paint: paintGolGts88, meta: golGts88Meta },
+  bmw320iF30: { paint: paintBmw320iF30, meta: bmw320iF30Meta },
 };
 
 export function rasterBodyFor(style: BodyStyle): RasterBody | undefined {
