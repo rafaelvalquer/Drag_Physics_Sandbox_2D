@@ -239,6 +239,8 @@ export interface CamPart extends PartBase {
   evoDeltaDeg: number;
   evcDeltaDeg: number;
   liftAddMm: number;
+  /** Override for systems that change intake lift independently of the exhaust valves. */
+  exhaustLiftAddMm?: number;
   /** Valve-train limit gained with the stiffer springs of the kit. */
   revLimitAddRpm: number;
 }

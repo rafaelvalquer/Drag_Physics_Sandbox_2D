@@ -44,6 +44,60 @@ const LIFT_GAIN_PER_MM = 0.03;
 /** Low-speed dilution per degree of extra valve overlap. */
 const OVERLAP_LOSS_PER_DEG = 0.0016;
 
+export interface CamGeometryDelta {
+  evo: number;
+  evc: number;
+  ivo: number;
+  ivc: number;
+  lift: number;
+  exhaustLift: number;
+}
+
+export function camGeometryDelta(part: CamPart | undefined, mod: MechanicalMods = {}): CamGeometryDelta {
+  const lift = part?.liftAddMm ?? mod.camLiftAddMm ?? 0;
+  return {
+    evo: part?.evoDeltaDeg ?? mod.camEvoDeltaDeg ?? 0,
+    evc: part?.evcDeltaDeg ?? mod.camEvcDeltaDeg ?? 0,
+    ivo: part?.ivoDeltaDeg ?? mod.camIvoDeltaDeg ?? 0,
+    ivc: part?.ivcDeltaDeg ?? mod.camIvcDeltaDeg ?? 0,
+    lift,
+    exhaustLift: part?.exhaustLiftAddMm ?? lift,
+  };
+}
+
+export function modifiedCam(stock: EngineConfig['cam'], delta: CamGeometryDelta): EngineConfig['cam'] {
+  return {
+    evoDeg: stock.evoDeg + delta.evo,
+    evcDeg: stock.evcDeg + delta.evc,
+    ivoDeg: stock.ivoDeg + delta.ivo,
+    ivcDeg: stock.ivcDeg + delta.ivc,
+    intakeLiftMm: stock.intakeLiftMm + delta.lift,
+    exhaustLiftMm: stock.exhaustLiftMm + delta.exhaustLift,
+  };
+}
+
+/** Trapped-charge change from intake closing, valve curtain area and low-speed residual dilution. */
+export function camChargeRatio(x: number, delta: CamGeometryDelta): number {
+  const overlapAdd = delta.evc - delta.ivo;
+  return (1 + IVC_SENSITIVITY_PER_DEG * delta.ivc * (x - IVC_PIVOT)) *
+    (1 + LIFT_GAIN_PER_MM * delta.lift * smoothstep(0.55, 1.15, x)) *
+    (1 - OVERLAP_LOSS_PER_DEG * overlapAdd * Math.max(0, 0.6 - x) / 0.6);
+}
+
+export function headChargeRatio(x: number, flowGain: number): number {
+  return 1 + flowGain * smoothstep(0.5, 1.1, x);
+}
+
+/** Change in runner pressure loss from the stock duct at the same air mass flow. */
+export function runnerPressureRecoveryPa(flowRatio: number, stockDiameterMm: number, diameterMm: number): number {
+  return STOCK_RUNNER_DROP_KPA * 1000 * flowRatio ** 2 * (1 - (stockDiameterMm / diameterMm) ** 4);
+}
+
+export function intakeRamRatio(rpm: number, tunedStock: number, tunedNew: number): number {
+  const ram = (tuned: number): number => 1 + RAM_TUNING_AMPLITUDE * Math.exp(-(((rpm - tuned) / (RAM_TUNING_WIDTH * tuned)) ** 2));
+  return ram(tunedNew) / ram(tunedStock);
+}
+
 export interface EngineParts {
   filter?: FilterPart;
   manifold?: ManifoldPart;
@@ -180,23 +234,9 @@ export function applyEngineParts(stock: EngineConfig, parts: EngineParts): Breat
   const runnerL = stock.intake.runnerLengthM * (m?.runnerLengthScale ?? mod.runnerLengthScale ?? 1);
   const runnerD = stock.intake.runnerDiameterMm + (m?.runnerDiameterAddMm ?? mod.runnerDiameterAddMm ?? 0);
   const c = parts.cam;
-  const camDelta = {
-    evo: c?.evoDeltaDeg ?? mod.camEvoDeltaDeg ?? 0,
-    evc: c?.evcDeltaDeg ?? mod.camEvcDeltaDeg ?? 0,
-    ivo: c?.ivoDeltaDeg ?? mod.camIvoDeltaDeg ?? 0,
-    ivc: c?.ivcDeltaDeg ?? mod.camIvcDeltaDeg ?? 0,
-    lift: c?.liftAddMm ?? mod.camLiftAddMm ?? 0,
-  };
+  const camDelta = camGeometryDelta(c, mod);
   const hasCam = !!c || !!mod.camLiftAddMm || !!mod.camIvcDeltaDeg;
-  const cam = hasCam ? {
-    evoDeg: stock.cam.evoDeg + camDelta.evo,
-    evcDeg: stock.cam.evcDeg + camDelta.evc,
-    ivoDeg: stock.cam.ivoDeg + camDelta.ivo,
-    ivcDeg: stock.cam.ivcDeg + camDelta.ivc,
-    intakeLiftMm: stock.cam.intakeLiftMm + camDelta.lift,
-    exhaustLiftMm: stock.cam.exhaustLiftMm + camDelta.lift,
-  } : stock.cam;
-  const overlapAdd = camDelta.evc - camDelta.ivo;
+  const cam = hasCam ? modifiedCam(stock.cam, camDelta) : stock.cam;
 
   // ---- stock operating points (same EngineModel the race uses) ----
   const stockExt = extendCurve(stock, curveTop);
@@ -206,7 +246,6 @@ export function applyEngineParts(stock: EngineConfig, parts: EngineParts): Breat
   // Helmholtz: tuned speed ∝ √(A/L); the stock manifold is assumed tuned at the torque peak.
   const tunedStock = torqueRpm;
   const tunedNew = tunedStock * (runnerD / stock.intake.runnerDiameterMm) * Math.sqrt(stock.intake.runnerLengthM / runnerL);
-  const ram = (rpm: number, tuned: number): number => 1 + RAM_TUNING_AMPLITUDE * Math.exp(-(((rpm - tuned) / (RAM_TUNING_WIDTH * tuned)) ** 2));
   const runnerDrop = (flow: number, d: number): number => STOCK_RUNNER_DROP_KPA * 1000 * (stock.intake.runnerDiameterMm / d) ** 4 * (flow / b0.referenceFlowKgS) ** 2;
 
   const na: number[] = [];
@@ -224,18 +263,14 @@ export function applyEngineParts(stock: EngineConfig, parts: EngineParts): Breat
     const residual = (p: number, pm: number): number => Math.pow(p / pm, 1 / GAMMA_EXHAUST) / stock.compressionRatio;
     const residualRatio = (1 - residual(back, map)) / (1 - residual(op.back, op.map));
     const x = rpm / ratedRpm;
-    const camRatio = hasCam
-      ? (1 + IVC_SENSITIVITY_PER_DEG * camDelta.ivc * (x - IVC_PIVOT)) *
-        (1 + LIFT_GAIN_PER_MM * camDelta.lift * smoothstep(0.55, 1.15, x)) *
-        (1 - OVERLAP_LOSS_PER_DEG * overlapAdd * Math.max(0, 0.6 - x) / 0.6)
-      : 1;
+    const camRatio = hasCam ? camChargeRatio(x, camDelta) : 1;
     // Port flow, throttle cross-section and Otto efficiency alter trapped mass / indicated work,
     // not an arbitrary power multiplier; strongest flow effect near peak rated air demand.
     const portFlowRatio = 1 + ((mod.headFlowScale ?? 1) - 1) * smoothstep(0.48, 1.2, x);
     const throttleDiam = stock.throttle.bodyDiameterMm;
     const newThrottle = throttleDiam + (mod.throttleDiameterAddMm ?? 0);
     const throttleFlowRatio = 1 + Math.min(0.012, (newThrottle * newThrottle / (throttleDiam * throttleDiam) - 1) * 0.055) * smoothstep(0.55, 1.1, x);
-    const ramRatio = (ram(rpm, tunedNew) / ram(rpm, tunedStock)) * (headGain ? 1 + headGain * smoothstep(0.5, 1.1, x) : 1);
+    const ramRatio = intakeRamRatio(rpm, tunedStock, tunedNew) * headChargeRatio(x, headGain);
     const willans = (p: number): number => p - WILLANS_OFFSET * ATMOSPHERIC_PRESSURE;
     // Willans line: indicated work ∝ (charge − offset); the charge follows MAP × trapped-mass ratios
     const chargeRatio = residualRatio * camRatio * ramRatio * portFlowRatio * throttleFlowRatio;

@@ -2,9 +2,12 @@ import type { EngineConfig } from '../../../data/schema';
 import { ATMOSPHERIC_PRESSURE, STANDARD_TEMPERATURE_K } from '../../../core/units';
 import { EngineModel, WILLANS_OFFSET } from '../../../physics/engine/EngineModel';
 import { engineGeometry } from '../../../physics/engine/EngineGeometry';
-import { extendCurve, ottoEfficiency, powerPeakRpm } from './breathingModel';
+import {
+  camChargeRatio, camGeometryDelta, extendCurve, headChargeRatio, intakeRamRatio, modifiedCam,
+  ottoEfficiency, powerPeakRpm, runnerPressureRecoveryPa, torquePeakRpm,
+} from './breathingModel';
 import type { EngineFamilyDef } from './chapter2Parts';
-import type { BoostControlPart, EcuPart, ExhaustPart, FilterPart, IntercoolerPart, MechanicalMods, PistonPart, TurboUpgradePart } from './parts';
+import type { BoostControlPart, CamPart, EcuPart, ExhaustPart, FilterPart, HeadPart, IntercoolerPart, ManifoldPart, MechanicalMods, PistonPart, TurboUpgradePart } from './parts';
 
 /**
  * Tuning of a FACTORY turbocharged engine (resolver v2). The stock WOT curve is the brake torque
@@ -47,6 +50,9 @@ export interface FactoryTurboParts {
   intercooler?: IntercoolerPart;
   boostControl?: BoostControlPart;
   pistons?: PistonPart;
+  cam?: CamPart;
+  head?: HeadPart;
+  manifold?: ManifoldPart;
   /** Boost target set on the dyno (programmable ECU only), bar gauge. */
   boostBar?: number;
   /** Generic car hardware (cooling): internal friction and knock margin. */
@@ -106,11 +112,24 @@ export function applyFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboP
   // over the factory peak (the calibration the stage is sold for)
   const stockPeakCfg = Math.max(...stock.torqueCurve.torqueNm);
   const limitNm = parts.ecu ? Math.min(internals * parts.ecu.torqueLimitFraction, stockPeakCfg * (parts.ecu.stockTorqueGainMax ?? Infinity)) : Infinity;
-  const revAdd = Math.min(parts.ecu?.revLimitAddRpm ?? 0, fam.valvetrainRevAddRpm) + (parts.pistons?.revLimitAddRpm ?? 0);
+  const valveKitLimit = parts.cam ? Math.max(fam.valvetrainRevAddRpm, parts.cam.revLimitAddRpm) : fam.valvetrainRevAddRpm;
+  const revAdd = Math.min(parts.ecu?.revLimitAddRpm ?? 0, valveKitLimit) + (parts.pistons?.revLimitAddRpm ?? 0);
   const revLimit = stock.revLimitRpm + revAdd;
   // a free-flow part never restricts more than the factory part it replaces
   const filterDrop = Math.min(b0.airFilterDropKPa, parts.filter?.airFilterDropKPa ?? b0.airFilterDropKPa);
   const backRef = Math.max(0.5, Math.min(b0.exhaustBackPressureKPa, parts.exhaust?.backPressureKPa ?? b0.exhaustBackPressureKPa) - (up?.backPressureReductionKPa ?? 0));
+  const camDelta = camGeometryDelta(parts.cam);
+  const cam = parts.cam ? modifiedCam(stock.cam, camDelta) : stock.cam;
+  const runnerDiam = stock.intake.runnerDiameterMm + (parts.manifold?.runnerDiameterAddMm ?? 0);
+  const runnerLength = stock.intake.runnerLengthM * (parts.manifold?.runnerLengthScale ?? 1);
+  const tunedStock = torquePeakRpm(stock.torqueCurve);
+  const tunedNew = tunedStock * (runnerDiam / stock.intake.runnerDiameterMm) * Math.sqrt(stock.intake.runnerLengthM / runnerLength);
+  const intake = {
+    ...stock.intake,
+    manifoldVolumeL: stock.intake.manifoldVolumeL * (parts.manifold?.plenumScale ?? 1) + (parts.intercooler?.volumeAddL ?? 0),
+    runnerDiameterMm: runnerDiam,
+    runnerLengthM: runnerLength,
+  };
 
   // ---- stock operating points (same EngineModel the race uses) ----
   const curveTop = Math.max(stock.torqueCurve.rpm[stock.torqueCurve.rpm.length - 1]!, revLimit + 300);
@@ -146,14 +165,20 @@ export function applyFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboP
       const rpm = grid[i]!;
       const r = op0.flow / b0.referenceFlowKgS;
       const op = model.wotOperatingPoint(rpm);
+      const rpmRatio = rpm / ratedRpm;
+      const valveCharge = (parts.cam ? camChargeRatio(rpmRatio, camDelta) : 1) * headChargeRatio(rpmRatio, parts.head?.flowGain ?? 0);
+      const tunedCharge = parts.manifold ? intakeRamRatio(rpm, tunedStock, tunedNew) : 1;
+      const runnerRecovery = parts.manifold ? runnerPressureRecoveryPa(r, stock.intake.runnerDiameterMm, runnerDiam) : 0;
+      const runnerRatio = 1 + runnerRecovery / op0.map;
+      const chargeDemand = valveCharge * tunedCharge * runnerRatio;
       // compressor flow limit: the charge mass flow scales with the absolute pressure at a speed
-      const boostCapPa = ((ATMOSPHERIC_PRESSURE + op0.boost) * flowCap) / Math.max(op0.flow, 1e-6) - ATMOSPHERIC_PRESSURE;
+      const boostCapPa = ((ATMOSPHERIC_PRESSURE + op0.boost) * flowCap) / Math.max(op0.flow * chargeDemand, 1e-6) - ATMOSPHERIC_PRESSURE;
       const boostPa = Math.max(0, Math.min(op.boost, boostCapPa, target * 1e5));
       const pr0 = (ATMOSPHERIC_PRESSURE + op0.boost) / ATMOSPHERIC_PRESSURE;
       const pr1 = (ATMOSPHERIC_PRESSURE + boostPa) / ATMOSPHERIC_PRESSURE;
       const filterRatio = (ATMOSPHERIC_PRESSURE - filterDrop * 1000 * r * r) / (ATMOSPHERIC_PRESSURE - b0.airFilterDropKPa * 1000 * r * r);
-      const pressureRatio = (pr1 / pr0) * filterRatio;
-      const density = pressureRatio * (chargeT(pr0, FACTORY_INTERCOOLER) / chargeT(pr1, icEff));
+      const pressureRatio = (pr1 / pr0) * filterRatio * runnerRatio;
+      const density = pressureRatio * (chargeT(pr0, FACTORY_INTERCOOLER) / chargeT(pr1, icEff)) * valveCharge * tunedCharge;
       const kl = knockAt(boostPa / 1e5);
       knockLoss = Math.max(knockLoss, kl);
       const knock = (1 - kl) / (1 - knockStock(op0.boost / 1e5));
@@ -172,7 +197,9 @@ export function applyFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboP
       // exhaust flow never lose steady full-load torque against the factory engine (off-boost
       // points stay the factory ones)
       const sameSpool = !up || up.spoolFlowScale <= 1;
-      if (sameSpool && !(parts.pistons?.compressionAdd && parts.pistons.compressionAdd < 0)) brake = Math.max(brake, Math.min(stockCurve[i]!, parts.ecu ? limitNm : Infinity));
+      if (sameSpool && !parts.cam && !parts.manifold && !parts.head && !(parts.pistons?.compressionAdd && parts.pistons.compressionAdd < 0)) {
+        brake = Math.max(brake, Math.min(stockCurve[i]!, parts.ecu ? limitNm : Infinity));
+      }
       next.push(round1(Math.max(brake, 1)));
       boosts.push(boostPa / 1e5);
     }
@@ -186,7 +213,8 @@ export function applyFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboP
     revLimitRpm: revLimit,
     redlineRpm: stock.redlineRpm + revAdd,
     maxSafeRpm: Math.max(stock.maxSafeRpm, revLimit + (stock.maxSafeRpm - stock.revLimitRpm)),
-    intake: { ...stock.intake, manifoldVolumeL: stock.intake.manifoldVolumeL + (parts.intercooler?.volumeAddL ?? 0) },
+    cam,
+    intake,
     // the steady curve above already carries the lower pumping loss of a freer exhaust; the live
     // model keeps the factory back pressure, which there drives the turbine (a freer system after
     // the turbine raises its pressure ratio, never slows the spool)

@@ -134,7 +134,10 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
     for (const req of ecu?.requiresParts ?? [])
       if (!req.ids.some((id) => partIds.includes(id))) errors.push(`${ecu!.name} exige ${req.label}`);
     if (errors.length) return { ok: false, errors };
-    const anyEngine = genericMod.coolingFrictionScale || genericMod.coolingKnockScale || ecu || turboUp || get('intercooler') || get('boost-control') || get('pistons') || get('intake-filter') || get('exhaust');
+    const cam = get('camshaft');
+    const head = get('cylinder-head');
+    const manifold = get('intake-manifold');
+    const anyEngine = genericMod.coolingFrictionScale || genericMod.coolingKnockScale || ecu || turboUp || get('intercooler') || get('boost-control') || get('pistons') || get('intake-filter') || get('exhaust') || cam || head || manifold;
     if (anyEngine) {
       const r = applyFactoryTurboParts(stockEngine, {
         family,
@@ -145,6 +148,9 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
         intercooler: get('intercooler'),
         boostControl: get('boost-control'),
         pistons: get('pistons'),
+        cam,
+        head,
+        manifold,
         boostBar: tune.boostBar,
         mod: genericMod,
       });
