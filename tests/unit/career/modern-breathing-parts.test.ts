@@ -16,12 +16,12 @@ describe('admissão e escape modernos por família', () => {
     '%s resolve os três estágios de cada seção',
     (_, car) => {
       const options = MODERN_BREATHING_PARTS.filter((part) => !incompatibility(car, part));
-      expect(options).toHaveLength(15);
+      expect(options).toHaveLength(18);
       const stock = resolveBuild(car, [], {}, 2);
       if (!stock.ok) throw new Error(stock.errors.join('; '));
       const metric = (part: typeof options[number], build: typeof stock): number => {
         const { engine } = build.car;
-        if (part.category === 'intake-airbox') return engine.breathing!.airFilterDropKPa;
+        if (part.category === 'intake-airbox' || part.category === 'intake-filter') return engine.breathing!.airFilterDropKPa;
         if (part.category === 'intake-throttle') return engine.throttle.responseTimeS;
         return build.exhaustRestrictionKPa ?? engine.breathing!.exhaustBackPressureKPa;
       };
@@ -40,6 +40,12 @@ describe('admissão e escape modernos por família', () => {
           replaced: series[0]!.id,
         });
       }
+      const filter = options.find((part) => part.category === 'intake-filter' && part.progression?.tier === 3)!;
+      const airbox = options.find((part) => part.category === 'intake-airbox' && part.progression?.tier === 3)!;
+      const filterOnly = resolveBuild(car, [filter.id], {}, 2);
+      const combined = resolveBuild(car, [filter.id, airbox.id], {}, 2);
+      if (!filterOnly.ok || !combined.ok) throw new Error(`Filtro e caixa de ar incompatíveis em ${car.id}`);
+      expect(combined.car.engine.breathing!.airFilterDropKPa).toBeLessThan(filterOnly.car.engine.breathing!.airFilterDropKPa);
     },
   );
 

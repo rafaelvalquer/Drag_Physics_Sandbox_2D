@@ -3,7 +3,7 @@ import { CHAPTER3_CARS } from '../../../data/cars/chapter3/index';
 import type { CarConfig } from '../../../data/schema';
 import { modernStageRelease } from './modernStageRelease';
 import type { PartTier } from './partProgression';
-import type { ExpandedPart, MechanicalMods } from './parts';
+import type { ExpandedPart, FilterPart, MechanicalMods } from './parts';
 
 const tiers = [1, 2, 3] as const;
 const number = (value: number): string => value.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
@@ -87,26 +87,49 @@ function sectionDrop(car: CarConfig, tier: PartTier, budget: number): number {
   return (car.engine.breathing?.exhaustBackPressureKPa ?? 18) * budget * tiersValue(tier, 1, 1.75, 2.5);
 }
 
-function forChapter(cars: readonly CarConfig[], origin: 2 | 3): ExpandedPart[] {
+function filterPart(car: CarConfig, family: string, origin: 2 | 3, tier: PartTier): FilterPart {
+  const stockDrop = car.engine.breathing?.airFilterDropKPa ?? 3;
+  const reduction = stockDrop * tiersValue(tier, 0.1, 0.2, 0.32);
+  const airFilterDropKPa = stockDrop - reduction;
+  return {
+    id: `intake-filter-${family}-s${tier}`,
+    category: 'intake-filter',
+    name: `Elemento filtrante Stage ${tier}`,
+    ...modernStageRelease(origin, tier),
+    price: Math.round(410 * Math.sqrt(car.engine.ratedPowerCv / 170) * tiersValue(tier, 1, 1.65, 2.5) / 50) * 50,
+    since: 2,
+    compat: { families: [family] },
+    progression: { tier, group: 'modern-intake-filter', specialization: 'rua' },
+    description: 'Elemento de filtragem dimensionado para a vazão do motor na caixa de ar.',
+    physics: `A queda de pressão diminui ${number(reduction)} kPa no fluxo nominal.`,
+    airFilterDropKPa,
+    intakeGainDelta: 0,
+  };
+}
+
+function forChapter(cars: readonly CarConfig[], origin: 2 | 3): (ExpandedPart | FilterPart)[] {
   const families = new Map<string, CarConfig>();
   for (const car of cars) {
     const family = car.engine.family;
     if (!family) throw new Error(`Família ausente no carro moderno ${car.id}`);
     if (!families.has(family)) families.set(family, car);
   }
-  return [...families].flatMap(([family, car]) => specs.flatMap((spec) => tiers.map((tier): ExpandedPart => ({
-    id: `${spec.slot}-${family}-s${tier}`,
-    category: spec.slot,
-    name: `${spec.name} Stage ${tier}`,
-    ...modernStageRelease(origin, tier),
-    price: Math.round(spec.basePrice * Math.sqrt(car.engine.ratedPowerCv / 170) * tiersValue(tier, 1, 1.65, 2.5) / 50) * 50,
-    since: 2,
-    modernBreathing: true,
-    compat: { families: [family] },
-    progression: { tier, group: `modern-${spec.slot}`, specialization: 'rua' },
-    description: spec.description,
-    ...spec.changes(car, tier),
-  }))));
+  return [...families].flatMap(([family, car]) => [
+    ...tiers.map((tier) => filterPart(car, family, origin, tier)),
+    ...specs.flatMap((spec) => tiers.map((tier): ExpandedPart => ({
+      id: `${spec.slot}-${family}-s${tier}`,
+      category: spec.slot,
+      name: `${spec.name} Stage ${tier}`,
+      ...modernStageRelease(origin, tier),
+      price: Math.round(spec.basePrice * Math.sqrt(car.engine.ratedPowerCv / 170) * tiersValue(tier, 1, 1.65, 2.5) / 50) * 50,
+      since: 2,
+      modernBreathing: true,
+      compat: { families: [family] },
+      progression: { tier, group: `modern-${spec.slot}`, specialization: 'rua' },
+      description: spec.description,
+      ...spec.changes(car, tier),
+    }))),
+  ]);
 }
 
 export const MODERN_BREATHING_PARTS = [...forChapter(CHAPTER2_CARS, 2), ...forChapter(CHAPTER3_CARS, 3)];

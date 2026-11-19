@@ -1,6 +1,8 @@
 # Admissão e escape dos carros modernos
 
-Os 18 carros modernos recebem três estágios de caixa de ar, corpo de borboleta, coletor de escape, tubulação e abafador. Cada oferta pertence à família do motor. A oficina da Liga abre as séries após as etapas 1 e 8, com o estágio 3 após o quinto duelo da Elite. Para os carros da Elite, os estágios abrem após os duelos 1, 5 e 9. A progressão usa os eventos já registrados no save.
+Os 18 carros modernos recebem três estágios de filtro, caixa de ar, corpo de borboleta, coletor de escape, tubulação e abafador. Cada oferta pertence à família do motor. A oficina da Liga abre as séries após as etapas 1 e 8, com o estágio 3 após o quinto duelo da Elite. Para os carros da Elite, os estágios abrem após os duelos 1, 5 e 9. A progressão usa os eventos já registrados no save.
+
+Os elementos de filtragem reduzem a restrição medida da admissão em 10%, 20% e 32% na vazão de referência. Filtro e caixa de ar ocupam pontos distintos do sistema e podem ser instalados juntos. O filtro esportivo compartilhado continua disponível com seu ID original. Nas 54 comparações adjacentes, cada troca reduziu a restrição em 0,20 a 0,34 kPa e a variação de tempo nos 402,336 m ficou entre −0,054 s e +0,030 s.
 
 As perdas de carga são estimativas no fluxo de referência, dimensionadas pela restrição da configuração original. O escape soma a contribuição de seções independentes e aplica a maior redução quando um escape completo substitui essas mesmas seções. O downpipe é separado. Layout, diâmetro e absorção seguem para o áudio procedural. Nos turbos de fábrica, a curva usa a nova restrição do escape e a simulação mantém a calibração de pressão do lado da turbina.
 

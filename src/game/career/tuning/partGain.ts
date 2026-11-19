@@ -217,12 +217,14 @@ function drivelineGain(part: PartDef, gain: PartGain): boolean {
 }
 
 function breathingGain(part: PartDef, gain: PartGain): boolean {
-  if (!isModernBreathingPart(part) && progressionOf(part)?.group !== 'classic-throttle') return false;
+  const group = progressionOf(part)?.group;
+  if (!isModernBreathingPart(part) && group !== 'classic-throttle' && group !== 'modern-intake-filter') return false;
   // These street parts should not worsen the reference pass enough to outweigh the hardware gain.
   if (gain.etAfter - gain.etBefore > 0.05) return false;
   const reduction = (before: number | null, after: number | null): boolean =>
     before !== null && after !== null && before - after >= 0.1;
-  if (part.category === 'intake-airbox') return reduction(gain.intakeRestrictionBeforeKPa, gain.intakeRestrictionAfterKPa);
+  if (part.category === 'intake-airbox' || part.category === 'intake-filter')
+    return reduction(gain.intakeRestrictionBeforeKPa, gain.intakeRestrictionAfterKPa);
   if (part.category === 'intake-throttle') return gain.throttleBeforeS - gain.throttleAfterS >= 0.001;
   return reduction(gain.exhaustRestrictionBeforeKPa, gain.exhaustRestrictionAfterKPa);
 }
