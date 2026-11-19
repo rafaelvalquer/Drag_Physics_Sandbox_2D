@@ -88,7 +88,7 @@ const cars = CAREER_CARS.map((car) => {
 const rivals = ALL_RIVALS.map((rival) => ({ id: rival.id, carId: rival.baseCarId, parts: rival.parts, ...baseline(rivalBuild(rival)) }));
 const value = (n: number | null): string => n === null ? '—' : n.toFixed(2);
 const lines = [
-  '# Baseline da oficina',
+  '# Matriz de cobertura da oficina',
   '',
   `Distância oficial de ${WORKSHOP_DISTANCE_M.toFixed(3)} m, pista de testes e piloto avançado. Opções do catálogo atual ainda não representam estágios validados.`,
   '',
@@ -110,5 +110,5 @@ for (const car of cars) {
   lines.push('');
 }
 mkdirSync(output, { recursive: true });
-writeFileSync(join(output, 'parts-coverage-baseline.json'), JSON.stringify({ distanceM: WORKSHOP_DISTANCE_M, cars, rivals }, null, 2) + '\n');
-writeFileSync(join(output, 'parts-coverage-baseline.md'), lines.join('\n'));
+writeFileSync(join(output, 'parts-coverage.json'), JSON.stringify({ distanceM: WORKSHOP_DISTANCE_M, cars, rivals }, null, 2) + '\n');
+writeFileSync(join(output, 'parts-coverage.md'), lines.join('\n'));
