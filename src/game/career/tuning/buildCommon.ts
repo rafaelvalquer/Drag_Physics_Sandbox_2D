@@ -225,7 +225,7 @@ export function deepFreeze<T>(o: T): T {
 
 /** How slot-catalogue mods of several parts combine (the same rules the v1 resolver uses). */
 const COMPOUND_MODS = new Set(['knockRetardScale', 'coolingKnockScale', 'coolingFrictionScale', 'burnDurationScale', 'turboSpoolScale', 'tireRollingScale']);
-const ADDITIVE_MODS = new Set(['backPressureReductionKPa', 'filterDropReductionKPa', 'intercoolerEffectivenessAdd', 'intercoolerMassAddKg', 'wastegateHoldAddBar', 'drivelineEfficiencyAdd', 'massRemoveKg']);
+const ADDITIVE_MODS = new Set(['backPressureReductionKPa', 'filterDropReductionKPa', 'intercoolerEffectivenessAdd', 'intercoolerMassAddKg', 'wastegateHoldAddBar', 'drivelineEfficiencyAdd', 'massRemoveKg', 'coolingMassAddKg']);
 
 export function combineMods(parts: readonly PartDef[]): MechanicalMods {
   const mod: MechanicalMods = {};
@@ -249,4 +249,15 @@ export function applyGenericChassisMods(car: CarConfig, mod: MechanicalMods): vo
   if (mod.tireTempSensitivityScale) car.tires.tempSensitivityPerC *= mod.tireTempSensitivityScale;
   if (mod.tireRollingScale) car.tires.rollingResistance = Math.max(0.005, car.tires.rollingResistance * mod.tireRollingScale);
   if (mod.massRemoveKg) car.massKg = Math.max(500, car.massKg - mod.massRemoveKg);
+}
+
+export function applyCoolingHardware(car: CarConfig, mod: MechanicalMods): void {
+  if (!mod.radiatorAreaScale && !mod.oilCoolerAreaScale && !mod.fanFlowScale) return;
+  const original = car.engine.cooling;
+  car.engine.cooling = {
+    radiatorScale: Math.min(3, (original?.radiatorScale ?? 1) * (mod.radiatorAreaScale ?? 1)),
+    oilCoolerScale: Math.min(3, (original?.oilCoolerScale ?? 1) * (mod.oilCoolerAreaScale ?? 1)),
+    fanFlowScale: Math.min(3, (original?.fanFlowScale ?? 1) * (mod.fanFlowScale ?? 1)),
+  };
+  car.massKg += mod.coolingMassAddKg ?? 0;
 }

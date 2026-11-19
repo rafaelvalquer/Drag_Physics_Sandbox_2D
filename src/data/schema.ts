@@ -159,6 +159,11 @@ export const EngineSchema = z
       maxFuelKgS: finite(0.001, 0.5),
       airFuelRatio: finite(5, 20),
     }).optional(),
+    cooling: z.object({
+      radiatorScale: finite(1, 3),
+      oilCoolerScale: finite(1, 3),
+      fanFlowScale: finite(1, 3),
+    }).optional(),
     combustion: z.object({
       burnDurationDeg: finite(25, 100),
       /** Cycle-to-cycle variation (coefficient of variation of the combustion pressure rise). */

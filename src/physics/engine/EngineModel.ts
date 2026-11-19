@@ -9,6 +9,7 @@ import { orificeMassFlow, throttleAttenuation } from './GasFlow';
 import { IgnitionModule } from './IgnitionModule';
 import { IdleAirController } from './IdleAirController';
 import { Turbocharger } from './Turbocharger';
+import { EngineThermalModel } from './EngineThermalModel';
 
 export interface EngineInputs {
   /** Driver / AI throttle request 0..1. */
@@ -68,6 +69,7 @@ export class EngineModel {
   readonly turbo: Turbocharger | null;
   readonly torqueCurve: MonotoneCubic;
   readonly frame: EngineTelemetryFrame;
+  readonly thermal: EngineThermalModel;
 
   ambient: Ambient = { pressurePa: ATMOSPHERIC_PRESSURE, temperatureK: 298.15 };
   dyno: DynoControl = { enabled: false, targetOmega: 0, maxTorque: 3000, hold: false };
@@ -118,6 +120,7 @@ export class EngineModel {
     this.geometry = engineGeometry(cfg);
     this.crank = new Dof('crank', cfg.inertiaKgM2);
     this.torqueCurve = new MonotoneCubic(cfg.torqueCurve.rpm, cfg.torqueCurve.torqueNm);
+    this.thermal = new EngineThermalModel(cfg, this.geometry.displacement);
     this.ignition = new IgnitionModule(cfg.firingAnglesDeg, rpmToRadS(cfg.revLimitRpm), cfg.limiterCutTimeS);
     this.throttleArea = (Math.PI * (cfg.throttle.bodyDiameterMm / 1000) ** 2) / 4;
     this.manifoldVolume = cfg.intake.manifoldVolumeL / 1000;
@@ -187,6 +190,7 @@ export class EngineModel {
     this.exhaustTempK = this.ambient.temperatureK + 20;
     this.idleAir.reset();
     this.turbo?.reset();
+    this.thermal.reset();
     this.ignition.reset(0);
     this.crankingTime = 0;
     this.catchTime = 0;
@@ -621,7 +625,7 @@ export class EngineModel {
     this.load = clamp(this.manifoldPressure / this.referencePressure, 0, 1.8);
     const indicated = this.wotIndicatedTorque(Math.max(rpm, cfg.torqueCurve.rpm[0]!));
     const willans = this.willansFactor(this.manifoldPressure);
-    this.torqueCombustion = omega > 0 ? indicated * willans * burn * this.fueledFraction(this.airMassFlow) : 0;
+    this.torqueCombustion = omega > 0 ? indicated * willans * burn * this.fueledFraction(this.airMassFlow) * this.thermal.torqueFraction : 0;
 
     // ----- losses -----
     const back = this.backPressure();
@@ -663,7 +667,7 @@ export class EngineModel {
   }
 
   /** Integrates the crank angle and updates ignition events, limiter and run state. */
-  postStep(h: number, input: EngineInputs, simTime: number): void {
+  postStep(h: number, input: EngineInputs, simTime: number, speedMps = 0): void {
     const cfg = this.cfg;
     const omega = this.crank.v;
     const rpm = radSToRpm(omega);
@@ -688,6 +692,7 @@ export class EngineModel {
       ? cfg.egt.idleK + (cfg.egt.maxK - cfg.egt.idleK) * clamp01(this.load * this.fueledFraction(this.airMassFlow) * (0.3 + 0.7 * (rpm / cfg.redlineRpm)))
       : this.ambient.temperatureK + (rpm > 100 ? 120 : 0);
     this.exhaustTempK = firstOrder(this.exhaustTempK, target, h, target > this.exhaustTempK ? 0.7 : 2.5);
+    this.thermal.step(h, Math.max(0, this.torqueCombustion * omega), this.ambient.temperatureK - 273.15, speedMps);
 
     // run state machine
     switch (this.runState) {

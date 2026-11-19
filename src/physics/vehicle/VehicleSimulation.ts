@@ -698,7 +698,7 @@ export class VehicleSimulation {
     }
     this.slipIntegral += Math.abs(slipMax) * h;
 
-    eng.postStep(h, ei, this.simTime);
+    eng.postStep(h, ei, this.simTime, this.body.v);
     const fl = this.failure;
     if (fl && eng.runState !== 'BROKEN') {
       const egt = (eng.exhaustTempK - c.engine.egt.idleK) / (c.engine.egt.maxK - c.engine.egt.idleK);

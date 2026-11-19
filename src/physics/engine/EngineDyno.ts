@@ -34,7 +34,8 @@ export class EngineDyno {
     e.crank.v += h * e.crank.invMass * explicit;
     this.solver.solve([e.frictionRow, e.starterRow, e.dynoRow], h);
     this.simTime += h;
-    e.postStep(h, this.inputs, this.simTime);
+    // A bench blower supplies air to the radiator while the car is stationary.
+    e.postStep(h, this.inputs, this.simTime, 20);
   }
 
   /** Cranks the engine until it runs (or gives up after `timeoutS`). */

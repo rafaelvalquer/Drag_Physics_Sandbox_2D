@@ -7,6 +7,7 @@ import { familyOf, incompatibility, transmissionKindOf } from './BuildResolverV2
 import { findPart, type PartDef } from './parts';
 import { reliabilityLimits } from './EngineReliability';
 import { physicalSlotOf, progressionOf } from './partProgression';
+import { EngineThermalModel } from '../../../physics/engine/EngineThermalModel';
 import { isModernBreathingPart } from './modernBreathing';
 import { MODERN_CONVERSION_PARTS } from './modernConversionParts';
 
@@ -51,6 +52,7 @@ export interface PartGain {
   fuelTargetAfterAfr: number | null;
   mappedTorqueLimitBeforeNm: number | null;
   mappedTorqueLimitAfterNm: number | null;
+  sustainedTemperature?: { circuit: 'coolant' | 'oil'; beforeC: number; afterC: number };
   fuelCapacityBeforeKgS: number | null;
   fuelCapacityAfterKgS: number | null;
   etBefore: number;
@@ -227,6 +229,21 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
   const fuelGain = 'fuelCapacityScale' in part && gain.fuelCapacityBeforeKgS !== null && gain.fuelCapacityAfterKgS !== null &&
     gain.fuelCapacityAfterKgS - gain.fuelCapacityBeforeKgS >= 0.0001 && gain.etAfter - gain.etBefore <= 0.05;
   const group = progressionOf(part)?.group;
+  if (group === 'cooling-radiator' || group === 'cooling-oil' || group === 'cooling-fan') {
+    const circuit = group === 'cooling-oil' ? 'oil' : 'coolant';
+    const speedMps = group === 'cooling-fan' ? 0 : 20;
+    // Sustained-load bench. Hold heat input, ambient and airflow constant for both circuits.
+    const powerW = base.car.engine.ratedPowerCv * 735.5 * 1.15;
+    const test = (engine: CarConfig['engine']): number => {
+      const model = new EngineThermalModel(engine);
+      for (let second = 0; second < 100; second++) model.step(1, powerW, 30, speedMps);
+      return circuit === 'oil' ? model.oilC : model.coolantC;
+    };
+    gain.sustainedTemperature = { circuit, beforeC: test(base.car.engine), afterC: test(after.car.engine) };
+  }
+  const thermal = gain.sustainedTemperature;
+  const coolingGain = thermal !== undefined && thermal.beforeC - thermal.afterC >= 0.2 &&
+    gain.etAfter - gain.etBefore <= 0.08;
   const internalGain = group === 'modern-rotating-assembly' && gain.safeRpmAfter - gain.safeRpmBefore >= 100 &&
     gain.engineInertiaAfterKgM2 < gain.engineInertiaBeforeKgM2 && gain.etAfter - gain.etBefore <= 0.05;
   const compressionGain = group === 'modern-na-compression' &&
@@ -242,7 +259,7 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     gain.chargeTemperatureBeforeK - gain.chargeTemperatureAfterK >= 0.5;
   const improvement = isGain(gain) || breathingGain(part, gain) || drivelineGain(part, gain) ||
     topEndGain(part, gain) || fuelGain || internalGain || compressionGain || ignitionGain || turboFlowGain || chargeCoolingGain ||
-    pressureControlGain(group, gain);
+    pressureControlGain(group, gain) || coolingGain;
   return { status: !effect ? 'no-effect' : improvement ? 'gain' : 'no-gain', gain };
 }
 

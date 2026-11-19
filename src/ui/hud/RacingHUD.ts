@@ -74,6 +74,7 @@ export class RacingHUD {
   private readonly strainBar: HTMLElement;
   private readonly strainText: HTMLElement;
   private readonly strainAlert: HTMLElement;
+  private readonly heatAlert: HTMLElement;
   private readonly risk = new StrainDisplay();
   private riskLastMs: number | null = null;
   private riskLastSimT = 0;
@@ -132,6 +133,8 @@ export class RacingHUD {
       this.strainText,
     );
     this.strainAlert = h('div', { class: 'strain-alert-msg', 'data-testid': 'hud-overrev', role: 'status', 'aria-live': 'polite' }, '');
+    this.heatAlert = h('div', { class: 'strain-alert-msg', 'data-testid': 'hud-overheat', role: 'status' }, 'Motor quente · potência reduzida');
+    this.heatAlert.hidden = true;
     this.strainAlert.style.display = 'none';
     this.strainRow.style.display = 'none';
     this.el = h(
@@ -157,6 +160,7 @@ export class RacingHUD {
         h('div', { class: 'bar-row', title: 'Escorregamento longitudinal dos pneus de tração: (ωr − v) / v' }, h('span', { class: 'k' }, 'patinagem'), h('div', { class: 'hbar' }, this.slipBar), this.slipText),
         this.strainRow,
         this.strainAlert,
+        this.heatAlert,
         this.msg,
       ),
     );
@@ -220,6 +224,7 @@ export class RacingHUD {
     this.slipBar.classList.toggle('hot', slip > 0.15);
     this.slipText.textContent = slip > 9.99 ? '>999 %' : `${(slip * 100).toFixed(0)} %`;
     this.updateStrain(sim);
+    this.heatAlert.hidden = sim.engine.thermal.torqueFraction >= 1;
   }
 
   /** Engine strain gauge: only when mechanical failures are on for this car. */

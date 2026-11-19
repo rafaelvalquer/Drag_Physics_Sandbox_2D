@@ -3,7 +3,7 @@ import { exhaustPreset } from '../../../data/exhaustPresets';
 import { applyEngineParts, curvePeakCv, engineFuel, powerPeakRpm, TURBO_MAX_COMPRESSION, withStockBreathing, type EngineParts } from './breathingModel';
 import { CATEGORY_LABEL, CATEGORY_ORDER_V1, findPart, findPartForVersion, type PartCategory, type PartDef, type TirePart, type FilterPart, type ManifoldPart, type CamPart, type ExhaustPart, type TurboPart, type MechanicalMods } from './parts';
 import { applyTuneOverlay, needsOverlay } from './TuningCapabilities';
-import { tuneKey, resolverTune, sameTune, applyTyre, CLUTCH_TORQUE_MARGIN, deepFreeze, workshopFinalDrive, workshopGearRatios, fmtBar, MAX_KNOCK_LOSS, type BuildResult, type BuildTune, type ResolverVersion } from './buildCommon';
+import { tuneKey, resolverTune, sameTune, applyTyre, applyCoolingHardware, CLUTCH_TORQUE_MARGIN, deepFreeze, workshopFinalDrive, workshopGearRatios, fmtBar, MAX_KNOCK_LOSS, type BuildResult, type BuildTune, type ResolverVersion } from './buildCommon';
 import { resolveV2 } from './BuildResolverV2';
 
 export { CLUTCH_TORQUE_MARGIN, MAX_KNOCK_LOSS, type BuildResult, type BuildTune, type ResolverVersion };
@@ -113,7 +113,7 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
   const parts = CATEGORY_ORDER_V1.map((c) => bySlot.get(c)).filter((p): p is PartDef => !!p);
   const mod: MechanicalMods = {};
   const compound = new Set(['knockRetardScale', 'coolingKnockScale', 'coolingFrictionScale', 'burnDurationScale', 'turboSpoolScale', 'tireRollingScale']);
-  const additive = new Set(['backPressureReductionKPa', 'filterDropReductionKPa', 'intercoolerEffectivenessAdd', 'intercoolerMassAddKg', 'wastegateHoldAddBar', 'drivelineEfficiencyAdd', 'massRemoveKg']);
+  const additive = new Set(['backPressureReductionKPa', 'filterDropReductionKPa', 'intercoolerEffectivenessAdd', 'intercoolerMassAddKg', 'wastegateHoldAddBar', 'drivelineEfficiencyAdd', 'massRemoveKg', 'coolingMassAddKg']);
   for (const p of parts) if ('mod' in p) {
     for (const [k, v] of Object.entries(p.mod)) {
       if (v === undefined) continue;
@@ -186,7 +186,7 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
   let knockLoss = 0;
   // Non-engine upgrades (clutch, tyres, mass, suspension, internals) must not resample
   // the engine curve: restoring them keeps factory motor physics byte-for-byte.
-  const nonEnginePrefix = /^(clutch|finalDrive|gearSpread|driveline|tire|massRemove|cgHeight|launchCg|internalTorqueLimit|fuelBoostLimit)/;
+  const nonEnginePrefix = /^(clutch|finalDrive|gearSpread|driveline|tire|massRemove|cgHeight|launchCg|internalTorqueLimit|fuelBoostLimit|radiatorArea|oilCoolerArea|fanFlow|coolingMass)/;
   const changesEngine = !!(engineParts.filter || engineParts.manifold || engineParts.cam || engineParts.exhaust || engineParts.turbo)
     || Object.keys(mod).some((k) => !nonEnginePrefix.test(k));
   if (changesEngine) {
@@ -247,6 +247,7 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
   if (mod.tireTempSensitivityScale) car.tires.tempSensitivityPerC *= mod.tireTempSensitivityScale;
   if (mod.tireRollingScale) car.tires.rollingResistance = Math.max(0.005, car.tires.rollingResistance * mod.tireRollingScale);
   if (mod.massRemoveKg) car.massKg = Math.max(500, car.massKg - mod.massRemoveKg);
+  applyCoolingHardware(car, mod);
   if (mod.cgHeightDeltaM) car.cgHeightM = Math.max(0.25, car.cgHeightM + mod.cgHeightDeltaM);
   // drag suspension: load transfer towards the driven axle (front drive: less, rear drive: more)
   if (mod.launchCgDeltaM) car.cgHeightM = Math.max(0.25, car.cgHeightM + (base.drivenAxle === 'front' ? -1 : 1) * mod.launchCgDeltaM);

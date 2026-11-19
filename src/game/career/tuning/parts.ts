@@ -11,6 +11,7 @@ import { MODERN_CONVERSION_PARTS } from './modernConversionParts';
 import { MODERN_INTERCOOLER_PARTS, MODERN_TURBO_PARTS } from './modernTurboParts';
 import { MODERN_PRESSURE_PARTS } from './modernPressureParts';
 import { MODERN_ECU_PARTS } from './modernEcuParts';
+import { COOLING_PARTS } from './coolingParts';
 import type { PartProgression } from './partProgression';
 
 /**
@@ -147,6 +148,10 @@ export const CATEGORY_DESCRIPTION: Record<PartCategory, string> = {
 /** Numeric mechanical changes use SI units or the documented suffix (Bar, KPa, Mm, Rpm).
  * Values are applied to hardware / operating conditions, never to advertised horsepower. */
 export interface MechanicalMods {
+  radiatorAreaScale?: number;
+  oilCoolerAreaScale?: number;
+  fanFlowScale?: number;
+  coolingMassAddKg?: number;
   [key: string]: number | undefined;
   filterDropKPa?: number; filterDropReductionKPa?: number; airboxVolumeScale?: number;
   runnerLengthScale?: number; runnerDiameterAddMm?: number; plenumScale?: number;
@@ -818,6 +823,7 @@ export const ALL_PARTS: readonly PartDef[] = [
   ...MODERN_TURBO_PARTS, ...MODERN_INTERCOOLER_PARTS,
   ...MODERN_PRESSURE_PARTS,
   ...MODERN_ECU_PARTS,
+  ...COOLING_PARTS,
 ];
 
 export function findPart(id: string): PartDef | undefined {
