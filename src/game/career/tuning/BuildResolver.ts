@@ -187,10 +187,11 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
   // Non-engine upgrades (clutch, tyres, mass, suspension, internals) must not resample
   // the engine curve: restoring them keeps factory motor physics byte-for-byte.
   const nonEnginePrefix = /^(clutch|finalDrive|gearSpread|driveline|tire|massRemove|cgHeight|launchCg|internalTorqueLimit|fuelBoostLimit|radiatorArea|oilCoolerArea|fanFlow|coolingMass)/;
+  const engineMods = Object.entries(mod).filter(([key]) => !nonEnginePrefix.test(key));
   const changesEngine = !!(engineParts.filter || engineParts.manifold || engineParts.cam || engineParts.exhaust || engineParts.turbo)
-    || Object.keys(mod).some((k) => !nonEnginePrefix.test(k));
+    || engineMods.length > 0;
   if (changesEngine) {
-    const r = applyEngineParts(stockEngine, engineParts);
+    const r = applyEngineParts(stockEngine, { ...engineParts, mod: Object.fromEntries(engineMods) });
     car.engine = r.engine;
     steadyBoostBar = r.steadyBoostBar;
     knockLoss = r.knockLoss;

@@ -7,6 +7,7 @@ import {
   ottoEfficiency, powerPeakRpm, runnerPressureRecoveryPa, throttleChargeRatio, torquePeakRpm,
 } from './breathingModel';
 import type { EngineFamilyDef } from './chapter2Parts';
+import { memoizeEngineCalibration } from './engineCalibrationCache';
 import type { BoostControlPart, CamPart, EcuPart, ExhaustPart, FilterPart, HeadPart, IntercoolerPart, ManifoldPart, MechanicalMods, PistonPart, TurboUpgradePart, WastegatePart } from './parts';
 
 /**
@@ -98,7 +99,9 @@ export function ecuBoostTarget(stock: EngineConfig, ecu?: EcuPart, tuneBar?: num
   return b0 + ecu.boostAddBar;
 }
 
-export function applyFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboParts): FactoryTurboResult {
+export const applyFactoryTurboParts = memoizeEngineCalibration(calibrateFactoryTurboParts);
+
+function calibrateFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboParts): FactoryTurboResult {
   const t0 = stock.turbo!;
   const b0 = stock.breathing!;
   const fam = parts.family;

@@ -26,30 +26,25 @@ function race(offer: ReturnType<typeof makeFreeEvent>, playerId: string, attempt
   };
 }
 
+const pools = [[CHAPTER_1_ID, CHAPTER1_CARS], [CHAPTER_2_ID, CHAPTER2_CARS], [CHAPTER_3_ID, CHAPTER3_CARS]] as const;
+const rotations = pools.flatMap(([chapter, pool]) =>
+  [1, 2, 3, 4].map((rotation) => [chapter, rotation, pool.map((car) => car.id)] as const));
+
 describe('procedural free races', () => {
-  it('uses only cars from the active chapter and valid hardware combinations', () => {
-    const pools = [
-      [CHAPTER_1_ID, CHAPTER1_CARS],
-      [CHAPTER_2_ID, CHAPTER2_CARS],
-      [CHAPTER_3_ID, CHAPTER3_CARS],
-    ] as const;
-    for (const [chapter, pool] of pools) {
-      for (let rotation = 1; rotation <= 4; rotation++) {
-        const offers = availableFreeOffers(chapter, rotation);
-        expect(offers.map((o) => o.tier)).toEqual([...FREE_TIERS]);
-        for (const o of offers) {
-          expect(pool.map((c) => c.id)).toContain(o.rival.baseCarId);
-          expect(o.event.chapter).toBe(chapter);
-          expect(o.event.rewardCr).toBe(FREE_REWARDS[chapter][o.tier]);
-          expect(o.rival.paint.color).toMatch(/^#[0-9a-f]{6}$/);
-          expect(o.rival.paint.accent).toMatch(/^#[0-9a-f]{6}$/);
-          expect(rivalBuild(o.rival).peakPowerCv).toBeGreaterThan(0);
-          expect(o.powerCv).toBeGreaterThan(0);
-          expect(o.rival.parts.length).toBeLessThanOrEqual(14);
-          expect(makeFreeEvent(chapter, rotation, o.tier)).toEqual(o);
-          expect(freeChapterOf(o.event.id)).toBe(chapter);
-        }
-      }
+  it.each(rotations)('%s rotation %i uses chapter cars and valid hardware', (chapter, rotation, carIds) => {
+    const offers = availableFreeOffers(chapter, rotation);
+    expect(offers.map((o) => o.tier)).toEqual([...FREE_TIERS]);
+    for (const o of offers) {
+      expect(carIds).toContain(o.rival.baseCarId);
+      expect(o.event.chapter).toBe(chapter);
+      expect(o.event.rewardCr).toBe(FREE_REWARDS[chapter][o.tier]);
+      expect(o.rival.paint.color).toMatch(/^#[0-9a-f]{6}$/);
+      expect(o.rival.paint.accent).toMatch(/^#[0-9a-f]{6}$/);
+      expect(rivalBuild(o.rival).peakPowerCv).toBeGreaterThan(0);
+      expect(o.powerCv).toBeGreaterThan(0);
+      expect(o.rival.parts.length).toBeLessThanOrEqual(14);
+      expect(makeFreeEvent(chapter, rotation, o.tier)).toEqual(o);
+      expect(freeChapterOf(o.event.id)).toBe(chapter);
     }
   });
 

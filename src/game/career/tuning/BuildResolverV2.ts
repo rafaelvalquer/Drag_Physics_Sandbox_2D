@@ -205,7 +205,12 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
         head,
         manifold,
         boostBar: tune.boostBar,
-        mod: { ...genericMod, ...exhaustMod, ...ignitionMod },
+        mod: {
+          coolingFrictionScale: genericMod.coolingFrictionScale,
+          coolingKnockScale: genericMod.coolingKnockScale,
+          ...exhaustMod,
+          ...ignitionMod,
+        },
       });
       car.engine = r.engine;
       steadyBoostBar = r.steadyBoostBar;

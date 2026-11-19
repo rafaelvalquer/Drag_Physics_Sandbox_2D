@@ -317,11 +317,16 @@ export class EngineModel {
     tempK = this.ambient.temperatureK,
   ): number {
     const area = this.throttleEffectiveArea(opening);
+    const efficiency = omega > 0 ? this.volumetricEfficiency(radSToRpm(omega)) : 0;
+    const densityDivisor = R_AIR * tempK;
+    const displacement = this.geometry.displacement;
+    const cyclesPerSecond = omega / FOUR_PI;
     let lo = 200;
     let hi = upstreamPa;
     for (let i = 0; i < 40; i++) {
       const mid = 0.5 * (lo + hi);
-      const net = orificeMassFlow(area, upstreamPa, mid, tempK, tempK) - this.cylinderMassFlow(mid, omega, tempK);
+      const flow = efficiency * (mid / densityDivisor) * displacement * cyclesPerSecond;
+      const net = orificeMassFlow(area, upstreamPa, mid, tempK, tempK) - flow;
       if (net > 0) lo = mid;
       else hi = mid;
     }

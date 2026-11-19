@@ -2,6 +2,7 @@ import type { EngineConfig } from '../../../data/schema';
 import { ATMOSPHERIC_PRESSURE, R_AIR, STANDARD_TEMPERATURE_K } from '../../../core/units';
 import { EngineModel, WILLANS_OFFSET } from '../../../physics/engine/EngineModel';
 import { engineGeometry } from '../../../physics/engine/EngineGeometry';
+import { memoizeEngineCalibration } from './engineCalibrationCache';
 import type { CamPart, ExhaustPart, FilterPart, ManifoldPart, TurboPart, MechanicalMods } from './parts';
 
 /**
@@ -215,7 +216,9 @@ export interface BreathingResult {
  * Derives the engine configuration of the given parts from a stock engine (which must carry a
  * `breathing` block — see withStockBreathing).
  */
-export function applyEngineParts(stock: EngineConfig, parts: EngineParts): BreathingResult {
+export const applyEngineParts = memoizeEngineCalibration(calibrateEngineParts);
+
+function calibrateEngineParts(stock: EngineConfig, parts: EngineParts): BreathingResult {
   const b0 = stock.breathing!;
   const mod = parts.mod ?? {};
   const compressionRatio = Math.max(6, stock.compressionRatio + (mod.compressionRatioDelta ?? 0));
