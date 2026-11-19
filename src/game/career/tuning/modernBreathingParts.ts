@@ -39,7 +39,7 @@ const specs: BreathingSpec[] = [
       const lexusStreet = car.engine.family === 'toyota-2gr-fse' && tier === 1;
       // Small bore changes at the 2GR converter's launch point made this stage slower.
       const bore = lexusStreet ? 0 : Math.round(car.engine.throttle.bodyDiameterMm * tiersValue(tier, 0.03, 0.06, 0.09));
-      const response = tiersValue(tier, lexusStreet ? 0.92 : 0.94, 0.87, 0.8);
+      const response = tiersValue(tier, lexusStreet ? 0.92 : 0.94, car.engine.family === 'alfa-690t' ? 0.9 : 0.87, 0.8);
       const geometry = bore ? `Diâmetro aumenta ${bore} mm.` : 'Diâmetro da peça original.';
       return { mod: { throttleDiameterAddMm: bore, throttleResponseScale: response }, physics: `${geometry} O tempo de resposta da borboleta diminui ${pct(response)}%.` };
     },

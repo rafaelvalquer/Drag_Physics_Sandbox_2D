@@ -50,8 +50,8 @@ describe('admissão e escape modernos por família', () => {
     expect(exhaustPressureAfterSections(18, 14, true, sections)).toBe(9);
   });
 
-  it('preserva a arrancada do Lexus ao acelerar a borboleta do 2GR-FSE', () => {
-    const car = CHAPTER3_CARS.find((item) => item.engine.family === 'toyota-2gr-fse')!;
+  it.each(['toyota-2gr-fse', 'alfa-690t'])('preserva a arrancada ao acelerar a borboleta do %s', (family) => {
+    const car = CHAPTER3_CARS.find((item) => item.engine.family === family)!;
     const track = TRACKS.find((item) => item.id === 'test-track')!;
     const stages = MODERN_BREATHING_PARTS.filter((part) => part.category === 'intake-throttle' && !incompatibility(car, part));
     const results = auditPartStages(car, stages, track, 2);
