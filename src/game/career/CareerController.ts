@@ -1,7 +1,5 @@
 import { findCampaignCar } from '../../data/cars/campaign';
 import { makeFreeEvent, type FreeEventOffer } from './FreeEvents';
-import { CHAPTER2_CARS } from '../../data/cars/chapter2/index';
-import { CHAPTER3_CARS } from '../../data/cars/chapter3/index';
 import { EVENTS, findEvent, type CareerEventDef } from './CareerEvents';
 import { isChapterComplete, isChapterUnlocked, isPartUnlocked, canTuneBoost, unlocksOf, unlockedChaptersOf } from './CareerProgression';
 import { CHAPTER_1_ID, CHAPTER_2_ID, findChapter, type ChapterId } from './chapters';
@@ -24,6 +22,7 @@ import {
 import { resolveBuild, type ResolverVersion } from './tuning/BuildResolver';
 import { findPart, type PartCategory, type UnlockId } from './tuning/parts';
 import { familyOf } from './tuning/BuildResolverV2';
+import { careerResolverVersion } from './tuning/resolverVersion';
 import type { BuildTune } from './tuning/buildCommon';
 import { droppedNotice, reconcileTune, tuningCapabilities, validateTune, type TuneContext, type TuningCapabilities } from './tuning/TuningCapabilities';
 
@@ -40,19 +39,15 @@ export function normalizeTune(t: BuildTune): BuildTune {
   return o;
 }
 
-const CHAPTER2_CAR_IDS = new Set([...CHAPTER2_CARS, ...CHAPTER3_CARS].map((c) => c.id));
-
 /**
- * Resolver version a car's build uses. Chapter 2 cars always use version 2 (their gearboxes,
+ * Resolver version a car's build uses. Modern cars always use version 2 (their gearboxes,
  * AWD and engine families exist only there). A chapter 1 car stays at the version stored with it
  * (1 for every car of an old save) until a part of version 2 is installed; from then on it uses 2.
  * On a chapter 1 build both versions give the identical car (tested), so moving never changes
  * what the player already had.
  */
 export function buildVersionFor(car: Pick<OwnedCar, 'baseCarId' | 'buildVersion'>, parts: readonly string[]): ResolverVersion {
-  if (CHAPTER2_CAR_IDS.has(car.baseCarId)) return 2;
-  if ((car.buildVersion ?? 1) === 2) return 2;
-  return parts.some((id) => findPart(id)?.since === 2) ? 2 : 1;
+  return careerResolverVersion(car.baseCarId, parts, car.buildVersion);
 }
 
 /** Unique id for a new garage car (ids of sold cars are never reused within the garage). */
@@ -404,7 +399,7 @@ export class CareerController {
             nickname: shortName(base.name),
             paint: chosenPaint.data,
             installedParts: [],
-            buildVersion: CHAPTER2_CAR_IDS.has(baseCarId) ? 2 : 1,
+            buildVersion: careerResolverVersion(baseCarId),
             purchasePrice: price,
             acquiredAt: new Date().toISOString(),
           });

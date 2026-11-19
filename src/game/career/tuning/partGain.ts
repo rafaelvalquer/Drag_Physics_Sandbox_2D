@@ -1,6 +1,8 @@
 import type { CarConfig, TrackConfig } from '../../../data/schema';
 import { runAccelerationTest } from '../../race/accelerationTest';
+import { RACE_DISTANCES } from '../../race/RaceController';
 import { resolveBuild, type ResolverVersion } from './BuildResolver';
+import { incompatibility } from './BuildResolverV2';
 import { findPart, type PartDef } from './parts';
 import { reliabilityLimits } from './EngineReliability';
 
@@ -29,6 +31,12 @@ export interface PartGain {
   launchRpmBefore: number;
   launchRpmAfter: number;
 }
+
+export const WORKSHOP_DISTANCE_M = RACE_DISTANCES.quarter.m;
+
+export type PartAudit =
+  | { status: 'incompatible' | 'dependency-blocked' | 'invalid-build' | 'simulation-failed'; reasons: string[] }
+  | { status: 'no-effect' | 'no-gain' | 'gain'; gain: PartGain };
 
 /** Smallest supporting builds tried in order until the part fits. */
 const CONTEXTS: readonly string[][] = [
@@ -62,29 +70,52 @@ function build(car: CarConfig, ids: string[], version: ResolverVersion) {
   return r.ok ? r : null;
 }
 
-const measured = new Map<string, { et: number; t100: number }>();
+const measured = new WeakMap<TrackConfig, Map<string, { et: number; t100: number }>>();
 function measure(key: string, car: CarConfig, track: TrackConfig): { et: number; t100: number } {
-  const hit = measured.get(key);
+  const cache = measured.get(track) ?? new Map();
+  measured.set(track, cache);
+  const hit = cache.get(key);
   if (hit) return hit;
-  const r = runAccelerationTest(car, track, { speedsKmh: [100], distancesM: [400], maxS: 40 });
-  const m = { et: r.distanceTimes.get(400) ?? Infinity, t100: r.speedTimes.get(100) ?? Infinity };
-  measured.set(key, m);
+  const r = runAccelerationTest(car, track, { speedsKmh: [100], distancesM: [WORKSHOP_DISTANCE_M], maxS: 45, stopAtLastSplit: true });
+  const m = { et: r.distanceTimes.get(WORKSHOP_DISTANCE_M) ?? Infinity, t100: r.speedTimes.get(100) ?? Infinity };
+  cache.set(key, m);
   return m;
 }
 
-/** Gain of `part` on `car`, or null when no supporting build accepts it (incompatible). */
-export function measurePartGain(car: CarConfig, part: PartDef, track: TrackConfig, version: ResolverVersion): PartGain | null {
+function physicsSignature(car: CarConfig): string {
+  const { id, name, description, visual, ...physics } = car;
+  return JSON.stringify(physics);
+}
+
+/** Classifies every attempted pairing, including failures to produce comparable runs. */
+export function auditPartGain(car: CarConfig, part: PartDef, track: TrackConfig, version: ResolverVersion): PartAudit {
+  const incompatible = incompatibility(car, part);
+  if (incompatible) return { status: 'incompatible', reasons: [incompatible] };
+  if (version === 1 && part.since === 2) return { status: 'incompatible', reasons: ['Peça requer resolver 2.'] };
+  const errors = new Set<string>();
   for (const ctx0 of CONTEXTS) {
     const ctx = ctx0.filter((id) => findPart(id)?.category !== part.category);
-    const withPart = build(car, [...ctx, part.id], version);
-    if (!withPart) continue;
     // a turbo kit is compared with the same build without any turbo hardware
     const baseIds = part.category === 'turbo' ? ctx.filter((id) => !requiresTurbo(id) && findPart(id)?.category !== 'turbo') : ctx;
     const base = build(car, baseIds, version);
     if (!base) continue;
-    const a = measure(base.key, base.car, track);
-    const b = measure(withPart.key, withPart.car, track);
-    return {
+    const withPart = resolveBuild(car, [...ctx, part.id], {}, version);
+    if (!withPart.ok) {
+      for (const error of withPart.errors) errors.add(error);
+      continue;
+    }
+    let a: ReturnType<typeof measure>;
+    let b: ReturnType<typeof measure>;
+    try {
+      a = measure(base.key, base.car, track);
+      b = measure(withPart.key, withPart.car, track);
+    } catch (error) {
+      return { status: 'simulation-failed', reasons: [String(error)] };
+    }
+    if (!Number.isFinite(a.et) || !Number.isFinite(b.et)) {
+      return { status: 'simulation-failed', reasons: ['Uma das provas não completou a distância de referência.'] };
+    }
+    const gain: PartGain = {
       partId: part.id,
       carId: car.id,
       context: baseIds,
@@ -101,8 +132,16 @@ export function measurePartGain(car: CarConfig, part: PartDef, track: TrackConfi
       launchRpmBefore: base.car.transmission.clutch.launchRpm,
       launchRpmAfter: withPart.car.transmission.clutch.launchRpm,
     };
+    const effect = physicsSignature(base.car) !== physicsSignature(withPart.car) || gain.safeRpmBefore !== gain.safeRpmAfter;
+    return { status: !effect ? 'no-effect' : isGain(gain) ? 'gain' : 'no-gain', gain };
   }
-  return null;
+  const reasons = [...errors];
+  // Existing resolvers expose human-readable validation errors rather than structured codes.
+  const missingSupport = /exige|instale|insuficiente/;
+  return {
+    status: reasons.length > 0 && reasons.every((reason) => missingSupport.test(reason)) ? 'dependency-blocked' : 'invalid-build',
+    reasons: reasons.length ? reasons : ['Nenhum contexto de referência produziu um build válido.'],
+  };
 }
 
 /** Tolerances of the gain check (s, cv). NOT_WORSE_S is the run-to-run resolution of the test. */
