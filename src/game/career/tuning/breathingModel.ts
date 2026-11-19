@@ -128,6 +128,11 @@ export function ottoEfficiency(cr: number): number {
   return 1 - Math.pow(cr, -0.3);
 }
 
+/** Change in indicated work from combustion duration at the same fuel and ignition advance. */
+export function burnWorkRatio(durationScale: number): number {
+  return 1 / Math.pow(durationScale, 0.15);
+}
+
 /** Stock breathing assumed for an engine that has none documented (estimated values). */
 export function withStockBreathing(e: EngineConfig, ratedRpm: number): EngineConfig {
   if (e.breathing) return e;
@@ -216,7 +221,7 @@ export function applyEngineParts(stock: EngineConfig, parts: EngineParts): Breat
   const compressionRatio = Math.max(6, stock.compressionRatio + (mod.compressionRatioDelta ?? 0));
   const otto = (r: number): number => 1 - 1 / Math.pow(r, 0.33);
   const thermalRatio = otto(compressionRatio) / otto(stock.compressionRatio);
-  const burnRatio = 1 / Math.pow(mod.burnDurationScale ?? 1, 0.15);
+  const burnRatio = burnWorkRatio(mod.burnDurationScale ?? 1);
   const g = engineGeometry(stock);
   const vdOver4pi = g.displacement / (4 * Math.PI);
   const ratedRpm = powerPeakRpm(stock.torqueCurve, stock.revLimitRpm);
@@ -331,7 +336,7 @@ export function applyEngineParts(stock: EngineConfig, parts: EngineParts): Breat
   // ---- turbo: fixed point between the curve and the steady boost it produces ----
   const fuel = engineFuel(stock);
   const knockPerBar = fuel === 'ethanol' ? turbo.knockLossPerBarEthanol : turbo.knockLossPerBarPetrol;
-  const crExcess = Math.max(1, compressionRatio - 7);
+  const crExcess = Math.max(1, compression - 7);
   let curve = base.torqueCurve.torqueNm.slice();
   let boosts: number[] = grid.map(() => 0);
   for (let pass = 0; pass < 5; pass++) {

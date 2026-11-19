@@ -34,6 +34,10 @@ export interface PartGain {
   exhaustRestrictionAfterKPa: number | null;
   throttleBeforeS: number;
   throttleAfterS: number;
+  burnBeforeDeg: number;
+  burnAfterDeg: number;
+  knockBefore: number;
+  knockAfter: number;
   fuelCapacityBeforeKgS: number | null;
   fuelCapacityAfterKgS: number | null;
   etBefore: number;
@@ -166,6 +170,10 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     exhaustRestrictionAfterKPa: after.exhaustRestrictionKPa ?? after.car.engine.breathing?.exhaustBackPressureKPa ?? null,
     throttleBeforeS: base.car.engine.throttle.responseTimeS,
     throttleAfterS: after.car.engine.throttle.responseTimeS,
+    burnBeforeDeg: base.car.engine.combustion.burnDurationDeg,
+    burnAfterDeg: after.car.engine.combustion.burnDurationDeg,
+    knockBefore: base.knockLoss,
+    knockAfter: after.knockLoss,
     fuelCapacityBeforeKgS: base.car.engine.fueling?.maxFuelKgS ??
       ('fuelCapacityScale' in part && after.car.engine.fueling ? after.car.engine.fueling.maxFuelKgS / part.fuelCapacityScale : null),
     fuelCapacityAfterKgS: after.car.engine.fueling?.maxFuelKgS ?? null,
@@ -195,8 +203,10 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     gain.engineInertiaAfterKgM2 < gain.engineInertiaBeforeKgM2 && gain.etAfter - gain.etBefore <= 0.05;
   const compressionGain = group === 'modern-na-compression' &&
     gain.cvAfter - gain.cvBefore >= 0.15 && gain.etAfter - gain.etBefore <= NOT_WORSE_S;
+  const ignitionGain = group === 'modern-ignition' && gain.burnBeforeDeg - gain.burnAfterDeg >= 0.1 &&
+    gain.etAfter - gain.etBefore <= 0.05;
   const improvement = isGain(gain) || breathingGain(part, gain) || drivelineGain(part, gain) ||
-    topEndGain(part, gain) || fuelGain || internalGain || compressionGain;
+    topEndGain(part, gain) || fuelGain || internalGain || compressionGain || ignitionGain;
   return { status: !effect ? 'no-effect' : improvement ? 'gain' : 'no-gain', gain };
 }
 

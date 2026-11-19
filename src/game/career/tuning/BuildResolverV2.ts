@@ -114,6 +114,8 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   const get = <C extends PartCategory>(c: C): Extract<PartDef, { category: C }> | undefined => bySlot.get(c) as Extract<PartDef, { category: C }> | undefined;
   const ecu = get('ecu');
   const pistons = get('pistons');
+  const ignition = get('electronics-ignition');
+  const ignitionMod = ignition && { burnDurationScale: ignition.burnDurationScale, knockRetardScale: ignition.knockRetardScale };
   const exhaust = get('exhaust');
   const fuelSupply = get('electronics-fuel');
   const ratedRpm = powerPeakRpm(base.engine.torqueCurve, base.engine.revLimitRpm);
@@ -165,7 +167,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
     const cam = get('camshaft');
     const head = get('cylinder-head');
     const manifold = get('intake-manifold');
-    const anyEngine = genericMod.coolingFrictionScale || genericMod.coolingKnockScale || ecu || turboUp || get('intercooler') || get('boost-control') || pistons || get('intake-filter') || exhaust || cam || head || manifold || sectionParts.length > 0;
+    const anyEngine = genericMod.coolingFrictionScale || genericMod.coolingKnockScale || ignition || ecu || turboUp || get('intercooler') || get('boost-control') || pistons || get('intake-filter') || exhaust || cam || head || manifold || sectionParts.length > 0;
     if (anyEngine) {
       engineModified = true;
       const r = applyFactoryTurboParts(stockEngine, {
@@ -181,7 +183,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
         head,
         manifold,
         boostBar: tune.boostBar,
-        mod: { ...genericMod, ...exhaustMod },
+        mod: { ...genericMod, ...exhaustMod, ...ignitionMod },
       });
       car.engine = r.engine;
       steadyBoostBar = r.steadyBoostBar;
@@ -222,9 +224,10 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
       ignitionGain: ecu?.ignitionGain,
       // New profiles include the spring limit. A remap may use the larger safe range, not add a second spring kit.
       revLimitAddRpm: cam?.progression && ecuRevAdd !== undefined ? Math.max(0, ecuRevAdd - cam.revLimitAddRpm) : ecuRevAdd,
-      mod: sectionParts.length || pistons?.frictionScale || genericMod.coolingFrictionScale || genericMod.coolingKnockScale
+      mod: sectionParts.length || ignition || pistons?.frictionScale || genericMod.coolingFrictionScale || genericMod.coolingKnockScale
         ? {
             ...exhaustMod,
+            ...ignitionMod,
             ...(genericMod.coolingFrictionScale || pistons?.frictionScale ? { coolingFrictionScale: (genericMod.coolingFrictionScale ?? 1) * (pistons?.frictionScale ?? 1) } : {}),
             ...(genericMod.coolingKnockScale ? { coolingKnockScale: genericMod.coolingKnockScale } : {}),
           }

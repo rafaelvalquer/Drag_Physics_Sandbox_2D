@@ -2,7 +2,7 @@ import { CHAPTER2_CARS } from '../../../data/cars/chapter2/index';
 import { CHAPTER3_CARS } from '../../../data/cars/chapter3/index';
 import type { CarConfig } from '../../../data/schema';
 import { modernStageRelease } from './modernStageRelease';
-import type { CompressionPart, PistonPart } from './parts';
+import type { CompressionPart, PistonPart, ValveSpringPart } from './parts';
 
 // Chamber targets depend on knock margin and factory compression, not on displacement alone.
 const naCompressionIncreases: Readonly<Record<string, readonly [number, number, number]>> = {
@@ -20,14 +20,16 @@ const internals = [
 ] as const;
 const format = (value: number): string => value.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
 
-function forFamily(car: CarConfig, origin: 2 | 3, family: string): (PistonPart | CompressionPart)[] {
+type InternalPart = PistonPart | CompressionPart | ValveSpringPart;
+
+function forFamily(car: CarConfig, origin: 2 | 3, family: string): InternalPart[] {
   const { induction, revLimitRpm, ratedPowerCv } = car.engine;
   const turbo = induction === 'turbo';
   const increases = naCompressionIncreases[family];
   const price = (base: number, multiplier: number): number =>
     Math.round(base * Math.sqrt(ratedPowerCv / 170) * multiplier / 50) * 50;
   const compat = { families: [family], induction };
-  return internals.flatMap((stage): (PistonPart | CompressionPart)[] => {
+  return internals.flatMap((stage): InternalPart[] => {
     const { tier, name, enduranceScale } = stage;
     // Keep the 2GR on the same automatic launch behavior measured with the original car.
     const lexus = family === 'toyota-2gr-fse';
@@ -55,7 +57,21 @@ function forFamily(car: CarConfig, origin: 2 | 3, family: string): (PistonPart |
       inertiaScale,
       frictionScale,
     };
-    if (!increases) return [piston];
+    const safeRpmAdd = Math.round(revLimitRpm * 0.027 * tier / 10) * 10;
+    const spring: ValveSpringPart = {
+      id: `valve-springs-${family}-s${tier}`,
+      category: 'engine-valvetrain',
+      name: `Molas e pratos Stage ${tier}`,
+      ...release,
+      price: price(620, [1, 1.65, 2.5][tier - 1]!),
+      since: 2,
+      compat,
+      progression: { tier, group: 'modern-valve-springs', specialization: 'rua' },
+      description: 'Molas e pratos dimensionados para evitar a flutuação das válvulas em alta rotação.',
+      physics: `A reserva mecânica sobe ${safeRpmAdd} rpm. A ECU continua definindo o corte.`,
+      safeRpmAdd,
+    };
+    if (!increases) return [piston, spring];
     const compressionAdd = increases[tier - 1];
     const compression: CompressionPart = {
       id: `compression-chamber-${family}-s${tier}`,
@@ -70,7 +86,7 @@ function forFamily(car: CarConfig, origin: 2 | 3, family: string): (PistonPart |
       physics: `Taxa de compressão +${format(compressionAdd)}:1. A eficiência térmica é calculada para a nova taxa.`,
       compressionAdd,
     };
-    return [piston, compression];
+    return [piston, spring, compression];
   });
 }
 

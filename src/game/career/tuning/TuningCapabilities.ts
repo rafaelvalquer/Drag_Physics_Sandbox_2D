@@ -92,8 +92,8 @@ export const FINAL_DRIVE_OPTIONS: readonly { value: FinalDrivePreset; label: str
 /** ECUs that move the ignition cut (programmable, or the NA remap). */
 const REV_ECUS = new Set(['ecu-programmable', 'ecu-stage1-na', 'ecu-street', 'ecu-race']);
 const CLASSIC_THROTTLES = new Set(['throttle-rework', 'throttle-large']);
-/** Parts whose effect is applied by the overlay (no resolver knows them). */
-export const OVERLAY_PARTS = new Set(['valve-springs', 'launch-control']);
+const isValveSpring = (id: string): boolean => findPart(id)?.category === 'engine-valvetrain';
+const isOverlayPart = (id: string): boolean => id === 'launch-control' || isValveSpring(id);
 
 const off = (reason: string, def = 0): RangeControl => ({ enabled: false, reason, min: def, max: def, step: 1, default: def });
 const round = (v: number, step: number): number => Math.round(v / step) * step;
@@ -262,10 +262,10 @@ export function droppedNotice(dropped: readonly TuneField[]): string | null {
 
 /** Hardware of the Dyno Lab parts that no resolver knows (valve springs, launch control). */
 function withOverlayParts(hw: CarConfig, partIds: readonly string[]): CarConfig {
-  if (!partIds.some((id) => OVERLAY_PARTS.has(id))) return hw;
+  if (!partIds.some(isOverlayPart)) return hw;
   const car = structuredClone(hw);
   const limits = reliabilityLimits(hw, partIds);
-  if (partIds.includes('valve-springs')) car.engine.maxSafeRpm = Math.max(car.engine.maxSafeRpm, limits.maxSafeRpm);
+  if (partIds.some(isValveSpring)) car.engine.maxSafeRpm = Math.max(car.engine.maxSafeRpm, limits.maxSafeRpm);
   const lc = findPart('launch-control');
   if (partIds.includes('launch-control') && lc && 'launchRpmAdd' in lc)
     car.transmission.clutch.launchRpm = Math.min(car.transmission.clutch.launchRpm + (lc.launchRpmAdd ?? 0), car.engine.redlineRpm - 800);
@@ -291,7 +291,7 @@ function extendCurve(car: CarConfig, rpm: number): void {
 
 /** Does this tune / part list need the overlay on top of the resolver result? */
 export function needsOverlay(tune: BuildTune, partIds: readonly string[]): boolean {
-  return TUNE_FIELDS.some((f) => f !== 'boostBar' && tune[f] !== undefined) || partIds.some((id) => OVERLAY_PARTS.has(id));
+  return TUNE_FIELDS.some((f) => f !== 'boostBar' && tune[f] !== undefined) || partIds.some(isOverlayPart);
 }
 
 /**

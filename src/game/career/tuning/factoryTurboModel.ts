@@ -3,7 +3,7 @@ import { ATMOSPHERIC_PRESSURE, STANDARD_TEMPERATURE_K } from '../../../core/unit
 import { EngineModel, WILLANS_OFFSET } from '../../../physics/engine/EngineModel';
 import { engineGeometry } from '../../../physics/engine/EngineGeometry';
 import {
-  camChargeRatio, camGeometryDelta, extendCurve, headChargeRatio, intakeRamRatio, modifiedCam,
+  burnWorkRatio, camChargeRatio, camGeometryDelta, extendCurve, headChargeRatio, intakeRamRatio, modifiedCam,
   ottoEfficiency, powerPeakRpm, runnerPressureRecoveryPa, throttleChargeRatio, torquePeakRpm,
 } from './breathingModel';
 import type { EngineFamilyDef } from './chapter2Parts';
@@ -55,7 +55,7 @@ export interface FactoryTurboParts {
   manifold?: ManifoldPart;
   /** Boost target set on the dyno (programmable ECU only), bar gauge. */
   boostBar?: number;
-  /** Generic car hardware (cooling): internal friction and knock margin. */
+  /** Cooling, breathing and ignition hardware. */
   mod?: MechanicalMods;
 }
 
@@ -105,9 +105,12 @@ export function applyFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboP
   const icEff = parts.intercooler?.effectiveness ?? FACTORY_INTERCOOLER;
   const cr = stock.compressionRatio + (parts.pistons?.compressionAdd ?? 0);
   const knockFree = (fam.knockFreeBoostBar ?? t0.maxBoostBar) + 0.3 * (stock.compressionRatio - cr) + 0.5 * (icEff - FACTORY_INTERCOOLER);
-  const knockAt = (bar: number): number => KNOCK_LOSS_PER_BAR * (parts.mod?.coolingKnockScale ?? 1) * Math.max(0, bar - knockFree);
+  const knockAt = (bar: number): number =>
+    KNOCK_LOSS_PER_BAR * (parts.mod?.coolingKnockScale ?? 1) * (parts.mod?.knockRetardScale ?? 1) * Math.max(0, bar - knockFree);
   const knockStock = (bar: number): number => KNOCK_LOSS_PER_BAR * Math.max(0, bar - (fam.knockFreeBoostBar ?? t0.maxBoostBar));
-  const indicatedScale = (ottoEfficiency(cr) / ottoEfficiency(stock.compressionRatio)) * (1 + (parts.ecu?.ignitionGain ?? 0));
+  const burnDurationScale = parts.mod?.burnDurationScale ?? 1;
+  const indicatedScale = (ottoEfficiency(cr) / ottoEfficiency(stock.compressionRatio)) *
+    (1 + (parts.ecu?.ignitionGain ?? 0)) * burnWorkRatio(burnDurationScale);
   const internals = fam.internalsTorqueNm * (parts.pistons?.torqueLimitScale ?? 1);
   // the map's torque target: a fraction of the mechanical limit, and for a staged map also a ceiling
   // over the factory peak (the calibration the stage is sold for)
@@ -226,6 +229,7 @@ export function applyFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboP
     cam,
     intake,
     throttle,
+    combustion: { ...stock.combustion, burnDurationDeg: stock.combustion.burnDurationDeg * burnDurationScale },
     // the steady curve above already carries the lower pumping loss of a freer exhaust; the live
     // model keeps the factory back pressure, which there drives the turbine (a freer system after
     // the turbine raises its pressure ratio, never slows the spool)

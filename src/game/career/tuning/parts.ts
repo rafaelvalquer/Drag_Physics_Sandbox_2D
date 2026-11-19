@@ -6,6 +6,7 @@ import { MODERN_DRIVELINE_PARTS } from './modernDrivelineParts';
 import { MODERN_FUEL_PARTS } from './modernFuelParts';
 import { MODERN_TOP_END_PARTS } from './modernTopEndParts';
 import { MODERN_INTERNAL_PARTS } from './modernInternalParts';
+import { MODERN_IGNITION_PARTS } from './modernIgnitionParts';
 import type { PartProgression } from './partProgression';
 
 /**
@@ -304,6 +305,14 @@ export interface FuelSystemPart extends PartBase {
   fuelCapacityScale: number;
 }
 
+export interface IgnitionPart extends PartBase {
+  category: 'electronics-ignition';
+  /** Effective burn duration with the calibrated plug, gap and coil. */
+  burnDurationScale: number;
+  /** Residual torque loss from protective spark retard under boost. */
+  knockRetardScale: number;
+}
+
 export interface TirePart extends PartBase {
   category: 'tires';
   grade: 'sport' | 'semiSlick' | 'slick';
@@ -494,6 +503,7 @@ export type PartDef =
   | DifferentialPart
   | ManualGearsetPart
   | FuelSystemPart
+  | IgnitionPart
   | TirePart
   | ExpandedPart
   | EcuPart
@@ -772,6 +782,7 @@ export const PARTS: readonly PartDef[] = [...BASE_PARTS, ...EXPANDED_PARTS, ...D
 export const ALL_PARTS: readonly PartDef[] = [
   ...PARTS, ...CHAPTER2_PARTS, ...CHAPTER3_PARTS, ...MODERN_BREATHING_PARTS,
   ...MODERN_DRIVELINE_PARTS, ...MODERN_FUEL_PARTS, ...MODERN_TOP_END_PARTS, ...MODERN_INTERNAL_PARTS,
+  ...MODERN_IGNITION_PARTS,
 ];
 
 export function findPart(id: string): PartDef | undefined {

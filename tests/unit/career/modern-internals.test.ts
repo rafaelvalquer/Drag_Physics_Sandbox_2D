@@ -5,6 +5,7 @@ import { resolveBuild } from '../../../src/game/career/tuning/BuildResolver';
 import { incompatibility } from '../../../src/game/career/tuning/BuildResolverV2';
 import { reliabilityLimits } from '../../../src/game/career/tuning/EngineReliability';
 import { MODERN_INTERNAL_PARTS } from '../../../src/game/career/tuning/modernInternalParts';
+import { tuningCapabilities } from '../../../src/game/career/tuning/TuningCapabilities';
 
 const modern = [...CHAPTER2_CARS, ...CHAPTER3_CARS];
 
@@ -58,5 +59,26 @@ describe('internos e compressão dos carros modernos', () => {
     }
     const weak = resolveBuild(n20, [...support, 'rotating-assembly-bmw-n20-s2'], {}, 2);
     expect(weak.ok ? [] : weak.errors).toContainEqual(expect.stringContaining('exige pistões e bielas forjados'));
+  });
+
+  it('expande a faixa de ajuste com molas sem mexer no corte por conta própria', () => {
+    const astra = modern.find((car) => car.engine.family === 'gm-familia2')!;
+    const ecu = 'ecu-stage1-na';
+    const springs = MODERN_INTERNAL_PARTS.filter((part) =>
+      part.category === 'engine-valvetrain' && !incompatibility(astra, part));
+    expect(springs).toHaveLength(3);
+    const original = tuningCapabilities(astra, [ecu], 2);
+    let max = original.revLimit.max;
+    for (const spring of springs) {
+      const springOnly = resolveBuild(astra, [spring.id], {}, 2);
+      if (!springOnly.ok) throw new Error(springOnly.errors.join('\n'));
+      expect(springOnly.car.engine.revLimitRpm).toBe(astra.engine.revLimitRpm);
+      expect(springOnly.car.engine.maxSafeRpm).toBeGreaterThan(astra.engine.maxSafeRpm);
+      const next = tuningCapabilities(astra, [ecu, spring.id], 2);
+      expect(next.revLimit.enabled).toBe(true);
+      expect(next.revLimit.default).toBe(original.revLimit.default);
+      expect(next.revLimit.max).toBeGreaterThan(max);
+      max = next.revLimit.max;
+    }
   });
 });
