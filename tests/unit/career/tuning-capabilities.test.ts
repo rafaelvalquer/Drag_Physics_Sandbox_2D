@@ -49,3 +49,29 @@ describe('tuning capabilities', () => {
     expect(reliabilityLimits(hw.car, ['valve-springs']).recommendedSafeRpm).toBeGreaterThan(reliabilityLimits(hw.car, []).recommendedSafeRpm);
   });
 });
+
+describe('boost slider offers only what the build accepts', () => {
+  const chevette = car('gm-chevette-sl-1988');
+  const kit = ['turbo-street', 'wastegate-race', 'clutch-reinforced'];
+  const maxOf = (extra: string[]): number => {
+    const c = tuningCapabilities(chevette, [...kit, ...extra], 1, { exactBoostMax: true });
+    expect(c.boost.enabled).toBe(true);
+    return c.boost.max;
+  };
+
+  it('max follows the fuel system and every offered value resolves', () => {
+    const stock = maxOf([]);
+    const inj = maxOf(['injectors']);
+    const pump = maxOf(['fuel-pump']);
+    expect(stock).toBeLessThanOrEqual(0.95);
+    expect(inj).toBeGreaterThan(stock);
+    expect(inj).toBeLessThanOrEqual(1.05);
+    expect(pump).toBeGreaterThan(inj);
+    expect(pump).toBeLessThanOrEqual(1.5);
+    for (const [extra, max] of [[[], stock], [['injectors'], inj], [['fuel-pump'], pump]] as const) {
+      const c = tuningCapabilities(chevette, [...kit, ...extra], 1, { exactBoostMax: true });
+      expect(resolveBuild(chevette, [...kit, ...extra], { boostBar: max }, 1).ok, `${extra.join()} @ ${max}`).toBe(true);
+      expect(c.boost.default).toBeLessThanOrEqual(max);
+    }
+  });
+});

@@ -36,6 +36,12 @@ import { wastegateMaxBar } from './factoryTurboModel';
 export interface TuneContext {
   /** Chapter 1 tuners (engine-tuners unlock): they set the boost of a classic turbo kit. */
   tunersUnlocked?: boolean;
+  /**
+   * Cap the boost range to the highest pressure the build accepts (several extra resolves). For the
+   * screens that show the slider; code that only needs the nominal range (generators, validation)
+   * leaves it off.
+   */
+  exactBoostMax?: boolean;
 }
 
 export interface RangeControl {
@@ -99,6 +105,39 @@ export const OVERLAY_PARTS = new Set(['valve-springs', 'launch-control']);
 const off = (reason: string, def = 0): RangeControl => ({ enabled: false, reason, min: def, max: def, step: 1, default: def });
 const round = (v: number, step: number): number => Math.round(v / step) * step;
 
+const boostCapCache = new Map<string, number>();
+
+/**
+ * Highest pressure of the range that the hardware build resolves with. The range itself comes from
+ * the kit / ECU / wastegate; fuel supply, compression, internals and clutch can limit it further, and
+ * the slider must not offer pressures that are rejected. Scans down from the range maximum.
+ */
+function capBoostToBuild(base: CarConfig, partIds: readonly string[], version: ResolverVersion, r: RangeControl): RangeControl {
+  const key = `${base.id}|${[...partIds].sort().join(',')}|${version}|${r.min}|${r.max}`;
+  let top = boostCapCache.get(key);
+  if (top === undefined) {
+    // binary search on a 0.01 bar grid (the limits are monotonic in pressure: fuel, torque, compression)
+    const ok = (b: number): boolean => resolveHardware(base, partIds, { boostBar: b }, version).ok;
+    const g = (v: number): number => Math.round(v * 100) / 100;
+    if (ok(r.max)) top = r.max;
+    else {
+      let lo = Math.round(r.min * 100);
+      let hi = Math.round(r.max * 100) - 1;
+      let best = lo; // nothing above the minimum is accepted
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        if (ok(mid / 100)) (best = mid), (lo = mid + 1);
+        else hi = mid - 1;
+      }
+      top = g(best / 100);
+    }
+    if (boostCapCache.size > 500) boostCapCache.clear();
+    boostCapCache.set(key, top);
+  }
+  if (top >= r.max) return r;
+  return { ...r, max: top, default: Math.min(r.default, top) };
+}
+
 export function tuningCapabilities(base: CarConfig, partIds: readonly string[], version: ResolverVersion, ctx: TuneContext = {}): TuningCapabilities {
   const hwR = resolveHardware(base, partIds, {}, version);
   const tOff = { enabled: false, reason: 'build inválido', options: THROTTLE_OPTIONS, default: 'standard' as const };
@@ -144,6 +183,9 @@ export function tuningCapabilities(base: CarConfig, partIds: readonly string[], 
         : { enabled: true, reason: null, min: classicRange[0], max: classicRange[1], step: 0.05, default: round(def, 0.01) };
   } else if (base.engine.induction === 'turbo') boost = off('Exige controle de pressão compatível.', factoryBoost ?? 0);
   else boost = off('Exige kit turbo compatível.');
+
+  // the slider only offers pressures the build accepts now (fuel, compression, internals, clutch...)
+  if (boost.enabled && ctx.exactBoostMax) boost = capBoostToBuild(base, partIds, version, boost);
 
   // ---- rev limit ----
   const revLimit: RangeControl = has((p) => REV_ECUS.has(p.id))

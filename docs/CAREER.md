@@ -29,6 +29,23 @@ A corrida da campanha é a do modo Corrida: `RaceController` (árvore, largada e
 DNF, frenagem), `SimulationRunner`, HUD, som. O rival é um `DragAI` com o perfil de piloto do rival; o jogador
 dirige com o teclado/toque como no modo Corrida. Não há relógio paralelo.
 
+## Requisitos de instalação na Oficina
+
+Quando a peça escolhida não cabe sozinha (kit turbo sem embreagem, pressão acima do que o combustível segura,
+compressão alta com turbo, internos, câmbio), a inspeção mostra **"O que falta para instalar"**:
+
+- cada requisito físico vira uma linha com a peça que o resolve, de onde ela vem (estoque grátis, preço ou
+  desbloqueio que falta) e o botão **Ver peça** (troca de aba e seleciona o cartão);
+- o que o jogador precisa ajustar (pressão fora da faixa, detonação) aparece como pendência com o texto do resolvedor;
+- **Instalar com requisitos (N peças · X CR)** abre a confirmação (o que vem do estoque, o que é comprado, saldo
+  antes e depois) e instala tudo em **uma compra atômica** (`CareerController.installBundle`): o build final é
+  validado uma vez, o estoque é usado primeiro, o saldo é cobrado uma vez e, se algo falhar, nada muda.
+
+Como funciona: `buildIssues.ts` classifica cada erro do resolvedor em um código (`fuel-limit`, `clutch-limit`,
+`needs-turbo-kit`…) com as categorias de peça que o resolvem; `ProjectRequirements.planInstall` testa os candidatos
+com o próprio resolvedor (estoque e desbloqueadas primeiro, depois a mais barata) e guarda só os que fazem o
+requisito sumir. Nada é previsto por fórmula. Auditoria de design do catálogo: [PARTS_DESIGN_AUDIT.md](PARTS_DESIGN_AUDIT.md).
+
 ## Peças e física
 
 Uma peça nunca soma potência: ela muda um parâmetro físico e a curva nova sai do modelo.

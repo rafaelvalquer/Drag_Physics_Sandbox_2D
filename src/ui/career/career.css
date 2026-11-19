@@ -905,3 +905,16 @@ th.win {
   .ws-parts { grid-template-columns: 1fr; }
   .ws-installed-slot { display: none; }
 }
+
+/* workshop: what is missing to install a part */
+.ws-req { margin: 10px 0; padding: 10px 12px; border: 1px solid rgba(255, 176, 64, 0.4); border-radius: 8px; background: rgba(255, 176, 64, 0.06); }
+.ws-req-title { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #ffcf8a; margin-bottom: 6px; }
+.ws-req-row { display: flex; gap: 8px; align-items: center; padding: 4px 0; font-size: 12.5px; }
+.ws-req-row .ws-req-mark { width: 16px; text-align: center; font-weight: 700; color: #ff8a8a; }
+.ws-req-row[data-source='stock'] .ws-req-mark { color: #7fd99a; }
+.ws-req-row.open .ws-req-mark { color: #ffcf8a; }
+.ws-req-text { flex: 1; line-height: 1.35; }
+.ws-req-go { font-size: 11px; padding: 3px 8px; }
+.ws-req-blockers { margin: 6px 0; font-size: 12px; color: #ffb4b4; }
+.ws-req > button.primary { width: 100%; margin-top: 8px; }
+.ws-bundle-list { margin: 8px 0; padding-left: 18px; line-height: 1.6; }

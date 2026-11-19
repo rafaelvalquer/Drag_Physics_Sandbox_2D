@@ -33,6 +33,8 @@ import { ownedCarBuild, ownedCarConfig, ownedCarLook, rivalBuild, rivalCar } fro
 import { BUILD_RESOLVER_VERSION, resolveBuild, type BuildResult } from '../game/career/tuning/BuildResolver';
 import type { BuildTune } from '../game/career/tuning/buildCommon';
 import { failureSpecFor, reconcileTune, tuneReliability } from '../game/career/tuning/TuningCapabilities';
+import { ISSUE_LABEL } from '../game/career/tuning/buildIssues';
+import { planInstall, type InstallPlan } from '../game/career/tuning/ProjectRequirements';
 import { playBlownEngine, playRiskWarning } from '../audio/core/blownEngineSound';
 import { ALL_PARTS, CATEGORY_DESCRIPTION, CATEGORY_LABEL, CATEGORY_ORDER_V1, UNLOCK_LABEL, WORKSHOP_TABS, findPart, type PartCategory, type PartDef } from '../game/career/tuning/parts';
 import { RACE_DISTANCES, RaceController, type LaneResult, type RaceLane } from '../game/race/RaceController';
@@ -1031,6 +1033,8 @@ export class CareerMode implements Mode {
     const after = resolveOwned(car, nextParts);
     const reqs = partRequirements(p, fam).map((u) => `${UNLOCK_LABEL[u]}${unlocksOf(s).has(u) ? ' ✓' : ''}`);
     const cmpHost = this.compareTable(before, after, installed ? 'Sem a peça' : 'Depois');
+    // what is missing to install it: the parts that fix each reported issue, found with the resolver
+    const plan = !installed && !after.ok ? this.planFor(p, car) : null;
     const act = async (fn: () => Promise<{ ok: boolean; error?: string; notice?: string }>, okMsg: string): Promise<void> => {
       if (!this.guard()) return;
       const r = await fn();
@@ -1048,7 +1052,7 @@ export class CareerMode implements Mode {
       buttons.push(
         h(
           'button',
-          { class: 'primary', 'data-testid': 'ws-buy', disabled: !unlocked || s.credits < p.price || !after.ok, onclick: () => void act(() => this.controller.buyPart(p.id), `${p.name} comprada e instalada.`) },
+          { class: 'primary', 'data-testid': 'ws-buy', disabled: !unlocked || s.credits < p.price || !after.ok, title: !after.ok ? 'Faltam requisitos: veja a lista acima.' : undefined, onclick: () => void act(() => this.controller.buyPart(p.id), `${p.name} comprada e instalada.`) },
           `Comprar e instalar (${cr(p.price)})`,
         ),
       );
@@ -1060,10 +1064,104 @@ export class CareerMode implements Mode {
       h('p', {}, p.description),
       h('p', { class: 'physics' }, h('b', {}, 'Efeito físico: '), p.physics),
       h('div', { class: 'hint' }, `Requisitos: ${reqs.join(' · ')}`),
-      h('div', { class: 'hint' }, `Compatibilidade: ${after.ok ? 'compatível com este carro' : 'incompatível no estado atual'}`),
+      h('div', { class: 'hint' }, `Compatibilidade: ${after.ok ? 'compatível com este carro' : 'faltam requisitos para instalar (veja abaixo)'}`),
+      plan ? this.requirementsPanel(plan, act) : '',
       cmpHost,
       h('div', { class: 'row' }, buttons),
     );
+  }
+
+  /** Install plan of a part on the active car (the part and the parts that make the build valid). */
+  private planFor(p: PartDef, car: OwnedCar): InstallPlan {
+    return planInstall({
+      base: findCampaignCar(car.baseCarId)!,
+      car,
+      save: this.controller.save!,
+      partId: p.id,
+      versionOf: (parts) => buildVersionFor(car, parts),
+    });
+  }
+
+  /**
+   * "What is missing" checklist: every part the build needs besides the selected one, with where it
+   * comes from (stock / price / locked), a shortcut to it and "install with requirements" (one atomic
+   * purchase). Settings the player must change (pressure, knock) are listed as open issues.
+   */
+  private requirementsPanel(plan: InstallPlan, act: (fn: () => Promise<{ ok: boolean; error?: string; notice?: string }>, okMsg: string) => Promise<void>): HTMLElement {
+    const extra = plan.steps.slice(1);
+    const rows = extra.map((st) => {
+      const why = st.resolves ? ISSUE_LABEL[st.resolves.code] : 'Requisito';
+      const where = st.source === 'stock' ? 'no seu estoque (grátis)' : st.state === 'locked' ? st.status.detail : cr(st.price);
+      return h(
+        'div',
+        { class: 'ws-req-row', 'data-testid': `ws-req-${st.partId}`, 'data-state': st.state, 'data-source': st.source },
+        h('span', { class: 'ws-req-mark', 'aria-hidden': 'true' }, st.source === 'stock' ? '✓' : '✗'),
+        h('span', { class: 'ws-req-text' }, h('b', {}, st.name), ` — ${why} · ${where}`),
+        h('button', { class: 'ws-req-go', 'data-testid': `ws-req-go-${st.partId}`, onclick: () => this.goToPart(st.partId) }, 'Ver peça'),
+      );
+    });
+    const open = plan.openIssues.map((i) =>
+      h('div', { class: 'ws-req-row open', 'data-testid': 'ws-req-open' }, h('span', { class: 'ws-req-mark', 'aria-hidden': 'true' }, '!'), h('span', { class: 'ws-req-text' }, i.message)),
+    );
+    const bundleIds = plan.steps.map((s) => s.partId);
+    const bundle = extra.length
+      ? h(
+          'button',
+          {
+            class: 'primary',
+            'data-testid': 'ws-install-bundle',
+            disabled: !plan.ok,
+            title: plan.blockers[0],
+            onclick: () => this.confirmBundle(plan, () => void act(() => this.controller.installBundle(bundleIds), `${bundleIds.length} peças instaladas.`)),
+          },
+          `Instalar com requisitos (${plan.steps.length} peças · ${cr(plan.cost)})`,
+        )
+      : '';
+    return h(
+      'div',
+      { class: 'ws-req', 'data-testid': 'ws-req-list' },
+      h('div', { class: 'ws-req-title' }, 'O que falta para instalar'),
+      ...rows,
+      ...open,
+      plan.blockers.length ? h('div', { class: 'ws-req-blockers', 'data-testid': 'ws-req-blockers' }, plan.blockers.join(' ')) : '',
+      bundle,
+    );
+  }
+
+  /** Selects a part (switching to its system tab) so the player can inspect or buy it. */
+  private goToPart(partId: string): void {
+    const p = findPart(partId);
+    if (!p) return;
+    const tab = WORKSHOP_TABS.find((t) => t.categories.includes(p.category));
+    if (tab) this.workshopTab = tab.id;
+    this.selectedPart = partId;
+    this.show('workshop');
+  }
+
+  /** Confirmation of a multi-part install: lists what comes from the stock and what is bought. */
+  private confirmBundle(plan: InstallPlan, onConfirm: () => void): void {
+    const s = this.controller.save!;
+    const close = (): void => back.remove();
+    const line = (st: InstallPlan['steps'][number]): HTMLElement =>
+      h('li', {}, `${st.name} — ${st.source === 'stock' ? 'do estoque (grátis)' : cr(st.price)}${st.replaces ? ` · ${findPart(st.replaces)?.name ?? st.replaces} vai para o estoque` : ''}`);
+    const back: HTMLElement = h(
+      'div',
+      { class: 'modal-backdrop', 'data-testid': 'ws-bundle-modal', onclick: (e: Event) => { if (e.target === back) close(); } },
+      h(
+        'div',
+        { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Instalar com requisitos' },
+        h('h3', {}, 'Instalar com requisitos'),
+        h('ul', { class: 'ws-bundle-list' }, ...plan.steps.map(line)),
+        h('p', {}, `Total: ${cr(plan.cost)} · saldo ${cr(s.credits)} → ${cr(s.credits - plan.cost)}. Tudo é instalado de uma vez; se algo falhar, nada é cobrado.`),
+        h(
+          'div',
+          { class: 'row' },
+          h('button', { 'data-testid': 'ws-bundle-cancel', onclick: close }, 'Cancelar'),
+          h('button', { class: 'primary', 'data-testid': 'ws-bundle-confirm', onclick: () => { close(); onConfirm(); } }, 'Confirmar'),
+        ),
+      ),
+    );
+    document.body.append(back);
   }
 
   // ------------------------------------------------------------------ dyno

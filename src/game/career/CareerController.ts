@@ -224,6 +224,68 @@ export class CareerController {
     }
   }
 
+  /**
+   * Installs several parts as ONE operation (the Workshop's "install with requirements"): the final
+   * build is validated once with all of them, so parts that only work together can be installed;
+   * parts of the car's stock are used first and the rest is charged once. Nothing changes if any part
+   * is locked, the credits fall short or the final build is not valid. Replaced parts go to the stock.
+   */
+  async installBundle(partIds: readonly string[]): Promise<OpResult> {
+    const s = this.save;
+    const car = this.activeCar;
+    if (!s || !car) return fail('nenhum carro ativo');
+    const ids = [...new Set(partIds)];
+    if (!ids.length) return fail('nenhuma peça para instalar');
+    const family = familyOf(findCampaignCar(car.baseCarId)!);
+    let parts = [...car.installedParts];
+    const added = new Map<string, boolean>(); // part id -> taken from the stock
+    const replacedOriginals: string[] = [];
+    let cost = 0;
+    for (const id of ids) {
+      const p = findPart(id);
+      if (!p) return fail(`peça desconhecida: ${id}`);
+      if (parts.includes(id)) continue;
+      if (!isPartUnlocked(s, p, family)) return fail(`${p.name} ainda não está liberada`);
+      const inStock = s.inventoryPartIds.includes(inventoryEntry(id, car.baseCarId));
+      added.set(id, inStock);
+      if (!inStock) cost += p.price;
+      const w = CareerController.withPart(parts, id);
+      parts = w.parts;
+      if (w.replaced) {
+        if (added.has(w.replaced)) {
+          // a later part of the bundle takes the slot of an earlier one: the earlier is not installed
+          if (!added.get(w.replaced)) cost -= findPart(w.replaced)!.price;
+          added.delete(w.replaced);
+        } else replacedOriginals.push(w.replaced);
+      }
+    }
+    if (!added.size) return fail('as peças já estão instaladas');
+    if (cost > s.credits) return fail(`créditos insuficientes: o pacote custa ${cost} CR, você tem ${s.credits} CR`);
+    const rt = this.reconciledTune(car, parts);
+    const chk = this.checkBuild(car, parts, rt.tune);
+    if (!chk.ok) return fail(`incompatível: ${chk.error}`);
+    try {
+      const v = await this.commit((n) => {
+        if (n.credits < cost) throw new Error('créditos insuficientes');
+        const c = n.ownedCars.find((x) => x.id === car.id)!;
+        n.credits -= cost;
+        for (const [id, inStock] of added) {
+          if (!inStock) continue;
+          const at = n.inventoryPartIds.indexOf(inventoryEntry(id, c.baseCarId));
+          if (at < 0) throw new Error('uma peça do estoque não está mais disponível');
+          n.inventoryPartIds.splice(at, 1);
+        }
+        for (const id of replacedOriginals) n.inventoryPartIds.push(inventoryEntry(id, c.baseCarId));
+        c.installedParts = parts;
+        c.tune = rt.tune;
+        c.buildVersion = buildVersionFor(c, parts);
+      });
+      return { ok: true, value: v, notice: rt.notice };
+    } catch (e) {
+      return fail((e as Error).message);
+    }
+  }
+
   async installFromInventory(partId: string): Promise<OpResult> {
     const s = this.save;
     const car = this.activeCar;
@@ -326,7 +388,7 @@ export class CareerController {
   /** Dyno Lab capabilities of an owned car with its installed parts. */
   capabilitiesOf(car: OwnedCar): TuningCapabilities | null {
     const base = findCampaignCar(car.baseCarId);
-    return base ? tuningCapabilities(base, car.installedParts, buildVersionFor(car, car.installedParts), this.tuneContext()) : null;
+    return base ? tuningCapabilities(base, car.installedParts, buildVersionFor(car, car.installedParts), { ...this.tuneContext(), exactBoostMax: true }) : null;
   }
 
   /**
