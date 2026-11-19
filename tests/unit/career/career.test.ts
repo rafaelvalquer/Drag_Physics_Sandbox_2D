@@ -262,6 +262,7 @@ describe('economy and idempotency', () => {
 
   it('the same attempt id is applied once (double click, reload)', async () => {
     const c = await career();
+    const start = c.save!.credits;
     const r = result('e1-primeira-noite', 'win', 'attempt-dup-0001');
     const a = await c.recordRace(r);
     const b = await c.recordRace(r);
@@ -271,7 +272,7 @@ describe('economy and idempotency', () => {
     await reloaded.load();
     const again = await reloaded.recordRace(r);
     expect(again.ok && again.value.applied).toBe(false);
-    expect(reloaded.save!.credits).toBe(START_CREDITS - 800 + 300);
+    expect(reloaded.save!.credits).toBe(start + 300);
     expect(reloaded.save!.results).toHaveLength(1);
   });
 
