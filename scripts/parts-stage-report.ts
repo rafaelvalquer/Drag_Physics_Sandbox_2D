@@ -41,20 +41,31 @@ const rows = cars.flatMap((car) => {
 });
 
 const delta = (before: number, after: number): string => Number.isFinite(after - before) ? (after - before).toFixed(3) : '—';
+const restrictionDelta = (before: number | null, after: number | null): string =>
+  before !== null && after !== null ? delta(before, after) : '—';
 const markdown = [
   '# Progressão de estágios da oficina',
   '',
   `Comparações adjacentes na mesma configuração de apoio, na pista de testes a ${WORKSHOP_DISTANCE_M.toFixed(3)} m. As séries com estágio ausente ou sem contexto comum ficam explícitas.`,
   '',
-  '| Carro | Família | Grupo | Antes | Depois | Δ cv | Δ N·m | Δ 0–100 s | Δ ¼ milha s | Resultado |',
-  '|---|---|---|---|---|---:|---:|---:|---:|---|',
+  '| Carro | Família | Grupo | Antes | Depois | Δ cv | Δ N·m | Δ 0–100 s | Δ ¼ milha s | Δ admissão kPa | Δ escape kPa | Δ borboleta ms | Resultado |',
+  '|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|',
 ];
 for (const row of rows) {
   const prefix = `| ${row.carId} | ${row.family} | ${row.group} |`;
-  if (row.missingTiers.length) markdown.push(`${prefix} — | — | — | — | — | — | Faltam stages ${row.missingTiers.join(', ')} |`);
+  if (row.missingTiers.length) markdown.push(`${prefix} — | — | — | — | — | — | — | — | — | Faltam stages ${row.missingTiers.join(', ')} |`);
   for (const { previous, next, audit } of row.comparisons) {
     const m = 'gain' in audit ? audit.gain : null;
-    const figures = m ? `${delta(m.cvBefore, m.cvAfter)} | ${delta(m.torqueBeforeNm, m.torqueAfterNm)} | ${delta(m.t100Before, m.t100After)} | ${delta(m.etBefore, m.etAfter)}` : '— | — | — | —';
+    const values = m ? [
+      delta(m.cvBefore, m.cvAfter),
+      delta(m.torqueBeforeNm, m.torqueAfterNm),
+      delta(m.t100Before, m.t100After),
+      delta(m.etBefore, m.etAfter),
+      restrictionDelta(m.intakeRestrictionBeforeKPa, m.intakeRestrictionAfterKPa),
+      restrictionDelta(m.exhaustRestrictionBeforeKPa, m.exhaustRestrictionAfterKPa),
+      delta(1000 * m.throttleBeforeS, 1000 * m.throttleAfterS),
+    ] : Array<string>(7).fill('—');
+    const figures = values.join(' | ');
     markdown.push(`${prefix} ${previous ?? 'Original'} | ${next} | ${figures} | ${audit.status} |`);
   }
 }

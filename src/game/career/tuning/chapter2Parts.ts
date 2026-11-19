@@ -135,6 +135,7 @@ export const CHAPTER2_PARTS: readonly PartDef[] = [
   },
   {
     id: 'downpipe-catless',
+    section: 'downpipe',
     since: 2,
     category: 'exhaust',
     name: 'Downpipe sem catalisador',

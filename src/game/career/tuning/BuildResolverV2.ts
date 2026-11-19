@@ -4,6 +4,7 @@ import { applyEngineParts, curvePeakCv, engineFuel, powerPeakRpm, TURBO_MAX_COMP
 import { applyGenericChassisMods, applyTyre, CLUTCH_TORQUE_MARGIN, combineMods, deepFreeze, fmtBar, workshopFinalDrive, MAX_KNOCK_LOSS, type BuildResult, type BuildTune } from './buildCommon';
 import { ENGINE_FAMILIES } from './chapter2Parts';
 import { applyFactoryTurboParts, wastegateMaxBar } from './factoryTurboModel';
+import { exhaustPressureAfterSections, isModernBreathingPart } from './modernBreathing';
 import {
   CATEGORY_LABEL,
   CATEGORY_ORDER_V2,
@@ -51,7 +52,8 @@ export function incompatibility(base: CarConfig, p: PartDef): string | null {
   const fam = familyOf(base);
   // two catalogues: the slot catalogue (v1, classic engines) and the family parts (v2, modern engines)
   // car hardware of the slot catalogue (mass, cooling, tyre size/pressure) fits every car
-  if ('mod' in p && fam !== LEGACY_FAMILY && !GENERIC_V2_CATEGORIES.includes(p.category)) return `${p.name} é do catálogo dos motores clássicos`;
+  if ('mod' in p && fam !== LEGACY_FAMILY && !GENERIC_V2_CATEGORIES.includes(p.category) && !isModernBreathingPart(p))
+    return `${p.name} é do catálogo dos motores clássicos`;
   if ((p.since ?? 1) === 2 && fam === LEGACY_FAMILY) return `${p.name} é para motores modernos`;
   const c = p.compat;
   if (!c) return null;
@@ -97,6 +99,8 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   const fam = familyOf(base);
   // generic slot-catalogue hardware on a modern car (cooling, mass, tyre size/pressure)
   const genericMod = fam === LEGACY_FAMILY ? {} : combineMods(parts);
+  const sectionParts = parts.filter(isModernBreathingPart);
+  const sectionMod = combineMods(sectionParts);
 
   // Chapter 1 hardware: the version 1 resolver is the reference (identical result, v2 key)
   if (fam === LEGACY_FAMILY && parts.every((p) => (p.since ?? 1) === 1)) {
@@ -107,13 +111,27 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   const car: CarConfig = structuredClone(base);
   const get = <C extends PartCategory>(c: C): Extract<PartDef, { category: C }> | undefined => bySlot.get(c) as Extract<PartDef, { category: C }> | undefined;
   const ecu = get('ecu');
+  const exhaust = get('exhaust');
+  const ratedRpm = powerPeakRpm(base.engine.torqueCurve, base.engine.revLimitRpm);
+  const stockEngine = withStockBreathing(base.engine, ratedRpm);
+  const stockBackPressure = stockEngine.breathing!.exhaustBackPressureKPa;
+  const exhaustMod = sectionMod.backPressureReductionKPa === undefined ? sectionMod : {
+    ...sectionMod,
+    // The NA model applies the computed pressure once, including any complete system.
+    backPressureKPa: exhaustPressureAfterSections(
+      stockBackPressure,
+      exhaust?.backPressureKPa ?? stockBackPressure,
+      exhaust?.section === 'downpipe',
+      sectionMod,
+    ),
+    backPressureReductionKPa: undefined,
+  };
   const turboSlot = get('turbo');
   const turboKit = turboSlot && !('upgrade' in turboSlot) ? (turboSlot as TurboPart) : undefined;
   const turboUp = turboSlot && 'upgrade' in turboSlot ? (turboSlot as TurboUpgradePart) : undefined;
-  const ratedRpm = powerPeakRpm(base.engine.torqueCurve, base.engine.revLimitRpm);
-  const stockEngine = withStockBreathing(base.engine, ratedRpm);
   let steadyBoostBar: { rpm: number; bar: number }[] = [];
   let knockLoss = 0;
+  let exhaustRestrictionKPa: number | undefined;
 
   // ---- engine ----
   const factoryTurbo = base.engine.induction === 'turbo' && fam !== LEGACY_FAMILY;
@@ -137,12 +155,12 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
     const cam = get('camshaft');
     const head = get('cylinder-head');
     const manifold = get('intake-manifold');
-    const anyEngine = genericMod.coolingFrictionScale || genericMod.coolingKnockScale || ecu || turboUp || get('intercooler') || get('boost-control') || get('pistons') || get('intake-filter') || get('exhaust') || cam || head || manifold;
+    const anyEngine = genericMod.coolingFrictionScale || genericMod.coolingKnockScale || ecu || turboUp || get('intercooler') || get('boost-control') || get('pistons') || get('intake-filter') || exhaust || cam || head || manifold || sectionParts.length > 0;
     if (anyEngine) {
       const r = applyFactoryTurboParts(stockEngine, {
         family,
         filter: get('intake-filter'),
-        exhaust: get('exhaust'),
+        exhaust,
         ecu,
         turbo: turboUp,
         intercooler: get('intercooler'),
@@ -152,11 +170,12 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
         head,
         manifold,
         boostBar: tune.boostBar,
-        mod: genericMod,
+        mod: { ...genericMod, ...exhaustMod },
       });
       car.engine = r.engine;
       steadyBoostBar = r.steadyBoostBar;
       knockLoss = r.knockLoss;
+      exhaustRestrictionKPa = r.exhaustRestrictionKPa;
     } else car.engine = structuredClone(stockEngine);
   } else {
     // NA engine (or a Chapter 1 engine with a v2 part): breathing model
@@ -182,15 +201,16 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
       filter: get('intake-filter'),
       manifold: get('intake-manifold'),
       cam: get('camshaft'),
-      exhaust: get('exhaust'),
+      exhaust,
       turbo: turboKit,
       boostBar: tune.boostBar,
       head: get('cylinder-head'),
       compressionAdd: pistons?.compressionAdd,
       ignitionGain: ecu?.ignitionGain,
       revLimitAddRpm: ecu ? Math.min(ecu.revLimitAddRpm, family?.valvetrainRevAddRpm ?? 0) : undefined,
-      mod: pistons?.frictionScale || genericMod.coolingFrictionScale || genericMod.coolingKnockScale
+      mod: sectionParts.length || pistons?.frictionScale || genericMod.coolingFrictionScale || genericMod.coolingKnockScale
         ? {
+            ...exhaustMod,
             ...(genericMod.coolingFrictionScale || pistons?.frictionScale ? { coolingFrictionScale: (genericMod.coolingFrictionScale ?? 1) * (pistons?.frictionScale ?? 1) } : {}),
             ...(genericMod.coolingKnockScale ? { coolingKnockScale: genericMod.coolingKnockScale } : {}),
           }
@@ -256,14 +276,25 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   }
   const ic = get('intercooler');
   if (ic) car.massKg += ic.massAddKg;
-  const exhaust = get('exhaust');
-  if (exhaust) {
-    car.exhaust = {
-      ...exhaustPreset(exhaust.acousticPreset, {
+  if (exhaust || sectionMod.headerDiameterScale || sectionMod.exhaustDiameterScale || sectionMod.exhaustAbsorptionScale) {
+    const acousticBase = exhaust
+      ? exhaustPreset(exhaust.acousticPreset, {
         layout: base.exhaust.layout,
         headerPrimaryLengthM: base.exhaust.headerPrimaryLengthM,
         headerDiameterMm: Math.min(base.exhaust.headerDiameterMm * exhaust.headerDiameterScale, 80),
-      }),
+      })
+      : base.exhaust;
+    car.exhaust = {
+      ...acousticBase,
+      headerDiameterMm: sectionMod.headerDiameterScale
+        ? Math.min(70, Math.max(acousticBase.headerDiameterMm, base.exhaust.headerDiameterMm * sectionMod.headerDiameterScale))
+        : acousticBase.headerDiameterMm,
+      tailpipeDiameterMm: sectionMod.exhaustDiameterScale
+        ? Math.min(120, Math.max(acousticBase.tailpipeDiameterMm, base.exhaust.tailpipeDiameterMm * sectionMod.exhaustDiameterScale))
+        : acousticBase.tailpipeDiameterMm,
+      mufflerAbsorption: sectionMod.exhaustAbsorptionScale
+        ? Math.max(0, Math.min(acousticBase.mufflerAbsorption, base.exhaust.mufflerAbsorption * sectionMod.exhaustAbsorptionScale))
+        : acousticBase.mufflerAbsorption,
       outputGain: base.exhaust.outputGain,
     };
   }
@@ -326,7 +357,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   if (awd?.transferEfficiencyAdd && car.awd) car.awd = { ...car.awd, transferEfficiency: Math.min(1, car.awd.transferEfficiency + awd.transferEfficiencyAdd) };
 
   // ---- visible parts ----
-  car.visual = { ...car.visual, mods: { intercooler: !!(turboKit || ic || turboUp), sportTip: !!exhaust, tyre: tyre?.grade ?? 'stock' } };
+  car.visual = { ...car.visual, mods: { intercooler: !!(turboKit || ic || turboUp), sportTip: !!(exhaust || sectionMod.exhaustDiameterScale || sectionMod.exhaustAbsorptionScale), tyre: tyre?.grade ?? 'stock' } };
   if (parts.length) car.name = `${base.name} (preparado)`.slice(0, 64);
 
   // ---- validation: every gearbox kind carries the new torque or the build is refused ----
@@ -347,7 +378,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   const v = validateCar(car);
   if (!v.ok) errors.push(...v.errors);
   if (errors.length) return { ok: false, errors };
-  return { ok: true, car: deepFreeze(v.value!), parts, key, peakTorqueNm, peakPowerCv, steadyBoostBar, knockLoss, version: 2 };
+  return { ok: true, car: deepFreeze(v.value!), parts, key, peakTorqueNm, peakPowerCv, steadyBoostBar, knockLoss, exhaustRestrictionKPa, version: 2 };
 }
 
 function interp(xs: readonly number[], ys: readonly number[], x: number): number {

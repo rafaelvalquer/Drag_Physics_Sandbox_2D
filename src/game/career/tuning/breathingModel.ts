@@ -88,6 +88,10 @@ export function headChargeRatio(x: number, flowGain: number): number {
   return 1 + flowGain * smoothstep(0.5, 1.1, x);
 }
 
+export function throttleChargeRatio(x: number, stockDiameterMm: number, diameterMm: number): number {
+  return 1 + Math.min(0.012, (diameterMm * diameterMm / (stockDiameterMm * stockDiameterMm) - 1) * 0.055) * smoothstep(0.55, 1.1, x);
+}
+
 /** Change in runner pressure loss from the stock duct at the same air mass flow. */
 export function runnerPressureRecoveryPa(flowRatio: number, stockDiameterMm: number, diameterMm: number): number {
   return STOCK_RUNNER_DROP_KPA * 1000 * flowRatio ** 2 * (1 - (stockDiameterMm / diameterMm) ** 4);
@@ -269,7 +273,7 @@ export function applyEngineParts(stock: EngineConfig, parts: EngineParts): Breat
     const portFlowRatio = 1 + ((mod.headFlowScale ?? 1) - 1) * smoothstep(0.48, 1.2, x);
     const throttleDiam = stock.throttle.bodyDiameterMm;
     const newThrottle = throttleDiam + (mod.throttleDiameterAddMm ?? 0);
-    const throttleFlowRatio = 1 + Math.min(0.012, (newThrottle * newThrottle / (throttleDiam * throttleDiam) - 1) * 0.055) * smoothstep(0.55, 1.1, x);
+    const throttleFlowRatio = throttleChargeRatio(x, throttleDiam, newThrottle);
     const ramRatio = intakeRamRatio(rpm, tunedStock, tunedNew) * headChargeRatio(x, headGain);
     const willans = (p: number): number => p - WILLANS_OFFSET * ATMOSPHERIC_PRESSURE;
     // Willans line: indicated work ∝ (charge − offset); the charge follows MAP × trapped-mass ratios

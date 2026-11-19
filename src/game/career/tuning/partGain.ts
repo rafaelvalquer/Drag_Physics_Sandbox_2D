@@ -6,6 +6,7 @@ import { incompatibility } from './BuildResolverV2';
 import { findPart, type PartDef } from './parts';
 import { reliabilityLimits } from './EngineReliability';
 import { physicalSlotOf, progressionOf } from './partProgression';
+import { isModernBreathingPart } from './modernBreathing';
 
 /**
  * Workshop audit: the gain of one part on one car, measured with the real physics (factory-style
@@ -25,6 +26,12 @@ export interface PartGain {
   redlineAfterRpm: number;
   massBeforeKg: number;
   massAfterKg: number;
+  intakeRestrictionBeforeKPa: number | null;
+  intakeRestrictionAfterKPa: number | null;
+  exhaustRestrictionBeforeKPa: number | null;
+  exhaustRestrictionAfterKPa: number | null;
+  throttleBeforeS: number;
+  throttleAfterS: number;
   etBefore: number;
   etAfter: number;
   t100Before: number;
@@ -120,6 +127,12 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     redlineAfterRpm: after.car.engine.revLimitRpm,
     massBeforeKg: base.car.massKg,
     massAfterKg: after.car.massKg,
+    intakeRestrictionBeforeKPa: base.car.engine.breathing?.airFilterDropKPa ?? null,
+    intakeRestrictionAfterKPa: after.car.engine.breathing?.airFilterDropKPa ?? null,
+    exhaustRestrictionBeforeKPa: base.exhaustRestrictionKPa ?? base.car.engine.breathing?.exhaustBackPressureKPa ?? null,
+    exhaustRestrictionAfterKPa: after.exhaustRestrictionKPa ?? after.car.engine.breathing?.exhaustBackPressureKPa ?? null,
+    throttleBeforeS: base.car.engine.throttle.responseTimeS,
+    throttleAfterS: after.car.engine.throttle.responseTimeS,
     etBefore: a.et,
     etAfter: b.et,
     t100Before: a.t100,
@@ -131,8 +144,20 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     launchRpmBefore: base.car.transmission.clutch.launchRpm,
     launchRpmAfter: after.car.transmission.clutch.launchRpm,
   };
-  const effect = physicsSignature(base.car) !== physicsSignature(after.car) || gain.safeRpmBefore !== gain.safeRpmAfter;
-  return { status: !effect ? 'no-effect' : isGain(gain) ? 'gain' : 'no-gain', gain };
+  const effect = physicsSignature(base.car) !== physicsSignature(after.car) ||
+    gain.safeRpmBefore !== gain.safeRpmAfter || gain.exhaustRestrictionBeforeKPa !== gain.exhaustRestrictionAfterKPa;
+  const improvement = isGain(gain) || (isModernBreathingPart(part) && breathingGain(part, gain));
+  return { status: !effect ? 'no-effect' : improvement ? 'gain' : 'no-gain', gain };
+}
+
+function breathingGain(part: PartDef, gain: PartGain): boolean {
+  // These street parts should not worsen the reference pass enough to outweigh the hardware gain.
+  if (gain.etAfter - gain.etBefore > 0.05) return false;
+  const reduction = (before: number | null, after: number | null): boolean =>
+    before !== null && after !== null && before - after >= 0.1;
+  if (part.category === 'intake-airbox') return reduction(gain.intakeRestrictionBeforeKPa, gain.intakeRestrictionAfterKPa);
+  if (part.category === 'intake-throttle') return gain.throttleBeforeS - gain.throttleAfterS >= 0.001;
+  return reduction(gain.exhaustRestrictionBeforeKPa, gain.exhaustRestrictionAfterKPa);
 }
 
 /** Classifies every attempted pairing, including failures to produce comparable runs. */

@@ -77,6 +77,8 @@ export type BuildResult =
       peakTorqueNm: number;
       peakPowerCv: number;
       steadyBoostBar: { rpm: number; bar: number }[];
+      /** Modelled exhaust restriction at reference flow. Factory turbo keeps its turbine-side live calibration. */
+      exhaustRestrictionKPa?: number;
       knockLoss: number;
       /** Resolver version that produced the build. */
       version: ResolverVersion;

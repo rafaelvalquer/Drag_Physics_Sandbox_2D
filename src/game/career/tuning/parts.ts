@@ -1,6 +1,7 @@
 import type { TransmissionKind, TurboConfig } from '../../../data/schema';
 import { CHAPTER2_PARTS } from './chapter2Parts';
 import { CHAPTER3_PARTS } from './chapter3Parts';
+import { MODERN_BREATHING_PARTS } from './modernBreathingParts';
 import type { PartProgression } from './partProgression';
 
 /**
@@ -222,6 +223,8 @@ export interface ExhaustPart extends PartBase {
   headerDiameterScale: number;
   /** Factory turbo: a freer path after the turbine lets it reach speed sooner (spool time scale). */
   spoolTimeScale?: number;
+  /** A downpipe changes its own section and can coexist with the rest of the exhaust. */
+  section?: 'downpipe';
 }
 
 export interface ManifoldPart extends PartBase {
@@ -446,6 +449,8 @@ export interface ExpandedPart extends PartBase {
   requiresTurbo?: boolean;
   /** Extra career unlock this part needs on a modern engine family (generic categories only). */
   modernUnlock?: UnlockId;
+  /** Modern hardware with an explicit application path in resolver 2. */
+  modernBreathing?: true;
 }
 
 export type PartDef =
@@ -503,9 +508,14 @@ export type UnlockId =
   | 'c2-generic-tires'
   | 'c2-generic-chassis'
   | 'c2-stage2'
+  | 'c2-workshop-street'
+  | 'c2-workshop-sport'
   | 'c3-stage3'
   // Chapter 3 — Elite da Madrugada
   | 'c3-v6-parts'
+  | 'c3-workshop-street'
+  | 'c3-workshop-sport'
+  | 'c3-workshop-race'
   | 'c3-dealer-gtr'
   | 'c3-final-challenge';
 
@@ -539,8 +549,13 @@ export const UNLOCK_LABEL: Record<UnlockId, string> = {
   'c2-generic-tires': 'Largura e pressão de pneus nos carros modernos',
   'c2-generic-chassis': 'Alívio de peso e arrefecimento nos carros modernos',
   'c2-stage2': 'Stage 2 do turbo de fábrica (downpipe, admissão direta, mapa Stage 2)',
+  'c2-workshop-street': 'Oficina da Liga · Stage 1',
+  'c2-workshop-sport': 'Oficina da Liga · Stage 2',
   'c3-stage3': 'Stage 3 do turbo de fábrica',
   'c3-v6-parts': 'Peças dos V6 aspirados (admissão, escape, comandos, remap, cabeçotes)',
+  'c3-workshop-street': 'Oficina da Elite · Stage 1',
+  'c3-workshop-sport': 'Oficina da Elite · Stage 2 e Stage 3 da Liga',
+  'c3-workshop-race': 'Oficina da Elite · Stage 3',
   'c3-dealer-gtr': 'GT-R à venda na revenda Elite',
   'c3-final-challenge': 'Duelo final da Elite',
 };
@@ -720,7 +735,7 @@ const DYNO_LAB_PARTS: readonly PartDef[] = [
 export const PARTS: readonly PartDef[] = [...BASE_PARTS, ...EXPANDED_PARTS, ...DYNO_LAB_PARTS];
 
 /** Every part of every resolver version (ids are unique across versions). */
-export const ALL_PARTS: readonly PartDef[] = [...PARTS, ...CHAPTER2_PARTS, ...CHAPTER3_PARTS];
+export const ALL_PARTS: readonly PartDef[] = [...PARTS, ...CHAPTER2_PARTS, ...CHAPTER3_PARTS, ...MODERN_BREATHING_PARTS];
 
 export function findPart(id: string): PartDef | undefined {
   return ALL_PARTS.find((p) => p.id === id);

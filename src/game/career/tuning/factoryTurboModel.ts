@@ -4,7 +4,7 @@ import { EngineModel, WILLANS_OFFSET } from '../../../physics/engine/EngineModel
 import { engineGeometry } from '../../../physics/engine/EngineGeometry';
 import {
   camChargeRatio, camGeometryDelta, extendCurve, headChargeRatio, intakeRamRatio, modifiedCam,
-  ottoEfficiency, powerPeakRpm, runnerPressureRecoveryPa, torquePeakRpm,
+  ottoEfficiency, powerPeakRpm, runnerPressureRecoveryPa, throttleChargeRatio, torquePeakRpm,
 } from './breathingModel';
 import type { EngineFamilyDef } from './chapter2Parts';
 import type { BoostControlPart, CamPart, EcuPart, ExhaustPart, FilterPart, HeadPart, IntercoolerPart, ManifoldPart, MechanicalMods, PistonPart, TurboUpgradePart } from './parts';
@@ -67,6 +67,7 @@ export interface FactoryTurboResult {
   targetBoostBar: number;
   wastegateMaxBar: number;
   torqueLimitNm: number;
+  exhaustRestrictionKPa: number;
 }
 
 /** Highest boost target the wastegate of this build can hold (bar). */
@@ -116,8 +117,10 @@ export function applyFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboP
   const revAdd = Math.min(parts.ecu?.revLimitAddRpm ?? 0, valveKitLimit) + (parts.pistons?.revLimitAddRpm ?? 0);
   const revLimit = stock.revLimitRpm + revAdd;
   // a free-flow part never restricts more than the factory part it replaces
-  const filterDrop = Math.min(b0.airFilterDropKPa, parts.filter?.airFilterDropKPa ?? b0.airFilterDropKPa);
-  const backRef = Math.max(0.5, Math.min(b0.exhaustBackPressureKPa, parts.exhaust?.backPressureKPa ?? b0.exhaustBackPressureKPa) - (up?.backPressureReductionKPa ?? 0));
+  const filterBase = Math.min(b0.airFilterDropKPa, parts.filter?.airFilterDropKPa ?? b0.airFilterDropKPa);
+  const airboxRecovery = parts.mod?.filterDropReductionKPa;
+  const filterDrop = airboxRecovery === undefined ? filterBase : Math.max(0.15, filterBase - airboxRecovery);
+  const backRef = Math.max(0.5, Math.min(b0.exhaustBackPressureKPa, parts.mod?.backPressureKPa ?? parts.exhaust?.backPressureKPa ?? b0.exhaustBackPressureKPa) - (up?.backPressureReductionKPa ?? 0));
   const camDelta = camGeometryDelta(parts.cam);
   const cam = parts.cam ? modifiedCam(stock.cam, camDelta) : stock.cam;
   const runnerDiam = stock.intake.runnerDiameterMm + (parts.manifold?.runnerDiameterAddMm ?? 0);
@@ -129,6 +132,12 @@ export function applyFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboP
     manifoldVolumeL: stock.intake.manifoldVolumeL * (parts.manifold?.plenumScale ?? 1) + (parts.intercooler?.volumeAddL ?? 0),
     runnerDiameterMm: runnerDiam,
     runnerLengthM: runnerLength,
+    airboxVolumeL: stock.intake.airboxVolumeL * (parts.mod?.airboxVolumeScale ?? 1),
+  };
+  const throttle = {
+    ...stock.throttle,
+    bodyDiameterMm: stock.throttle.bodyDiameterMm + (parts.mod?.throttleDiameterAddMm ?? 0),
+    responseTimeS: stock.throttle.responseTimeS * (parts.mod?.throttleResponseScale ?? 1),
   };
 
   // ---- stock operating points (same EngineModel the race uses) ----
@@ -166,7 +175,8 @@ export function applyFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboP
       const r = op0.flow / b0.referenceFlowKgS;
       const op = model.wotOperatingPoint(rpm);
       const rpmRatio = rpm / ratedRpm;
-      const valveCharge = (parts.cam ? camChargeRatio(rpmRatio, camDelta) : 1) * headChargeRatio(rpmRatio, parts.head?.flowGain ?? 0);
+      const valveCharge = (parts.cam ? camChargeRatio(rpmRatio, camDelta) : 1) * headChargeRatio(rpmRatio, parts.head?.flowGain ?? 0) *
+        throttleChargeRatio(rpmRatio, stock.throttle.bodyDiameterMm, throttle.bodyDiameterMm);
       const tunedCharge = parts.manifold ? intakeRamRatio(rpm, tunedStock, tunedNew) : 1;
       const runnerRecovery = parts.manifold ? runnerPressureRecoveryPa(r, stock.intake.runnerDiameterMm, runnerDiam) : 0;
       const runnerRatio = 1 + runnerRecovery / op0.map;
@@ -215,6 +225,7 @@ export function applyFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboP
     maxSafeRpm: Math.max(stock.maxSafeRpm, revLimit + (stock.maxSafeRpm - stock.revLimitRpm)),
     cam,
     intake,
+    throttle,
     // the steady curve above already carries the lower pumping loss of a freer exhaust; the live
     // model keeps the factory back pressure, which there drives the turbine (a freer system after
     // the turbine raises its pressure ratio, never slows the spool)
@@ -229,6 +240,7 @@ export function applyFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboP
     targetBoostBar: target,
     wastegateMaxBar: wgMax,
     torqueLimitNm: limitNm,
+    exhaustRestrictionKPa: backRef,
   };
 }
 
