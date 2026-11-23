@@ -94,7 +94,7 @@ function forFamily(car: CarConfig, origin: 2 | 3, family: string): InternalPart[
         ? 'Câmaras de volume aferido para ampliar a margem de detonação sob pressão.'
         : 'Câmaras usinadas com volume aferido para a taxa desejada em motor aspirado.',
       physics: turbo
-        ? `Taxa de compressão −${format(-compressionAdd)}:1. Amplia a faixa de pressão sem atraso de centelha; a eficiência sem pressão também diminui.`
+        ? `Taxa de compressão −${format(-compressionAdd)}:1: o motor aceita +${format(Math.round(-compressionAdd * 30) / 100)} bar antes de detonar. Sozinha, perde um pouco de potência (menor eficiência térmica), porque a ECU original não usa essa margem; o ganho aparece só com ECU e pressão acima da original.`
         : `Taxa de compressão +${format(compressionAdd)}:1. A eficiência térmica é calculada para a nova taxa.`,
       compressionAdd,
     };
