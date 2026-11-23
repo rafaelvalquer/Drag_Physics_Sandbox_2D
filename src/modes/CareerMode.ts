@@ -811,7 +811,7 @@ export class CareerMode implements Mode {
       const categoryParts = allInTab.filter((p) => p.category === cat);
       const entries = categoryParts.map((p) => {
         const st = partStatus(s, car, p, family);
-        const progression = progressionOf(p, family);
+        const progression = progressionOf(p, family, car.baseCarId);
         return h('li', {
           class: `ws-part-card ${sel?.id === p.id ? 'sel' : ''} ${st.state}`,
           'data-testid': `ws-part-${p.id}`,
@@ -1016,6 +1016,7 @@ export class CareerMode implements Mode {
           row('Faixa útil (90 % do torque)', range(before), range(after), width(before), width(after), 'higher'),
           row(t0.powershift ? 'Capacidade do câmbio' : 'Embreagem', torque(t0.clutch.maxTorqueNm), torque(t1.clutch.maxTorqueNm), t0.clutch.maxTorqueNm, t1.clutch.maxTorqueNm),
           changed('Capacidade dos internos', before.internalTorqueLimitNm, after.internalTorqueLimitNm, torque, 'higher'),
+          changed('Taxa de compressão', before.car.engine.compressionRatio, after.car.engine.compressionRatio, (n) => `${f2(n)}:1`, 'neutral'),
           changed('Rotação de largada', t0.clutch.launchRpm, t1.clutch.launchRpm, (n) => `${n} rpm`, 'neutral'),
           changed('Temperatura da carga na pressão-alvo', before.chargeTemperatureAtTargetK, after.chargeTemperatureAtTargetK, (n) => `${f1(n - 273.15)} °C`, 'lower'),
           changed('Fase de torque da troca', t0.powershift?.torquePhaseS, t1.powershift?.torquePhaseS, ms, 'lower'),

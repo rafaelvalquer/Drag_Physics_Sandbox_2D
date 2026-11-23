@@ -20,7 +20,7 @@ const rows = cars.flatMap((car) => {
   const family = familyOf(car);
   const groups = new Map<string, Map<PartTier, PartDef>>();
   for (const part of ALL_PARTS) {
-    const progression = progressionOf(part, family);
+    const progression = progressionOf(part, family, car.id);
     if (!progression || (selectedGroups.size && !selectedGroups.has(progression.group)) || incompatibility(car, part)) continue;
     const group = groups.get(progression.group) ?? new Map<PartTier, PartDef>();
     if (group.has(progression.tier)) throw new Error(`${car.id}: ${progression.group} tem mais de uma peça compatível no Stage ${progression.tier}.`);

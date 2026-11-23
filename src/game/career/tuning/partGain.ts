@@ -131,6 +131,9 @@ function build(car: CarConfig, ids: string[], version: ResolverVersion) {
   return r.ok ? r : null;
 }
 
+/** Compare chamber geometry at the same pressure, outside the wastegate's default map. */
+const classicCompressionTune = { boostBar: 0.8 };
+
 const measured = new WeakMap<TrackConfig, Map<string, { et: number; t100: number }>>();
 function measure(key: string, car: CarConfig, track: TrackConfig): { et: number; t100: number } {
   const cache = measured.get(track) ?? new Map();
@@ -277,8 +280,9 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
   const classicInternalGain = group === 'classic-rotating-assembly' && gain.etAfter - gain.etBefore <= 0.05 &&
     gain.internalTorqueLimitBeforeNm !== null && gain.internalTorqueLimitAfterNm !== null &&
     gain.internalTorqueLimitAfterNm - gain.internalTorqueLimitBeforeNm >= 20;
-  const compressionGain = group === 'modern-na-compression' &&
+  const compressionGain = (group === 'modern-na-compression' || group === 'classic-na-compression') &&
     gain.cvAfter - gain.cvBefore >= 0.15 && gain.etAfter - gain.etBefore <= NOT_WORSE_S;
+  const turboCompressionGain = group === 'classic-turbo-compression' && gain.knockBefore - gain.knockAfter >= 0.002;
   const ignitionGain = (group === 'modern-ignition' || group === 'classic-ignition' || group === 'classic-ecu') &&
     gain.burnBeforeDeg - gain.burnAfterDeg >= 0.1 &&
     gain.etAfter - gain.etBefore <= 0.05;
@@ -297,7 +301,7 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     gain.chargeTemperatureBeforeK - gain.chargeTemperatureAfterK >= 0.5;
   const improvement = isGain(gain) || breathingGain(part, gain) || drivelineGain(part, gain) ||
     topEndGain(part, gain) || fuelGain || internalGain || classicInternalGain || compressionGain || ignitionGain || turboFlowGain || chargeCoolingGain ||
-    classicTurbineGain || pressureControlGain(group, gain) || coolingGain || chassisGain(group, gain) || legacyFuelGain;
+    classicTurbineGain || turboCompressionGain || pressureControlGain(group, gain) || coolingGain || chassisGain(group, gain) || legacyFuelGain;
   return { status: !effect ? 'no-effect' : improvement ? 'gain' : 'no-gain', gain };
 }
 
@@ -389,13 +393,14 @@ export function auditPartGain(car: CarConfig, part: PartDef, track: TrackConfig,
     return auditConversionCompression(car, part, track, version);
   const errors = new Set<string>();
   const candidates = auditContexts(car, part);
+  const tune = progressionOf(part, familyOf(car), car.id)?.group === 'classic-turbo-compression' ? classicCompressionTune : {};
   for (const ctx0 of candidates) {
     const ctx = ctx0.filter((id) => findPart(id)?.category !== part.category);
     // a turbo kit is compared with the same build without any turbo hardware
     const baseIds = part.category === 'turbo' ? ctx.filter((id) => !requiresTurbo(id) && findPart(id)?.category !== 'turbo') : ctx;
-    const base = build(car, baseIds, version);
-    if (!base) continue;
-    const withPart = resolveBuild(car, [...ctx, part.id], {}, version);
+    const base = resolveBuild(car, baseIds, tune, version);
+    if (!base.ok) continue;
+    const withPart = resolveBuild(car, [...ctx, part.id], tune, version);
     if (!withPart.ok) {
       for (const error of withPart.errors) errors.add(error);
       continue;
@@ -453,11 +458,12 @@ function conversionSupport(car: CarConfig): string[] {
 }
 
 function auditContexts(car: CarConfig, part: PartDef): readonly string[][] {
-  const group = progressionOf(part)?.group;
+  const group = progressionOf(part, familyOf(car), car.id)?.group;
   if (group === 'classic-turbo-kit') return [[
     'clutch-ceramic-race', 'fuel-pump', 'forged-kit', 'ecu-race', 'ignition-race',
     ...(car.id === 'gm-celta-2003' ? ['compression-celta-turbo-s3'] : []),
   ]];
+  if (group === 'classic-turbo-compression') return [['turbo-basic', 'clutch-ceramic-race']];
   if (group === 'classic-fuel') return CONTEXTS.filter((context) => context.some((id) => findPart(id)?.category === 'turbo'));
   if (car.engine.family === 'toyota-2gr-fse' && group === 'weight-reduction') return [['tires-sport']];
   if (car.engine.family === 'mercedes-m276' && (group === 'tire-compound' || group === 'tire-width'))
@@ -535,6 +541,7 @@ export function auditPartStages(car: CarConfig, stages: readonly PartDef[], trac
   if (progressionOf(first)?.objective === 'boost-headroom') return auditBoostHeadroom(car, stages, track, version);
   const slot = physicalSlotOf(first);
   const specialization = progressionOf(first)?.specialization;
+  const tune = progressionOf(first)?.group === 'classic-turbo-compression' ? classicCompressionTune : {};
   const errors = new Set<string>();
   const candidates = auditContexts(car, first);
   for (const candidate of candidates) {
@@ -542,12 +549,12 @@ export function auditPartStages(car: CarConfig, stages: readonly PartDef[], trac
       const support = findPart(id);
       return support && physicalSlotOf(support) !== slot;
     });
-    const stock = resolveBuild(car, context, {}, version);
+    const stock = resolveBuild(car, context, tune, version);
     if (!stock.ok) continue;
     if (specialization === 'turbo' && slot !== 'turbo' && stock.car.engine.induction !== 'turbo') continue;
     const builds: ValidBuild[] = [stock];
     for (const part of stages) {
-      const result = resolveBuild(car, [...context, part.id], {}, version);
+      const result = resolveBuild(car, [...context, part.id], tune, version);
       if (result.ok) builds.push(result);
       else for (const error of result.errors) errors.add(error);
     }

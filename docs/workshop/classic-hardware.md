@@ -18,4 +18,12 @@ Os três conjuntos mantêm os IDs existentes e passam a oferecer limites estimad
 
 A oficina mostra a capacidade antes e depois. A auditoria confirmou aumento de capacidade nas 21 comparações de internos. Uma montagem de referência do Gol a 1,50 bar excedeu 400 N·m e o resolver só a aceitou a partir do segundo estágio.
 
-Para repetir a auditoria execute `npx tsx scripts/parts-stage-report.ts --groups=classic-exhaust-header,classic-exhaust-pipe,classic-exhaust-muffler,classic-exhaust-system,classic-fuel,classic-ignition,classic-valve-springs,classic-rotating-assembly --fail`.
+## Compressão aspirada e turbo
+
+Seis carros têm séries separadas. A série aspirada aumenta a taxa em 0,22, 0,45 e 0,70. A série turbo reduz a taxa e exige o kit, com os primeiros estágios dimensionados a partir da taxa de fábrica de cada motor. A taxa de competição reduz 1,20. O limite de detonação do resolver continua valendo conforme o combustível.
+
+O Celta VHC sai de fábrica com 12,6:1 a gasolina e usa a série própria de pistões para a conversão. A taxa alta antiga permanece válida para montagens aspiradas salvas. A taxa turbo genérica, que não atendia ao limite do VHC, dá lugar na oficina aos três kits específicos.
+
+As 39 comparações de estágio passaram. Cada etapa aspirada acrescentou entre 0,48 e 1,07 cv. Com os turbos mantidos em 0,80 bar, cada etapa de baixa taxa reduziu a perda estimada por detonação entre 0,8 e 3,2 pontos percentuais. O tempo de pista pode aumentar com a redução da taxa à mesma pressão. A série VHC é comparada pela pressão admissível.
+
+Para repetir a auditoria de compressão execute `npx tsx scripts/parts-stage-report.ts --groups=classic-na-compression,classic-turbo-compression,celta-turbo-compression --fail`.

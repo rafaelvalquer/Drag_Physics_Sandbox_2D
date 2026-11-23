@@ -99,6 +99,10 @@ const existing: Readonly<Record<string, PartProgression>> = {
   'ic-small': { tier: 1, group: 'classic-intercooler', specialization: 'turbo' },
   'ic-medium': { tier: 2, group: 'classic-intercooler', specialization: 'turbo' },
   'ic-large': { tier: 3, group: 'classic-intercooler', specialization: 'turbo' },
+  'compression-classic-na-s1': { tier: 1, group: 'classic-na-compression', specialization: 'aspirado' },
+  'compression-classic-na-s2': { tier: 2, group: 'classic-na-compression', specialization: 'aspirado' },
+  'compression-high': { tier: 3, group: 'classic-na-compression', specialization: 'aspirado' },
+  'compression-low': { tier: 3, group: 'classic-turbo-compression', specialization: 'turbo' },
   'ecu-stage1': { tier: 1, group: 'factory-turbo-ecu', specialization: 'turbo' },
   'ecu-stage2': { tier: 2, group: 'factory-turbo-ecu', specialization: 'turbo' },
   'ecu-stage3': { tier: 3, group: 'factory-turbo-ecu', specialization: 'turbo' },
@@ -107,8 +111,10 @@ const existing: Readonly<Record<string, PartProgression>> = {
 // Shared original parts belong to classic series only. They remain standalone options on modern cars.
 const sharedClassicSeries = new Set(['filter-sport', 'exhaust-sport', 'valve-springs', 'clutch-reinforced', 'differential-short']);
 
-export function progressionOf(part: PartDef, family?: string): PartProgression | undefined {
+export function progressionOf(part: PartDef, family?: string, carId?: string): PartProgression | undefined {
   if (family && family !== 'legacy' && sharedClassicSeries.has(part.id)) return undefined;
+  // The VHC has its own compression series. Legacy generic parts remain in existing saves.
+  if (carId === 'gm-celta-2003' && part.id === 'compression-high') return undefined;
   return part.progression ?? existing[part.id];
 }
 

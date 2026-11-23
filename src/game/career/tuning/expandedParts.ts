@@ -1,3 +1,4 @@
+import { CHAPTER1_CARS } from '../../../data/cars/campaign';
 import type { ExpandedPart, MechanicalMods, UnlockId } from './parts';
 
 /**
@@ -26,7 +27,9 @@ const specs: Spec[] = [
   ['head-street', 'engine-head', 'Cabeçote retrabalhado leve', 2, 1900, 'part-cam', { headFlowScale: 1.045 }, 'Dutos de admissão e escape limpos e casados com as juntas.'],
   ['head-classic-street', 'engine-head', 'Cabeçote com sedes retrabalhadas', 1, 1050, 'part-cam', { headFlowScale: 1.022 }, 'Retrabalho das sedes mantendo a seção original dos dutos.'],
   ['head-race', 'engine-head', 'Cabeçote retrabalhado completo', 3, 3400, 'part-cam', { headFlowScale: 1.09 }, 'Cabeçote de competição: dutos alargados, sedes retrabalhadas e válvulas maiores.'],
-  ['compression-high', 'engine-compression', 'Taxa alta aspirada', 3, 2200, 'part-cam', { compressionRatioDelta: 0.7 }, 'Cabeçote rebaixado para motor aspirado.', 'Ciclo Otto mais eficiente em toda a faixa; não aceita turbo com gasolina.'],
+  ['compression-classic-na-s1', 'engine-compression', 'Taxa aspirada de rua', 1, 980, 'part-cam', { compressionRatioDelta: 0.22 }, 'Câmara ligeiramente reduzida para melhorar o aproveitamento do combustível em motores aspirados.'],
+  ['compression-classic-na-s2', 'engine-compression', 'Taxa aspirada esportiva', 2, 1510, 'part-cam', { compressionRatioDelta: 0.45 }, 'Câmara com volume intermediário entre o conjunto de rua e o cabeçote de competição.'],
+  ['compression-high', 'engine-compression', 'Taxa alta aspirada', 3, 2200, 'part-cam', { compressionRatioDelta: 0.7 }, 'Cabeçote rebaixado para motor aspirado.', 'Melhora a eficiência do ciclo. Em montagem turbo, a taxa final e o combustível determinam a margem contra detonação.'],
   ['compression-low', 'engine-compression', 'Taxa baixa turbo', 3, 2400, 'part-turbo', { compressionRatioDelta: -1.2, wastegateHoldAddBar: 0.12 }, 'Pistões de cabeça rebaixada para motor turbo de pressão alta.', 'Com menos taxa o motor aceita mais pressão sem detonar, e o mapa segura a pressão mais alta. Só para motor com kit turbo.'],
   ['rods-reinforced', 'engine-internals', 'Bielas reforçadas', 3, 3100, 'part-turbo', { internalTorqueLimitNm: 400, coolingFrictionScale: 0.985 }, 'Bielas forjadas com bronzinas de competição.', 'Base para turbo de pressão alta; sozinhas, só o atrito menor das bronzinas.'],
   ['pistons-forged', 'engine-internals', 'Pistões forjados', 3, 3500, 'part-turbo', { internalTorqueLimitNm: 440, coolingFrictionScale: 0.975 }, 'Bielas reforçadas e pistões forjados leves com anéis de baixa tensão.', 'Base para turbo de pressão alta; o conjunto também reduz o atrito dos anéis.'],
@@ -114,7 +117,10 @@ export function describeMods(m: MechanicalMods): string {
   }
   if (m.revLimitAddRpm) out.push(`corte de giro +${n(m.revLimitAddRpm)} rpm`);
   if (m.headFlowScale) out.push(`vazão do cabeçote +${pct(m.headFlowScale)} % em alta rotação`);
-  if (m.compressionRatioDelta) out.push(`taxa de compressão ${m.compressionRatioDelta > 0 ? '+' : '−'}${n(Math.abs(m.compressionRatioDelta), 1)}`);
+  if (m.compressionRatioDelta) {
+    const delta = Math.abs(m.compressionRatioDelta);
+    out.push(`taxa de compressão ${m.compressionRatioDelta > 0 ? '+' : '−'}${n(delta, Number.isInteger(delta * 10) ? 1 : 2)}`);
+  }
   if (m.internalTorqueLimitNm) out.push(`internos aguentam ${n(m.internalTorqueLimitNm)} N·m`);
   if (m.flywheelInertiaScale) out.push(`inércia do volante −${pct(m.flywheelInertiaScale)} %`);
   if (m.backPressureReductionKPa) out.push(`contrapressão −${n(m.backPressureReductionKPa, 1)} kPa no fluxo nominal`);
@@ -154,9 +160,13 @@ export function describeMods(m: MechanicalMods): string {
   return s ? s[0]!.toUpperCase() + s.slice(1) + '.' : '';
 }
 
-export const EXPANDED_PARTS: readonly ExpandedPart[] = specs.map(([id, category, name, chapter, price, unlock, mod, description, note]) => ({
+const nonVhcCars = CHAPTER1_CARS.filter((car) => car.id !== 'gm-celta-2003');
+const nonVhcIds = nonVhcCars.map((car) => car.id);
+
+const ordinaryParts: ExpandedPart[] = specs.map(([id, category, name, chapter, price, unlock, mod, description, note]) => ({
   id, category, name, chapter, price, unlock, mod, description,
   physics: note ? `${describeMods(mod)} ${note}` : describeMods(mod),
+  ...(id === 'compression-low' || id.startsWith('compression-classic-na-') ? { compat: { cars: nonVhcIds } } : {}),
   requiresTurbo: category === 'turbo-turbine' || category === 'turbo-intercooler' ||
     category === 'turbo-wastegate' || category === 'turbo-boost' || id === 'compression-low' ||
     id === 'cam-turbo-street' || id === 'cam-turbo-sport',
@@ -167,6 +177,28 @@ export const EXPANDED_PARTS: readonly ExpandedPart[] = specs.map(([id, category,
       ? { modernUnlock: 'c2-generic-chassis' as const }
       : {}),
 }));
+
+const classicTurboCompression = nonVhcCars.flatMap((car) => ([1, 2] as const).map((tier): ExpandedPart => {
+  // Keep the intermediate chambers above the model's knock floor on low-compression engines.
+  const reduction = Math.round(Math.min(0.4, (car.engine.compressionRatio - 8) * 0.4) * 100) * tier / 100;
+  const mod = { compressionRatioDelta: -reduction };
+  return {
+    id: `compression-classic-turbo-${car.id}-s${tier}`,
+    category: 'engine-compression',
+    name: tier === 1 ? 'Taxa turbo de rua' : 'Taxa turbo esportiva',
+    chapter: tier,
+    price: tier === 1 ? 980 : 1610,
+    unlock: 'part-turbo',
+    compat: { cars: [car.id] },
+    requiresTurbo: true,
+    mod,
+    progression: { tier, group: 'classic-turbo-compression', specialization: 'turbo' },
+    description: 'Pistões com rebaixo dimensionado para ampliar a margem contra detonação sob pressão.',
+    physics: describeMods(mod),
+  };
+}));
+
+export const EXPANDED_PARTS: readonly ExpandedPart[] = [...ordinaryParts, ...classicTurboCompression];
 
 /** The VHC can prepare for boost before installing the kit. */
 export const CELTA_TURBO_COMPRESSION: readonly ExpandedPart[] = ([1, 2, 3] as const).map((tier) => ({
