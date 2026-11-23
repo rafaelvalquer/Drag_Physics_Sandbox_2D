@@ -30,7 +30,8 @@ test('boots, unlocks audio and streams physics frames to the AudioWorklet', asyn
   expect(st.rejectedFrames).toBe(0);
   expect(st.peak[2]).toBeGreaterThan(1e-4); // exhaust channel is producing sound at idle
   expect(Math.max(...st.peak)).toBeLessThanOrEqual(1);
-  expect(Math.abs(st.playbackRate - 1)).toBeLessThanOrEqual(0.02);
+  expect(st.playbackRate).toBeGreaterThanOrEqual(0.98);
+  expect(st.playbackRate).toBeLessThanOrEqual(1.02);
   // the master analyser sees a non-silent signal
   const rms = await page.evaluate(() => {
     const an = (window as unknown as { __app: { debug: { current: { ctx: { audio: { analyser: AnalyserNode } } } } } }).__app.debug.current.ctx.audio.analyser;
