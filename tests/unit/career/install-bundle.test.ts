@@ -43,6 +43,15 @@ describe('build issues', () => {
       ['Remap Stage 2 exige downpipe sem catalisador', 'needs-part'],
       ['detonação: este motor perde 30 % do torque em atraso de ignição nesta pressão; baixe a pressão', 'knock'],
       ['pressão fora da faixa do kit (0,40 a 1,00 bar)', 'range'],
+      ['a turbina de competição exige alimentação de maior vazão', 'fuel-limit'],
+      ['a conversão exige bomba e injetores de maior vazão', 'fuel-limit'],
+      ['a turbina de competição exige pistões e bielas forjados', 'internals-limit'],
+      ['Remap Stage 3 exige pistões e bielas forjados', 'internals-limit'],
+      ['a turbina de competição exige intercooler de maior capacidade', 'intercooler-limit'],
+      ['Remap Stage 3 exige a turbina de maior fluxo', 'turbine-limit'],
+      ['a conversão exige ignição Stage 2 ou superior', 'ignition-limit'],
+      ['a conversão exige arrefecimento de óleo reforçado', 'oil-cooling'],
+      ['o kit turbo exige taxa de compressão até 10,5:1 para limitar a detonação', 'compression-limit'],
     ];
     for (const [msg, code] of cases) expect(classifyError(msg).code, msg).toBe(code);
     expect(issuesOf(['qualquer coisa nova'])[0]!.code).toBe('other');
@@ -63,6 +72,19 @@ describe('install planner', () => {
     expect(plan.blockers).toEqual([]);
     expect(plan.ok).toBe(true);
     expect(plan.cost).toBe(plan.steps.reduce((n, s) => n + (s.source === 'buy' ? s.price : 0), 0));
+  });
+});
+
+describe('install planner on modern cars', () => {
+  it('lists forged internals, intercooler and fuel for the Stage 3 turbine of a BMW 320i', () => {
+    const base = findCampaignCar('bmw-320i-f30-2014')!;
+    const car = { baseCarId: base.id, installedParts: ['ecu-programmable'] };
+    const save = { completedEventIds: [], inventoryPartIds: [], credits: 999999 };
+    const plan = planInstall({ base, car, save, partId: 'factory-turbo-bmw-n20-s3', versionOf: () => 2 });
+    const fixed = plan.steps.slice(1).map((st) => st.resolves!.code).sort();
+    expect(fixed).toEqual(['fuel-limit', 'intercooler-limit', 'internals-limit']);
+    expect(plan.steps.every((st) => st.partId.length > 0)).toBe(true);
+    expect(plan.openIssues).toEqual([]);
   });
 });
 

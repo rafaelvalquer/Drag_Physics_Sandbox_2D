@@ -84,6 +84,8 @@ describe('internos dos clássicos', () => {
       'turbo-strong', 'clutch-ceramic-race', 'fuel-pump', 'ecu-race', 'ignition-race',
       'compression-low', 'wastegate-race', 'cam-turbo', 'head-race', 'exhaust-classic-race',
       'turbine-large', 'manifold-classic-race', 'filter-direct',
+      // the cam's overlap now costs boost pressure (breathingModel): the intercooler brings the build back above 400 N·m
+      'ic-large',
     ];
     const tune = { boostBar: 1.5 };
     const rods = resolveBuild(gol, [...support, 'rods-reinforced'], tune, 1);

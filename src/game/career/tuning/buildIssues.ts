@@ -14,6 +14,10 @@ export type IssueCode =
   | 'gearbox-limit'
   | 'compression-limit'
   | 'needs-ecu'
+  | 'intercooler-limit'
+  | 'turbine-limit'
+  | 'ignition-limit'
+  | 'oil-cooling'
   | 'needs-part'
   | 'knock'
   | 'range'
@@ -36,6 +40,10 @@ export const ISSUE_LABEL: Record<IssueCode, string> = {
   'gearbox-limit': 'Câmbio para o torque',
   'compression-limit': 'Taxa de compressão compatível',
   'needs-ecu': 'ECU compatível',
+  'intercooler-limit': 'Intercooler de maior capacidade',
+  'turbine-limit': 'Turbina de maior fluxo',
+  'ignition-limit': 'Ignição mais forte',
+  'oil-cooling': 'Arrefecimento de óleo',
   'needs-part': 'Peça de apoio',
   knock: 'Pressão sem detonação',
   range: 'Pressão dentro da faixa',
@@ -51,6 +59,14 @@ const RULES: { re: RegExp; code: IssueCode; fix: readonly PartCategory[] }[] = [
   { re: /taxa .*(kit turbo|detona)/, code: 'compression-limit', fix: ['engine-compression'] },
   { re: /exige ECU programável|turbina de maior fluxo exige ECU/, code: 'needs-ecu', fix: ['ecu'] },
   { re: /wastegate não segura/, code: 'needs-part', fix: ['boost-control'] },
+  // Stage 3 / turbo conversion (modern engines)
+  { re: /alimentação de maior vazão|bomba e injetores/, code: 'fuel-limit', fix: ['electronics-fuel'] },
+  { re: /pistões e bielas|torque da conversão/, code: 'internals-limit', fix: ['pistons', 'engine-internals'] },
+  { re: /intercooler de maior capacidade/, code: 'intercooler-limit', fix: ['intercooler', 'turbo-intercooler'] },
+  { re: /exige a turbina de maior fluxo/, code: 'turbine-limit', fix: ['turbo', 'turbo-turbine'] },
+  { re: /ignição Stage/, code: 'ignition-limit', fix: ['electronics-ignition'] },
+  { re: /arrefecimento de óleo/, code: 'oil-cooling', fix: ['cooling-oil'] },
+  { re: /exige taxa de compressão/, code: 'compression-limit', fix: ['pistons', 'engine-compression'] },
   { re: /^.+ exige .+/, code: 'needs-part', fix: [] }, // ECU `requiresParts`: the ids come from the ECU part
   { re: /detonação/, code: 'knock', fix: [] },
   { re: /pressão fora da faixa/, code: 'range', fix: [] },
