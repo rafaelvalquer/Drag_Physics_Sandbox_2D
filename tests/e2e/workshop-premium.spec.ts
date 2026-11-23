@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
-import { CHAPTER2_EVENTS, EVENTS } from '../../src/game/career/CareerEvents';
+import { CHAPTER2_EVENTS, CHAPTER3_EVENTS, EVENTS } from '../../src/game/career/CareerEvents';
+import { findPart } from '../../src/game/career/tuning/parts';
 import { boot, errors, mode } from './helpers';
 
 test.afterEach(() => expect(errors, errors.join('\n')).toEqual([]));
@@ -88,14 +89,28 @@ test('oficina moderna: libera, substitui e guarda estágios da mesma peça', asy
   await page.getByTestId('ws-buy').click();
   await expect(stage(2)).toHaveAttribute('data-state', 'installed');
   await expect(stage(1)).toHaveAttribute('data-state', 'owned');
+
+  const elite = JSON.stringify([...EVENTS, ...CHAPTER2_EVENTS, ...CHAPTER3_EVENTS.slice(0, 5)].map((event) => event.id));
+  await mode(page, `m.controller.commit(s => { s.completedEventIds = ${elite}; }).then(() => m.show('workshop'))`);
+  await expect(stage(3)).toHaveAttribute('data-state', 'available');
+  const beforePurchase = await mode<number>(page, 'm.controller.save.credits');
+  await stage(3).click();
+  await page.getByTestId('ws-buy').click();
+  await expect(stage(3)).toHaveAttribute('data-state', 'installed');
+  await expect(stage(2)).toHaveAttribute('data-state', 'owned');
+  const stage3Price = findPart('intake-airbox-bmw-n20-s3')!.price;
+  expect(await mode<number>(page, 'm.controller.save.credits')).toBe(beforePurchase - stage3Price);
+
   await page.getByTestId('ws-stock-intake-airbox').click();
   await page.getByTestId('ws-install-stock').click();
   await expect(page.getByTestId('ws-stock-intake-airbox')).toHaveAttribute('data-state', 'installed');
   await expect(stage(2)).toHaveAttribute('data-state', 'owned');
+  await expect(stage(3)).toHaveAttribute('data-state', 'owned');
   await mode(page, "m.controller.load().then(() => m.show('workshop'))");
   await expect(page.getByTestId('ws-stock-intake-airbox')).toHaveAttribute('data-state', 'installed');
   await expect(stage(1)).toHaveAttribute('data-state', 'owned');
   await expect(stage(2)).toHaveAttribute('data-state', 'owned');
+  await expect(stage(3)).toHaveAttribute('data-state', 'owned');
   await page.getByTestId('ws-tab-transmission').click();
   await page.getByTestId('ws-part-automatic-bmw-n20-s1').click();
   await expect(page.getByTestId('ws-compare')).toContainText('Capacidade do câmbio');
@@ -104,4 +119,8 @@ test('oficina moderna: libera, substitui e guarda estágios da mesma peça', asy
   await page.getByTestId('ws-tab-electronics').click();
   await page.getByTestId('ws-part-fuel-bmw-n20-s1').click();
   await expect(page.getByTestId('ws-compare')).toContainText('Vazão de combustível');
+  await page.getByTestId('ws-tab-engine').click();
+  await page.getByTestId('ws-part-compression-chamber-bmw-n20-s1').click();
+  await expect(page.getByTestId('ws-compare')).toContainText('Taxa de compressão');
+  await expect(page.getByTestId('ws-compare')).toContainText('Pressão sem atraso por detonação');
 });

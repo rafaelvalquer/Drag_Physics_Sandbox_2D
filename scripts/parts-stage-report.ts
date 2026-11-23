@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { CAREER_CARS } from '../src/data/cars/campaign';
 import { TRACKS } from '../src/data/tracks/index';
 import { familyOf, incompatibility } from '../src/game/career/tuning/BuildResolverV2';
-import { auditPartStages, WORKSHOP_DISTANCE_M } from '../src/game/career/tuning/partGain';
+import { auditPartStages, WORKSHOP_ACCELERATION_LIMIT_S, WORKSHOP_DISTANCE_M } from '../src/game/career/tuning/partGain';
 import { physicalSlotOf, progressionOf, type PartTier } from '../src/game/career/tuning/partProgression';
 import { ALL_PARTS, type PartDef } from '../src/game/career/tuning/parts';
 import { careerResolverVersion } from '../src/game/career/tuning/resolverVersion';
@@ -12,6 +12,7 @@ const args = process.argv.slice(2);
 const carId = args.find((arg) => arg.startsWith('--car='))?.slice('--car='.length);
 const selectedGroups = new Set(args.find((arg) => arg.startsWith('--groups='))?.slice('--groups='.length).split(/[,\s]+/).filter(Boolean) ?? []);
 const output = args.find((arg) => arg.startsWith('--out='))?.slice('--out='.length) ?? 'docs/workshop';
+const extendedSplits = args.includes('--extended');
 const cars = CAREER_CARS.filter((car) => !carId || car.id === carId);
 if (!cars.length) throw new Error(`Carro desconhecido: ${carId}`);
 const track = TRACKS.find((item) => item.id === 'test-track')!;
@@ -37,7 +38,7 @@ const rows = cars.flatMap((car) => {
       slot: physicalSlotOf(stages[0]!),
       specialization: progressionOf(stages[0]!)!.specialization,
       missingTiers: tiers.filter((tier) => !levels.has(tier)),
-      comparisons: auditPartStages(car, contiguous, track, careerResolverVersion(car.id)),
+      comparisons: auditPartStages(car, contiguous, track, careerResolverVersion(car.id), extendedSplits),
     };
   });
 });
@@ -46,7 +47,7 @@ const delta = (before: number, after: number): string => Number.isFinite(after -
 const restrictionDelta = (before: number | null, after: number | null): string =>
   before !== null && after !== null ? delta(before, after) : '—';
 const metrics = [
-  'Δ cv', 'Δ N·m', 'Δ torque por faixa N·m', 'Δ 0–100 s', 'Δ ¼ milha s',
+  'Δ cv', 'Δ N·m', 'Δ torque por faixa N·m', 'Δ 0–100 s', 'Δ ¼ milha s', ...(extendedSplits ? ['100–200 s antes → depois'] : []),
   'Δ admissão kPa', 'Δ escape kPa', 'Δ borboleta ms', 'Δ combustível g/s',
   'Δ giro seguro rpm', 'Δ inércia kg·m²', 'Δ duração da queima °', 'Δ perda por detonação p.p.',
   'Δ temperatura da carga no alvo °C', 'Δ limite da wastegate bar', 'Δ resposta do turbo s', 'Pressão admissível bar',
@@ -63,6 +64,7 @@ const markdown = [
   '# Progressão de estágios da oficina',
   '',
   `Comparações adjacentes na pista de testes a ${WORKSHOP_DISTANCE_M.toFixed(3)} m. Os estágios usam o mesmo conjunto de apoio. A série legada de ECU mede os pacotes completos com as peças exigidas em cada nível. Estágios ausentes ou montagens inválidas ficam explícitos.`,
+  ...(extendedSplits ? [`A coluna de 100–200 km/h usa até ${WORKSHOP_ACCELERATION_LIMIT_S} s simulados desde a largada. “—” indica que a montagem não alcançou 200 km/h nesse prazo.`] : []),
   '',
   `| Carro | Família | Grupo | Antes | Depois | ${metrics.join(' | ')} | Resultado |`,
   `|---|---|---|---|---|${metrics.map(() => '---:').join('|')}|---|`,
@@ -78,6 +80,7 @@ for (const row of rows) {
       m.torqueBands.map((band) => delta(band.beforeNm, band.afterNm)).join(' / '),
       delta(m.t100Before, m.t100After),
       delta(m.etBefore, m.etAfter),
+      ...(extendedSplits ? [`${m.hundredTo200BeforeS?.toFixed(3) ?? '—'} → ${m.hundredTo200AfterS?.toFixed(3) ?? '—'}`] : []),
       restrictionDelta(m.intakeRestrictionBeforeKPa, m.intakeRestrictionAfterKPa),
       restrictionDelta(m.exhaustRestrictionBeforeKPa, m.exhaustRestrictionAfterKPa),
       delta(1000 * m.throttleBeforeS, 1000 * m.throttleAfterS),
@@ -115,7 +118,12 @@ mkdirSync(output, { recursive: true });
 const missingGroups = [...selectedGroups].filter((group) => !rows.some((row) => row.group === group));
 if (missingGroups.length) throw new Error(`Nenhuma série compatível para: ${missingGroups.join(', ')}`);
 const suffix = [carId, selectedGroups.size ? 'selection' : undefined].filter(Boolean).map((item) => `-${item}`).join('');
-writeFileSync(join(output, `parts-stage${suffix}.json`), JSON.stringify({ distanceM: WORKSHOP_DISTANCE_M, rows }, null, 2) + '\n');
+writeFileSync(join(output, `parts-stage${suffix}.json`), JSON.stringify({
+  distanceM: WORKSHOP_DISTANCE_M,
+  extendedSplits,
+  accelerationLimitS: WORKSHOP_ACCELERATION_LIMIT_S,
+  rows,
+}, null, 2) + '\n');
 writeFileSync(join(output, `parts-stage${suffix}.md`), markdown.join('\n') + '\n');
 const issues = rows.filter((row) => row.missingTiers.length || row.comparisons.some(({ audit }) => audit.status !== 'gain'));
 console.log(`${rows.length} grupos em ${cars.length} carros. ${issues.length} grupos com lacunas, falhas ou ganhos não comprovados.`);

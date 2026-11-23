@@ -48,13 +48,16 @@ describe('controle de largada por estágio', () => {
     expect(isPartUnlocked(afterNight(6), findPart('launch-control-pro')!, family)).toBe(true);
   });
 
-  it('mede o controle de competição do 208 GT com o mesmo pneu nos dois builds', () => {
-    const car = CAREER_CARS.find((item) => item.engine.family === 'psa-prince-thp')!;
+  it.each([
+    ['psa-prince-thp', 'tires-sport'],
+    ['honda-k20', 'tires-semislick'],
+  ])('mede a largada de competição do %s com o mesmo pneu nos dois builds', (family, tire) => {
+    const car = CAREER_CARS.find((item) => item.engine.family === family)!;
     const track = TRACKS.find((item) => item.id === 'test-track')!;
     const audit = auditPartGain(car, findPart('launch-control-pro')!, track, 2);
     if (!('gain' in audit)) throw new Error(audit.reasons.join('\n'));
     expect(audit.status).toBe('gain');
-    expect(audit.gain.context).toEqual(['tires-sport']);
+    expect(audit.gain.context).toEqual([tire]);
     expect(audit.gain.etAfter).toBeLessThan(audit.gain.etBefore);
   });
 });

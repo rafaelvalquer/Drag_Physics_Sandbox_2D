@@ -9,3 +9,7 @@ A referência é a pista de testes com piloto avançado, usando a distância ofi
 Cada peça é avaliada contra um build com o mesmo conjunto de apoio. O relatório distingue incompatibilidade física, dependência sem contexto aceito, build inválido, falha de simulação, ausência de efeito, efeito sem ganho pelos critérios atuais e ganho medido. As dependências da implementação anterior ainda chegam como mensagens do resolver. Quando o auditor reconhece nelas um requisito de hardware, registra essa interpretação e mantém as mensagens originais no JSON.
 
 As contagens por categoria refletem opções compatíveis e opções com ganho. A quantidade de opções pode incluir especializações e ainda não comprova uma sequência Stage 1, 2 e 3. O baseline registra a situação anterior à expansão para que os resultados finais possam ser comparados com ela.
+
+Na matriz atual, `npx tsx scripts/parts-coverage-report.ts docs/workshop --extended` acrescenta as medições de 100–200 km/h aos resultados por peça. Para os pares de estágios use `npx tsx scripts/parts-stage-report.ts --out=docs/workshop --extended --fail`. O teste segue até a distância de referência e até 200 km/h, com limite de 45 s simulados. O JSON registra um valor nulo para esse intervalo se a montagem não alcançar 200 km/h. Os tempos nos 402,336 m e no 0–100 continuam sendo medidos na mesma passagem.
+
+O workflow da oficina testa uma referência de cada capítulo em pushes e pull requests. A execução manual gera a cobertura, a matriz de estágios e o relatório por peça em jobs separados.

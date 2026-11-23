@@ -2,44 +2,30 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CAREER_CARS, CHAPTER1_CARS } from '../src/data/cars/campaign';
 import { CHAPTER2_CARS } from '../src/data/cars/chapter2/index';
-import type { CarConfig } from '../src/data/schema';
 import { TRACKS } from '../src/data/tracks/index';
 import { ALL_RIVALS } from '../src/game/career/CareerEvents';
 import { rivalBuild } from '../src/game/career/RivalBuildFactory';
 import { runAccelerationTest } from '../src/game/race/accelerationTest';
 import { resolveBuild, type BuildResult } from '../src/game/career/tuning/BuildResolver';
 import { familyOf, transmissionKindOf } from '../src/game/career/tuning/BuildResolverV2';
-import { auditPartGain, WORKSHOP_DISTANCE_M } from '../src/game/career/tuning/partGain';
-import { ALL_PARTS, CATEGORY_ORDER, type PartCategory } from '../src/game/career/tuning/parts';
-import { physicalSlotOf, physicalSlotOfCategory, progressionOf } from '../src/game/career/tuning/partProgression';
+import { WORKSHOP_SLOTS, workshopSlotExclusion } from '../src/game/career/tuning/partCoverage';
+import { auditPartGain, WORKSHOP_ACCELERATION_LIMIT_S, WORKSHOP_DISTANCE_M } from '../src/game/career/tuning/partGain';
+import { ALL_PARTS } from '../src/game/career/tuning/parts';
+import { physicalSlotOf, progressionOf } from '../src/game/career/tuning/partProgression';
 import { careerResolverVersion } from '../src/game/career/tuning/resolverVersion';
 
 const track = TRACKS.find((item) => item.id === 'test-track')!;
-const output = process.argv[2] ?? 'docs/workshop';
+const args = process.argv.slice(2);
+const output = args.find((arg) => !arg.startsWith('--')) ?? 'docs/workshop';
+const extendedSplits = args.includes('--extended');
 const classicIds = new Set(CHAPTER1_CARS.map((car) => car.id));
 const leagueIds = new Set(CHAPTER2_CARS.map((car) => car.id));
 
-const slots = [...new Set(CATEGORY_ORDER.map(physicalSlotOfCategory))];
-
-/** Applicability is independent of whether the present catalogue happens to cover the slot. */
-function notApplicable(car: CarConfig, slot: PartCategory, classic: boolean): string | null {
-  if (slot === 'awd' && car.drivenAxle !== 'awd') return 'Veículo sem tração integral.';
-  if ((slot === 'engine-flywheel' || slot === 'clutch') && transmissionKindOf(car) !== 'manual')
-    return 'Componente de câmbio manual. A preparação compatível pertence ao slot do câmbio.';
-  if (slot === 'electronics-launch' && transmissionKindOf(car) === 'torque-converter-auto')
-    return 'Na largada, o conversor determina o estol.';
-  if (slot === 'turbo' && car.engine.induction === 'turbo') return 'Turbo de fábrica. O upgrade pertence ao slot da turbina.';
-  if (slot === 'turbo' && car.engine.family === 'toyota-2gr-fse')
-    return 'Conversão opcional sem calibração do sistema de injeção mista e do conversor sob pressão.';
-  if (slot === 'exhaust-downpipe' && car.engine.induction !== 'turbo')
-    return 'Sem saída de turbina de fábrica. Em conversões a saída faz parte do kit.';
-  if (!classic && car.engine.induction !== 'turbo' && ['turbo-turbine', 'turbo-intercooler', 'turbo-wastegate', 'turbo-boost'].includes(slot))
-    return 'Sem turbo de fábrica. Componentes dependem de um projeto de conversão.';
-  return null;
-}
-
 function baseline(build: Extract<BuildResult, { ok: true }>) {
-  const run = runAccelerationTest(build.car, track, { speedsKmh: [100, 200], distancesM: [WORKSHOP_DISTANCE_M], maxS: 45 });
+  const run = runAccelerationTest(build.car, track, {
+    speedsKmh: [100, 200], distancesM: [WORKSHOP_DISTANCE_M],
+    maxS: WORKSHOP_ACCELERATION_LIMIT_S, stopAtLastSplit: true,
+  });
   const t100 = run.speedTimes.get(100) ?? null;
   const t200 = run.speedTimes.get(200) ?? null;
   return {
@@ -62,10 +48,10 @@ const cars = CAREER_CARS.map((car) => {
     category: part.category,
     slot: physicalSlotOf(part),
     progression: progressionOf(part, familyOf(car), car.id),
-    ...auditPartGain(car, part, track, version),
+    ...auditPartGain(car, part, track, version, extendedSplits),
   }));
-  const categories = slots.map((slot) => {
-    const reason = notApplicable(car, slot, classic);
+  const categories = WORKSHOP_SLOTS.map((slot) => {
+    const reason = workshopSlotExclusion(car, slot);
     const compatible = parts.filter((part) => part.slot === slot && part.status !== 'incompatible');
     return {
       slot,
@@ -98,14 +84,14 @@ const lines = [
   '',
   `Distância oficial de ${WORKSHOP_DISTANCE_M.toFixed(3)} m, pista de testes e piloto avançado. Opções do catálogo atual ainda não representam estágios validados.`,
   '',
-  '| Carro | Cap. | Família | Resolver | cv | N·m | ¼ milha (s) | 0–100 (s) | Categorias cobertas/aplicáveis | Compatíveis | Builds válidos¹ | Sem efeito | Sem ganho² |',
-  '|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
+  '| Carro | Cap. | Família | Resolver | cv | N·m | ¼ milha (s) | 0–100 (s) | 100–200 (s) | Categorias cobertas/aplicáveis | Compatíveis | Builds válidos¹ | Sem efeito | Sem ganho² |',
+  '|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
 ];
 for (const car of cars) {
   const applicable = car.categories.filter((category) => category.applicable);
   const count = (...statuses: string[]): number => car.parts.filter((part) => statuses.includes(part.status)).length;
   const f = car.factory;
-  lines.push(`| ${car.name} | ${car.chapter} | ${car.family} | ${f.resolver} | ${value(f.powerCv)} | ${value(f.torqueNm)} | ${value(f.quarterS)} | ${value(f.zeroTo100S)} | ${applicable.filter((category) => category.compatibleOptions).length}/${applicable.length} | ${car.parts.length - count('incompatible')} | ${count('gain', 'no-gain', 'no-effect', 'simulation-failed')} | ${count('no-effect')} | ${count('no-effect', 'no-gain')} |`);
+  lines.push(`| ${car.name} | ${car.chapter} | ${car.family} | ${f.resolver} | ${value(f.powerCv)} | ${value(f.torqueNm)} | ${value(f.quarterS)} | ${value(f.zeroTo100S)} | ${value(f.hundredTo200S)} | ${applicable.filter((category) => category.compatibleOptions).length}/${applicable.length} | ${car.parts.length - count('incompatible')} | ${count('gain', 'no-gain', 'no-effect', 'simulation-failed')} | ${count('no-effect')} | ${count('no-effect', 'no-gain')} |`);
 }
 lines.push('', '¹ Inclui builds válidos cuja simulação falhou. ² Conta pares medidos, incluindo peças sem efeito. O JSON discrimina bloqueios por dependência, builds inválidos e falhas de simulação.', '');
 for (const car of cars) {
@@ -116,5 +102,7 @@ for (const car of cars) {
   lines.push('');
 }
 mkdirSync(output, { recursive: true });
-writeFileSync(join(output, 'parts-coverage.json'), JSON.stringify({ distanceM: WORKSHOP_DISTANCE_M, cars, rivals }, null, 2) + '\n');
+writeFileSync(join(output, 'parts-coverage.json'), JSON.stringify({
+  distanceM: WORKSHOP_DISTANCE_M, extendedSplits, accelerationLimitS: WORKSHOP_ACCELERATION_LIMIT_S, cars, rivals,
+}, null, 2) + '\n');
 writeFileSync(join(output, 'parts-coverage.md'), lines.join('\n'));

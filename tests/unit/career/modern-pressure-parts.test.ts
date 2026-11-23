@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { findCampaignCar } from '../../../src/data/cars/campaign';
+import { TRACKS } from '../../../src/data/tracks/index';
 import { resolveBuild } from '../../../src/game/career/tuning/BuildResolver';
 import { incompatibility } from '../../../src/game/career/tuning/BuildResolverV2';
 import { MODERN_PRESSURE_PARTS } from '../../../src/game/career/tuning/modernPressureParts';
+import { auditPartGain } from '../../../src/game/career/tuning/partGain';
 import { reconcileTune, tuningCapabilities } from '../../../src/game/career/tuning/TuningCapabilities';
 
 const car = findCampaignCar('bmw-320i-f30-2014')!;
@@ -65,5 +67,16 @@ describe('atuadores e solenoides de pressão', () => {
     expect(parts.filter((part) => part.category === 'turbo-wastegate')).toHaveLength(3);
     expect(parts.filter((part) => part.category === 'boost-control')).toHaveLength(3);
     expect(parts.every((part) => incompatibility(lexus, part))).toBe(true);
+  });
+
+  it('valida o solenoide de competição do C200 com o câmbio original', () => {
+    const c200 = findCampaignCar('mercedes-c200-w205-2015')!;
+    const solenoid = MODERN_PRESSURE_PARTS.find((part) => part.id === 'boost-solenoid-mb-m274-s3')!;
+    const track = TRACKS.find((item) => item.id === 'test-track')!;
+    const audit = auditPartGain(c200, solenoid, track, 2);
+    if (!('gain' in audit)) throw new Error(audit.reasons.join('\n'));
+    expect(audit.status).toBe('gain');
+    expect(audit.gain.spoolTimeAfterS).toBeLessThan(audit.gain.spoolTimeBeforeS!);
+    expect(audit.gain.etAfter - audit.gain.etBefore).toBeLessThanOrEqual(0.05);
   });
 });

@@ -15,3 +15,5 @@ A wastegate e o solenoide têm três opções independentes por família. A wast
 O solenoide altera o tempo de resposta do turbo. O mapa define o alvo de pressão e a wastegate define o teto. Os kits combinados legados mantêm o comportamento existente. Se um carro já tem um kit com atuador, vale o maior limite mecânico compatível com o mapa, sem somar as capacidades dos dois atuadores.
 
 O relatório compara a pressão que o atuador consegue manter e a constante de tempo do turbo, além dos indicadores de desempenho. No Alfa 690T, o solenoide reduz o tempo de resposta em 4%, 9% e 15% para manter a sequência de troca durante a largada dentro da variação aceita na auditoria. Execute `npx tsx scripts/parts-stage-report.ts --groups=modern-wastegate,modern-boost-control --fail`.
+
+No Mercedes M274, o Stage 3 reduz a constante de tempo em 11,5%. No C200, essa calibração acrescentou 0,042 s na passagem de referência com o câmbio original. A versão de 12,5% acrescentava 0,051 s.

@@ -72,6 +72,8 @@ export interface PartGain {
   etAfter: number;
   t100Before: number;
   t100After: number;
+  hundredTo200BeforeS: number | null;
+  hundredTo200AfterS: number | null;
   clutchBeforeNm: number;
   clutchAfterNm: number;
   couplingBeforeNm: number | null;
@@ -136,15 +138,34 @@ function build(car: CarConfig, ids: string[], version: ResolverVersion) {
 /** Compare chamber geometry at the same pressure, outside the wastegate's default map. */
 const classicCompressionTune = { boostBar: 0.8 };
 
-const measured = new WeakMap<TrackConfig, Map<string, { et: number; t100: number }>>();
-function measure(key: string, car: CarConfig, track: TrackConfig): { et: number; t100: number } {
+interface AccelerationMeasurement {
+  et: number;
+  t100: number;
+  hundredTo200S: number | null;
+}
+
+export const WORKSHOP_ACCELERATION_LIMIT_S = 45;
+const measured = new WeakMap<TrackConfig, Map<string, AccelerationMeasurement>>();
+function measure(key: string, car: CarConfig, track: TrackConfig, extendedSplits: boolean): AccelerationMeasurement {
   const cache = measured.get(track) ?? new Map();
   measured.set(track, cache);
-  const hit = cache.get(key);
+  const cacheKey = extendedSplits ? `extended:${key}` : key;
+  const hit = cache.get(cacheKey);
   if (hit) return hit;
-  const r = runAccelerationTest(car, track, { speedsKmh: [100], distancesM: [WORKSHOP_DISTANCE_M], maxS: 45, stopAtLastSplit: true });
-  const m = { et: r.distanceTimes.get(WORKSHOP_DISTANCE_M) ?? Infinity, t100: r.speedTimes.get(100) ?? Infinity };
-  cache.set(key, m);
+  const r = runAccelerationTest(car, track, {
+    speedsKmh: extendedSplits ? [100, 200] : [100],
+    distancesM: [WORKSHOP_DISTANCE_M],
+    maxS: WORKSHOP_ACCELERATION_LIMIT_S,
+    stopAtLastSplit: true,
+  });
+  const t100 = r.speedTimes.get(100) ?? Infinity;
+  const t200 = r.speedTimes.get(200);
+  const m = {
+    et: r.distanceTimes.get(WORKSHOP_DISTANCE_M) ?? Infinity,
+    t100,
+    hundredTo200S: t200 != null && Number.isFinite(t100) ? t200 - t100 : null,
+  };
+  cache.set(cacheKey, m);
   return m;
 }
 
@@ -172,12 +193,12 @@ function torqueBands(base: CarConfig['engine'], after: CarConfig['engine']): Par
   });
 }
 
-function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, context: string[], track: TrackConfig): PartAudit {
+function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, context: string[], track: TrackConfig, extendedSplits: boolean): PartAudit {
   let a: ReturnType<typeof measure>;
   let b: ReturnType<typeof measure>;
   try {
-    a = measure(base.key, base.car, track);
-    b = measure(after.key, after.car, track);
+    a = measure(base.key, base.car, track, extendedSplits);
+    b = measure(after.key, after.car, track, extendedSplits);
   } catch (error) {
     return { status: 'simulation-failed', reasons: [String(error)] };
   }
@@ -240,6 +261,8 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     etAfter: b.et,
     t100Before: a.t100,
     t100After: b.t100,
+    hundredTo200BeforeS: a.hundredTo200S,
+    hundredTo200AfterS: b.hundredTo200S,
     clutchBeforeNm: base.car.transmission.clutch.maxTorqueNm,
     clutchAfterNm: after.car.transmission.clutch.maxTorqueNm,
     couplingBeforeNm: base.car.awd?.centerCouplingNm ?? null,
@@ -387,16 +410,16 @@ function breathingGain(part: PartDef, gain: PartGain): boolean {
 }
 
 /** Classifies every attempted pairing, including failures to produce comparable runs. */
-export function auditPartGain(car: CarConfig, part: PartDef, track: TrackConfig, version: ResolverVersion): PartAudit {
+export function auditPartGain(car: CarConfig, part: PartDef, track: TrackConfig, version: ResolverVersion, extendedSplits = false): PartAudit {
   const incompatible = incompatibility(car, part);
   if (incompatible) return { status: 'incompatible', reasons: [incompatible] };
   if (version === 1 && part.since === 2) return { status: 'incompatible', reasons: ['Peça requer resolver 2.'] };
   if (progressionOf(part)?.group === 'factory-turbo-ecu')
-    return auditLegacyEcuStages(car, track, version).find((result) => result.next === part.id)!.audit;
+    return auditLegacyEcuStages(car, track, version, extendedSplits).find((result) => result.next === part.id)!.audit;
   if (progressionOf(part)?.objective === 'boost-headroom')
-    return auditBoostHeadroom(car, [part], track, version)[0]!.audit;
+    return auditBoostHeadroom(car, [part], track, version, extendedSplits)[0]!.audit;
   if ('conversionPreparation' in part && part.conversionPreparation)
-    return auditConversionCompression(car, part, track, version);
+    return auditConversionCompression(car, part, track, version, extendedSplits);
   const errors = new Set<string>();
   const candidates = auditContexts(car, part);
   const tune = progressionOf(part, familyOf(car), car.id)?.group === 'classic-turbo-compression' ? classicCompressionTune : {};
@@ -411,7 +434,7 @@ export function auditPartGain(car: CarConfig, part: PartDef, track: TrackConfig,
       for (const error of withPart.errors) errors.add(error);
       continue;
     }
-    return compareBuilds(base, withPart, part, baseIds, track);
+    return compareBuilds(base, withPart, part, baseIds, track, extendedSplits);
   }
   const reasons = [...errors];
   // Existing resolvers expose human-readable validation errors rather than structured codes.
@@ -433,7 +456,7 @@ function supportedTransmission(car: CarConfig): string {
   return kind === 'manual' ? 'clutch-reinforced' : kind === 'dual-clutch' ? 'dct-upgrade' : 'at-upgrade';
 }
 
-function auditLegacyEcuStages(car: CarConfig, track: TrackConfig, version: ResolverVersion): StageComparison[] {
+function auditLegacyEcuStages(car: CarConfig, track: TrackConfig, version: ResolverVersion, extendedSplits: boolean): StageComparison[] {
   const stages = ['ecu-stage1', 'ecu-stage2', 'ecu-stage3'];
   const support = ['pistons-forged-modern', supportedTransmission(car)];
   const packages = [support, [...support, 'downpipe-catless', 'intercooler-race'], [...support, 'downpipe-catless', 'intercooler-race', 'turbo-hybrid']];
@@ -449,7 +472,7 @@ function auditLegacyEcuStages(car: CarConfig, track: TrackConfig, version: Resol
       const reasons = [...(before.ok ? [] : before.errors), ...(after.ok ? [] : after.errors)];
       return { previous, next, audit: { status: 'invalid-build', reasons } };
     }
-    return { previous, next, audit: compareBuilds(before, after, findPart(next)!, packages[index]!, track) };
+    return { previous, next, audit: compareBuilds(before, after, findPart(next)!, packages[index]!, track, extendedSplits) };
   });
 }
 
@@ -470,7 +493,10 @@ function auditContexts(car: CarConfig, part: PartDef): readonly string[][] {
     ...(car.id === 'gm-celta-2003' ? ['compression-celta-turbo-s3'] : []),
   ]];
   if (group === 'classic-turbo-compression') return [['turbo-basic', 'clutch-ceramic-race']];
-  if (car.engine.family === 'psa-prince-thp' && group === 'launch-control') return [['tires-sport']];
+  if (group === 'launch-control') {
+    if (car.engine.family === 'psa-prince-thp') return [['tires-sport']];
+    if (car.engine.family === 'honda-k20') return [['tires-semislick']];
+  }
   if (group === 'classic-fuel') return CONTEXTS.filter((context) => context.some((id) => findPart(id)?.category === 'turbo'));
   if (car.engine.family === 'toyota-2gr-fse' && group === 'weight-reduction') return [['tires-sport']];
   if (car.engine.family === 'mercedes-m276' && (group === 'tire-compound' || group === 'tire-width'))
@@ -493,7 +519,7 @@ function auditContexts(car: CarConfig, part: PartDef): readonly string[][] {
   return CONTEXTS;
 }
 
-function auditConversionCompression(car: CarConfig, part: PartDef, track: TrackConfig, version: ResolverVersion): PartAudit {
+function auditConversionCompression(car: CarConfig, part: PartDef, track: TrackConfig, version: ResolverVersion, extendedSplits: boolean): PartAudit {
   const kit = MODERN_CONVERSION_PARTS.find((option) =>
     option.category === 'turbo' && option.progression?.tier === 3 && !incompatibility(car, option));
   const context = conversionSupport(car).filter((id) => id !== part.id);
@@ -503,7 +529,7 @@ function auditConversionCompression(car: CarConfig, part: PartDef, track: TrackC
   const converted = resolveBuild(car, [...context, part.id, kit.id], {}, version);
   if (!aspirated || !converted.ok)
     return { status: 'invalid-build', reasons: converted.ok ? ['Referência aspirada inválida.'] : converted.errors };
-  const audit = compareBuilds(withoutChamber.ok ? withoutChamber : aspirated, converted, part, context, track);
+  const audit = compareBuilds(withoutChamber.ok ? withoutChamber : aspirated, converted, part, context, track, extendedSplits);
   if (!('gain' in audit)) return audit;
   const beforeBar = withoutChamber.ok ? withoutChamber.car.engine.turbo?.maxBoostBar ?? 0 : 0;
   const afterBar = converted.car.engine.turbo?.maxBoostBar ?? 0;
@@ -511,7 +537,7 @@ function auditConversionCompression(car: CarConfig, part: PartDef, track: TrackC
   return { status: afterBar > beforeBar ? 'gain' : audit.status, gain: audit.gain };
 }
 
-function auditBoostHeadroom(car: CarConfig, stages: readonly PartDef[], track: TrackConfig, version: ResolverVersion): StageComparison[] {
+function auditBoostHeadroom(car: CarConfig, stages: readonly PartDef[], track: TrackConfig, version: ResolverVersion, extendedSplits: boolean): StageComparison[] {
   const context = ['turbo-strong', 'clutch-ceramic-race', 'fuel-pump', 'forged-kit', 'ecu-race', 'ignition-race'];
   const [minimum, maximum] = boostRangeForParts(context)!;
   const supported = (part?: PartDef): { bar: number; build: ValidBuild | null } => {
@@ -531,7 +557,7 @@ function auditBoostHeadroom(car: CarConfig, stages: readonly PartDef[], track: T
     const reference = a.build ?? (index === 0 ? build(car, [], version) : null);
     if (!reference || !b.build)
       return { previous, next: part.id, audit: { status: 'invalid-build', reasons: ['O conjunto não aceitou pressão na faixa testada.'] } };
-    const audit = compareBuilds(reference, b.build, part, context, track);
+    const audit = compareBuilds(reference, b.build, part, context, track, extendedSplits);
     if ('gain' in audit) {
       audit.gain.boostHeadroom = { beforeBar: a.bar, afterBar: b.bar };
       return { previous, next: part.id, audit: { status: b.bar > a.bar ? 'gain' : 'no-gain', gain: audit.gain } };
@@ -541,11 +567,11 @@ function auditBoostHeadroom(car: CarConfig, stages: readonly PartDef[], track: T
 }
 
 /** Uses one support build for all comparisons in a progression group. */
-export function auditPartStages(car: CarConfig, stages: readonly PartDef[], track: TrackConfig, version: ResolverVersion): StageComparison[] {
+export function auditPartStages(car: CarConfig, stages: readonly PartDef[], track: TrackConfig, version: ResolverVersion, extendedSplits = false): StageComparison[] {
   const first = stages[0];
   if (!first) return [];
-  if (progressionOf(first)?.group === 'factory-turbo-ecu') return auditLegacyEcuStages(car, track, version);
-  if (progressionOf(first)?.objective === 'boost-headroom') return auditBoostHeadroom(car, stages, track, version);
+  if (progressionOf(first)?.group === 'factory-turbo-ecu') return auditLegacyEcuStages(car, track, version, extendedSplits);
+  if (progressionOf(first)?.objective === 'boost-headroom') return auditBoostHeadroom(car, stages, track, version, extendedSplits);
   const slot = physicalSlotOf(first);
   const specialization = progressionOf(first)?.specialization;
   const tune = progressionOf(first)?.group === 'classic-turbo-compression' ? classicCompressionTune : {};
@@ -569,7 +595,7 @@ export function auditPartStages(car: CarConfig, stages: readonly PartDef[], trac
     return stages.map((part, index) => ({
       previous: stages[index - 1]?.id ?? null,
       next: part.id,
-      audit: compareBuilds(builds[index]!, builds[index + 1]!, part, context, track),
+      audit: compareBuilds(builds[index]!, builds[index + 1]!, part, context, track, extendedSplits),
     }));
   }
   return stages.map((part, index) => ({

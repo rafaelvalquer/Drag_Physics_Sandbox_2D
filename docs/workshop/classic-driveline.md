@@ -15,3 +15,5 @@ Os 17 carros com câmbio manual ou de dupla embreagem têm três níveis de cont
 A auditoria mediu 51 comparações na pista de testes. As mudanças de alvo variaram de −0,019 a +0,010 s no quarto de milha com o piloto de referência. A regulagem permite ajustar a saída ao pneu e à aderência da pista.
 
 No 208 GT, a comparação usa os mesmos pneus esportivos nos quatro níveis. Com pneus originais, o alvo padrão do Stage 3 aumentou a patinagem e custou 0,014 s frente à largada original. Com pneus esportivos, o Stage 3 reduziu a patinagem de 1,700 para 1,533 s e completou o quarto de milha 0,007 s antes da configuração original com os mesmos pneus.
+
+No Civic Si, a comparação usa pneus semi-slick nos quatro níveis. Nessa configuração, o Stage 3 encurtou de 15,374 para 15,351 s a passagem de referência.

@@ -8,6 +8,11 @@ const stages = [
   { tier: 2, headroom: 0.64, response: 0.92, actuatorPrice: 1400, controllerPrice: 1150 },
   { tier: 3, headroom: 0.8, response: 0.875, actuatorPrice: 2120, controllerPrice: 1790 },
 ] as const;
+// Calibrated for families whose factory shift schedule is sensitive to spool during launch.
+const responseOverrides: Readonly<Record<string, readonly [number, number, number]>> = {
+  'alfa-690t': [0.96, 0.91, 0.85],
+  'mb-m274': [0.96, 0.92, 0.885],
+};
 
 type PressurePart = BoostControlPart | WastegatePart;
 const fmt = (value: number): string => value.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
@@ -20,8 +25,7 @@ export const MODERN_PRESSURE_PARTS: readonly PressurePart[] = ([2, 3] as const).
     const price = (base: number) => Math.round(base * Math.sqrt(car.engine.ratedPowerCv / 220) / 50) * 50;
     return stages.flatMap((stage): PressurePart[] => {
       const { tier } = stage;
-      // On the 690T, small changes during spool can move the first automatic shift.
-      const response = family === 'alfa-690t' ? [0.96, 0.91, 0.85][tier - 1]! : stage.response;
+      const response = responseOverrides[family]?.[tier - 1] ?? stage.response;
       const common = { ...modernStageRelease(origin, tier), since: 2 as const, compat: { families: [family], induction: 'turbo' as const } };
       return [
         {

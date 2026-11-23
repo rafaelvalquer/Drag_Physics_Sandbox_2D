@@ -4,10 +4,11 @@ import { CHAPTER2_CARS } from '../../../src/data/cars/chapter2/index';
 import { CHAPTER3_CARS } from '../../../src/data/cars/chapter3/index';
 import { TRACKS } from '../../../src/data/tracks/index';
 import { resolveBuild } from '../../../src/game/career/tuning/BuildResolver';
-import { incompatibility } from '../../../src/game/career/tuning/BuildResolverV2';
+import { familyOf, incompatibility } from '../../../src/game/career/tuning/BuildResolverV2';
+import { WORKSHOP_SLOTS, workshopSlotExclusion } from '../../../src/game/career/tuning/partCoverage';
 import { auditPartGain } from '../../../src/game/career/tuning/partGain';
 import { physicalSlotOf, progressionOf } from '../../../src/game/career/tuning/partProgression';
-import { ALL_PARTS, type PartDef } from '../../../src/game/career/tuning/parts';
+import { ALL_PARTS, findPart, type PartDef } from '../../../src/game/career/tuning/parts';
 import { careerResolverVersion } from '../../../src/game/career/tuning/resolverVersion';
 
 /**
@@ -69,7 +70,7 @@ describe('sequências de estágios', () => {
     for (const car of CAREER_CARS) {
       const sequences = new Map<string, PartDef[]>();
       for (const part of ALL_PARTS) {
-        const progression = progressionOf(part);
+        const progression = progressionOf(part, familyOf(car), car.id);
         if (!progression || incompatibility(car, part)) continue;
         const sequence = sequences.get(progression.group) ?? [];
         sequence.push(part);
@@ -78,9 +79,38 @@ describe('sequências de estágios', () => {
       for (const [group, sequence] of sequences) {
         const label = `${car.id}/${group}`;
         expect(new Set(sequence.map((part) => progressionOf(part)!.tier)).size, label).toBe(sequence.length);
+        expect(sequence, label).toHaveLength(3);
         expect(new Set(sequence.map(physicalSlotOf)).size, label).toBe(1);
         expect(new Set(sequence.map((part) => progressionOf(part)!.specialization)).size, label).toBe(1);
       }
     }
+  });
+
+  it.each(CAREER_CARS.map((car) => [car.id, car] as const))('%s cobre todas as categorias aplicáveis', (_, car) => {
+    const parts = ALL_PARTS.filter((part) => !incompatibility(car, part));
+    for (const slot of WORKSHOP_SLOTS) {
+      if (workshopSlotExclusion(car, slot)) continue;
+      const tiers = parts.filter((part) => physicalSlotOf(part) === slot)
+        .map((part) => progressionOf(part, familyOf(car), car.id)?.tier);
+      expect([...new Set(tiers.filter((tier) => tier !== undefined))].sort(), `${car.id}/${slot}`).toEqual([1, 2, 3]);
+    }
+  });
+});
+
+describe('aceleração além do quarto de milha', () => {
+  it.each([
+    ['nissan-gtr-r35-2015', 'compression-chamber-nissan-vr38dett-s1', true],
+    ['fiat-uno-mille-1995', 'filter-sport', false],
+  ] as const)('%s só registra 100–200 km/h se alcançar a velocidade final', (id, partId, canReach) => {
+    const car = CAREER_CARS.find((item) => item.id === id)!;
+    const options = [car, findPart(partId)!, track, careerResolverVersion(id)] as const;
+    const short = auditPartGain(...options);
+    const extended = auditPartGain(...options, true);
+    if (!('gain' in short) || !('gain' in extended)) throw new Error(`${id}: simulação indisponível`);
+    expect(short.gain.hundredTo200AfterS).toBeNull();
+    expect(extended.gain.etAfter).toBe(short.gain.etAfter);
+    expect(extended.gain.t100After).toBe(short.gain.t100After);
+    if (canReach) expect(extended.gain.hundredTo200AfterS).toBeGreaterThan(0);
+    else expect(extended.gain.hundredTo200AfterS).toBeNull();
   });
 });
