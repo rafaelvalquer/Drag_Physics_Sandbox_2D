@@ -985,7 +985,9 @@ export class CareerMode implements Mode {
       clear(cmpHost);
       if (!before.ok) return;
       if (!after.ok) {
-        cmpHost.append(h('div', { class: 'error', 'data-testid': 'ws-incompatible' }, `Incompatível: ${after.errors.join('; ')}`));
+        // "Sem a peça" is the preview of REMOVING an installed part: the part is fine, other parts depend on it
+        const removing = afterLabel === 'Sem a peça';
+        cmpHost.append(h('div', { class: 'error', 'data-testid': 'ws-incompatible' }, removing ? `Não dá para remover esta peça: outras peças dependem dela. ${after.errors.join('; ')}` : `Incompatível: ${after.errors.join('; ')}`));
         return;
       }
       const eb = this.estimate(before);
@@ -1117,7 +1119,7 @@ export class CareerMode implements Mode {
       h('p', {}, p.description),
       h('p', { class: 'physics' }, h('b', {}, 'Efeito físico: '), p.physics),
       h('div', { class: 'hint' }, `Requisitos: ${reqs.join(' · ')}`),
-      h('div', { class: 'hint' }, `Compatibilidade: ${after.ok ? 'compatível com este carro' : 'faltam requisitos para instalar (veja abaixo)'}`),
+      h('div', { class: 'hint' }, `Compatibilidade: ${installed ? (after.ok ? 'instalada e removível' : 'instalada e compatível; outras peças dependem dela') : after.ok ? 'compatível com este carro' : 'faltam requisitos para instalar (veja abaixo)'}`),
       plan ? this.requirementsPanel(plan, act) : '',
       cmpHost,
       h('div', { class: 'row' }, buttons),
