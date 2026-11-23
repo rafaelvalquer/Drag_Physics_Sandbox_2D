@@ -51,6 +51,8 @@ export interface PartGain {
   chargeTemperatureAfterK: number | null;
   wastegateBeforeBar: number | null;
   wastegateAfterBar: number | null;
+  knockFreeBeforeBar: number | null;
+  knockFreeAfterBar: number | null;
   spoolTimeBeforeS: number | null;
   spoolTimeAfterS: number | null;
   boostTargetBeforeBar: number | null;
@@ -250,6 +252,8 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     safeRpmAfter: reliabilityLimits(after.car, after.parts.map((p) => p.id)).recommendedSafeRpm,
     launchRpmBefore: base.car.transmission.clutch.launchRpm,
     launchRpmAfter: after.car.transmission.clutch.launchRpm,
+    knockFreeBeforeBar: base.knockFreeBoostBar ?? null,
+    knockFreeAfterBar: after.knockFreeBoostBar ?? null,
     internalTorqueLimitBeforeNm: base.internalTorqueLimitNm ?? null,
     internalTorqueLimitAfterNm: after.internalTorqueLimitNm ?? null,
   };
@@ -282,7 +286,9 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     gain.internalTorqueLimitAfterNm - gain.internalTorqueLimitBeforeNm >= 20;
   const compressionGain = (group === 'modern-na-compression' || group === 'classic-na-compression') &&
     gain.cvAfter - gain.cvBefore >= 0.15 && gain.etAfter - gain.etBefore <= NOT_WORSE_S;
-  const turboCompressionGain = group === 'classic-turbo-compression' && gain.knockBefore - gain.knockAfter >= 0.002;
+  const turboCompressionGain = (group === 'classic-turbo-compression' && gain.knockBefore - gain.knockAfter >= 0.002) ||
+    (group === 'modern-turbo-compression' && gain.knockFreeBeforeBar !== null && gain.knockFreeAfterBar !== null &&
+      gain.knockFreeAfterBar - gain.knockFreeBeforeBar >= 0.015);
   const ignitionGain = (group === 'modern-ignition' || group === 'classic-ignition' || group === 'classic-ecu') &&
     gain.burnBeforeDeg - gain.burnAfterDeg >= 0.1 &&
     gain.etAfter - gain.etBefore <= 0.05;

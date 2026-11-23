@@ -82,6 +82,8 @@ export type BuildResult =
       chargeTemperatureAtTargetK?: number;
       /** Maximum pressure the installed actuator can hold. Other build limits still apply. */
       wastegateLimitBar?: number;
+      /** Reference boost before ignition retard against knock begins. */
+      knockFreeBoostBar?: number;
       /** Maximum torque permitted by the map and supported mechanical hardware. */
       mappedTorqueLimitNm?: number;
       /** Torque at which a classic build exceeds the installed bottom end's capacity. */

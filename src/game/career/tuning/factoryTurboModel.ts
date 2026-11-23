@@ -63,6 +63,7 @@ export interface FactoryTurboParts {
   boostControl?: BoostControlPart;
   wastegate?: WastegatePart;
   pistons?: PistonPart;
+  chamberCompressionAdd?: number;
   cam?: CamPart;
   head?: HeadPart;
   manifold?: ManifoldPart;
@@ -82,6 +83,16 @@ export interface FactoryTurboResult {
   torqueLimitNm: number;
   exhaustRestrictionKPa: number;
   chargeTemperatureAtTargetK: number;
+  knockFreeBoostBar: number;
+}
+
+/** Pressure before the factory turbo model starts retarding ignition under reference conditions. */
+export function factoryKnockFreeBoostBar(
+  stock: EngineConfig, family: EngineFamilyDef,
+  compression = stock.compressionRatio, coolerEffectiveness = FACTORY_INTERCOOLER,
+): number {
+  return (family.knockFreeBoostBar ?? stock.turbo!.maxBoostBar) +
+    0.3 * (stock.compressionRatio - compression) + 0.5 * (coolerEffectiveness - FACTORY_INTERCOOLER);
 }
 
 /** Highest boost target the wastegate of this build can hold (bar). */
@@ -121,8 +132,8 @@ function calibrateFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboPart
     compressorBlades: up?.compressorBlades ?? t0.compressorBlades,
   };
   const icEff = parts.intercooler?.effectiveness ?? FACTORY_INTERCOOLER;
-  const cr = stock.compressionRatio + (parts.pistons?.compressionAdd ?? 0);
-  const knockFree = (fam.knockFreeBoostBar ?? t0.maxBoostBar) + 0.3 * (stock.compressionRatio - cr) + 0.5 * (icEff - FACTORY_INTERCOOLER);
+  const cr = stock.compressionRatio + (parts.pistons?.compressionAdd ?? 0) + (parts.chamberCompressionAdd ?? 0);
+  const knockFree = factoryKnockFreeBoostBar(stock, fam, cr, icEff);
   const knockAt = (bar: number): number =>
     KNOCK_LOSS_PER_BAR * (parts.mod?.coolingKnockScale ?? 1) * (parts.mod?.knockRetardScale ?? 1) * Math.max(0, bar - knockFree);
   const knockStock = (bar: number): number => KNOCK_LOSS_PER_BAR * Math.max(0, bar - (fam.knockFreeBoostBar ?? t0.maxBoostBar));
@@ -225,7 +236,7 @@ function calibrateFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboPart
       // exhaust flow never lose steady full-load torque against the factory engine (off-boost
       // points stay the factory ones)
       const sameSpool = !up || up.spoolFlowScale <= 1;
-      if (sameSpool && !parts.cam && !parts.manifold && !parts.head && !(parts.pistons?.compressionAdd && parts.pistons.compressionAdd < 0)) {
+      if (sameSpool && !parts.cam && !parts.manifold && !parts.head && cr >= stock.compressionRatio) {
         brake = Math.max(brake, Math.min(stockCurve[i]!, parts.ecu ? limitNm : Infinity));
       }
       next.push(round1(Math.max(brake, 1)));
@@ -261,6 +272,7 @@ function calibrateFactoryTurboParts(stock: EngineConfig, parts: FactoryTurboPart
     torqueLimitNm: limitNm,
     exhaustRestrictionKPa: backRef,
     chargeTemperatureAtTargetK: factoryChargeTemperatureK(target, icEff, up?.compressorEfficiency),
+    knockFreeBoostBar: knockFree,
   };
 }
 

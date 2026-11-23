@@ -1019,6 +1019,7 @@ export class CareerMode implements Mode {
           changed('Taxa de compressão', before.car.engine.compressionRatio, after.car.engine.compressionRatio, (n) => `${f2(n)}:1`, 'neutral'),
           changed('Rotação de largada', t0.clutch.launchRpm, t1.clutch.launchRpm, (n) => `${n} rpm`, 'neutral'),
           changed('Temperatura da carga na pressão-alvo', before.chargeTemperatureAtTargetK, after.chargeTemperatureAtTargetK, (n) => `${f1(n - 273.15)} °C`, 'lower'),
+          changed('Pressão sem atraso por detonação', before.knockFreeBoostBar, after.knockFreeBoostBar, (n) => `${f2(n)} bar`, 'higher'),
           changed('Fase de torque da troca', t0.powershift?.torquePhaseS, t1.powershift?.torquePhaseS, ms, 'lower'),
           changed('Travamento do conversor', t0.torqueConverter?.lockup.maxTorqueNm, t1.torqueConverter?.lockup.maxTorqueNm, torque, 'higher'),
           changed('Acoplamento central AWD', before.car.awd?.centerCouplingNm, after.car.awd?.centerCouplingNm, torque, 'higher'),

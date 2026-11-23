@@ -15,7 +15,7 @@ describe('internos e compressão dos carros modernos', () => {
     const rotating = available.filter((part) => part.category === 'pistons');
     const compression = available.filter((part) => part.category === 'engine-compression');
     expect(rotating).toHaveLength(3);
-    expect(compression).toHaveLength(car.engine.induction === 'NA' ? 3 : 0);
+    expect(compression).toHaveLength(3);
 
     let previousInertia = car.engine.inertiaKgM2;
     let previousSafe = reliabilityLimits(car, []).recommendedSafeRpm;
@@ -34,10 +34,18 @@ describe('internos e compressão dos carros modernos', () => {
       previousSafe = safe;
       previousTorqueScale = part.torqueLimitScale;
     }
+    const reference = resolveBuild(car, [rotating[0]!.id], {}, 2);
+    if (!reference.ok) throw new Error(reference.errors.join('\n'));
+    let knockFree = reference.knockFreeBoostBar ?? 0;
     for (const part of compression) {
       const built = resolveBuild(car, [rotating[0]!.id, part.id], {}, 2);
       if (!built.ok) throw new Error(built.errors.join('\n'));
       expect(built.car.engine.compressionRatio).toBeCloseTo(car.engine.compressionRatio + part.compressionAdd);
+      if (car.engine.induction === 'turbo') {
+        expect(built.knockFreeBoostBar).toBeGreaterThan(knockFree);
+        expect(built.car.engine.turbo?.maxBoostBar).toBe(car.engine.turbo?.maxBoostBar);
+        knockFree = built.knockFreeBoostBar!;
+      }
     }
   }, 60_000);
 
@@ -59,6 +67,18 @@ describe('internos e compressão dos carros modernos', () => {
     }
     const weak = resolveBuild(n20, [...support, 'rotating-assembly-bmw-n20-s2'], {}, 2);
     expect(weak.ok ? [] : weak.errors).toContainEqual(expect.stringContaining('exige pistões e bielas forjados'));
+  });
+
+  it('reduz o atraso de centelha no N20 à mesma pressão de sobrealimentação', () => {
+    const n20 = modern.find((car) => car.engine.family === 'bmw-n20')!;
+    const support = ['ecu-programmable', 'turbo-hybrid', 'boost-control', 'pistons-forged-modern', 'at-upgrade'];
+    const tune = { boostBar: 1.48 };
+    const original = resolveBuild(n20, support, tune, 2);
+    const reduced = resolveBuild(n20, [...support, 'compression-chamber-bmw-n20-s3'], tune, 2);
+    if (!original.ok || !reduced.ok) throw new Error('Montagem de referência inválida');
+    expect(reduced.car.engine.turbo?.maxBoostBar).toBe(original.car.engine.turbo?.maxBoostBar);
+    expect(original.knockLoss).toBeGreaterThan(0);
+    expect(reduced.knockLoss).toBeLessThan(original.knockLoss);
   });
 
   it('expande a faixa de ajuste com molas sem mexer no corte por conta própria', () => {

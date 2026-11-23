@@ -6,9 +6,13 @@ Nos cinco aspirados, o retrabalho das câmaras ocupa uma categoria própria. O r
 
 Nos turbos de fábrica, o mapa Stage 3 exige um conjunto classificado para pelo menos 145% da capacidade original. O conjunto forjado legado e o novo estágio 3 cumprem o requisito. Os estágios inferiores preservam o acesso ao mapa Stage 2 dentro do limite de torque do conjunto instalado.
 
+Os 13 turbos de fábrica também têm uma série independente de câmaras de baixa compressão. Cada etapa é dimensionada a partir da taxa original da família. O modelo usa a taxa final para calcular a eficiência do ciclo e a pressão em que começa a atrasar a centelha. O limite da wastegate, o alvo da ECU e a capacidade dos internos continuam sendo calculados separadamente. O comparador exibe a pressão sem atraso por detonação nas condições de referência.
+
+As 39 comparações das câmaras confirmaram aumento de 0,021 a 0,069 bar de margem por troca de estágio. No mapa original, os tempos de quarto de milha variaram de −0,052 a +0,101 s entre estágios. A taxa menor pode custar eficiência em um motor que ainda opera abaixo do ponto de detonação.
+
 No Lexus 2GR-FSE, a simulação mostrou uma transição na sequência de trocas durante a largada. Reduções maiores de inércia ou aumentos maiores de compressão custaram aproximadamente 0,7 s. A calibração usa mudanças menores de massa alternada, atrito e volume de câmara, com ganhos de capacidade mecânica ou potência que podem ser conferidos junto ao tempo de pista.
 
-Para repetir a auditoria de trocas adjacentes, execute `npx tsx scripts/parts-stage-report.ts --groups=modern-rotating-assembly,modern-na-compression --fail`. O relatório inclui a reserva de rotação segura, a inércia e os tempos dos dois builds de cada comparação.
+Para repetir a auditoria de trocas adjacentes, execute `npx tsx scripts/parts-stage-report.ts --groups=modern-rotating-assembly,modern-na-compression,modern-turbo-compression --fail`. O relatório inclui a reserva de rotação segura, a inércia, a margem antes do atraso por detonação e os tempos dos dois builds.
 
 As molas e pratos de válvulas têm três estágios por família. Cada conjunto aumenta a rotação mecânica segura, mantendo o corte previamente calibrado. Com uma ECU que permite alterar o corte, o ganho abre uma faixa maior de ajuste no Dyno Lab. A série antiga de molas mantém o mesmo ID e o mesmo efeito.
 

@@ -19,6 +19,11 @@ const internals = [
   { tier: 3, name: 'Conjunto forjado de competição', inertiaScale: 0.91, frictionScale: 0.96, enduranceScale: 1.6 },
 ] as const;
 const format = (value: number): string => value.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+const turboCompression = [
+  { maxReduction: 0.23, clearanceFraction: 0.12 },
+  { maxReduction: 0.45, clearanceFraction: 0.25 },
+  { maxReduction: 0.65, clearanceFraction: 0.4 },
+] as const;
 
 type InternalPart = PistonPart | CompressionPart | ValveSpringPart;
 
@@ -71,19 +76,26 @@ function forFamily(car: CarConfig, origin: 2 | 3, family: string): InternalPart[
       physics: `A reserva mecânica sobe ${safeRpmAdd} rpm. A ECU continua definindo o corte.`,
       safeRpmAdd,
     };
-    if (!increases) return [piston, spring];
-    const compressionAdd = increases[tier - 1];
+    const { maxReduction, clearanceFraction } = turboCompression[tier - 1]!;
+    const compressionAdd = turbo
+      ? -Math.round(100 * Math.min(maxReduction, (car.engine.compressionRatio - 8.45) * clearanceFraction)) / 100
+      : increases?.[tier - 1];
+    if (compressionAdd === undefined) return [piston, spring];
     const compression: CompressionPart = {
       id: `compression-chamber-${family}-s${tier}`,
       category: 'engine-compression',
-      name: `Câmara de alta compressão Stage ${tier}`,
+      name: `Câmara de ${turbo ? 'baixa' : 'alta'} compressão Stage ${tier}`,
       ...release,
       price: price(980, [1, 1.65, 2.5][tier - 1]!),
       since: 2,
       compat,
-      progression: { tier, group: 'modern-na-compression', specialization: 'aspirado' },
-      description: 'Câmaras usinadas com volume aferido para a taxa desejada em motor aspirado.',
-      physics: `Taxa de compressão +${format(compressionAdd)}:1. A eficiência térmica é calculada para a nova taxa.`,
+      progression: { tier, group: turbo ? 'modern-turbo-compression' : 'modern-na-compression', specialization: turbo ? 'turbo' : 'aspirado' },
+      description: turbo
+        ? 'Câmaras de volume aferido para ampliar a margem de detonação sob pressão.'
+        : 'Câmaras usinadas com volume aferido para a taxa desejada em motor aspirado.',
+      physics: turbo
+        ? `Taxa de compressão −${format(-compressionAdd)}:1. Amplia a faixa de pressão sem atraso de centelha; a eficiência sem pressão também diminui.`
+        : `Taxa de compressão +${format(compressionAdd)}:1. A eficiência térmica é calculada para a nova taxa.`,
       compressionAdd,
     };
     return [piston, spring, compression];

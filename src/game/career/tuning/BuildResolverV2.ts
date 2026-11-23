@@ -3,7 +3,7 @@ import { exhaustPreset } from '../../../data/exhaustPresets';
 import { applyEngineParts, curvePeakCv, engineFuel, powerPeakRpm, TURBO_MAX_COMPRESSION, withStockBreathing, type EngineParts } from './breathingModel';
 import { applyCoolingHardware, applyGenericChassisMods, applyTyre, CLUTCH_TORQUE_MARGIN, combineMods, deepFreeze, fmtBar, workshopFinalDrive, workshopGearRatios, MAX_KNOCK_LOSS, type BuildResult, type BuildTune } from './buildCommon';
 import { ENGINE_FAMILIES } from './chapter2Parts';
-import { applyFactoryTurboParts, factoryChargeTemperatureK, wastegateMaxBar } from './factoryTurboModel';
+import { applyFactoryTurboParts, factoryChargeTemperatureK, factoryKnockFreeBoostBar, wastegateMaxBar } from './factoryTurboModel';
 import { factoryFuelSupply, fuelMixtureRatio, peakFuelDemandKgS } from './fuelDelivery';
 import { exhaustPressureAfterSections, isModernBreathingPart } from './modernBreathing';
 import {
@@ -141,12 +141,14 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   const turboKit = turboSlot && !('upgrade' in turboSlot) ? (turboSlot as TurboPart) : undefined;
   const conversion = turboKit?.conversion;
   const turboUp = turboSlot && 'upgrade' in turboSlot ? (turboSlot as TurboUpgradePart) : undefined;
-  const compressionAdd = (pistons?.compressionAdd ?? 0) + (get('engine-compression')?.compressionAdd ?? 0);
+  const chamber = get('engine-compression');
+  const compressionAdd = (pistons?.compressionAdd ?? 0) + (chamber?.compressionAdd ?? 0);
   let steadyBoostBar: { rpm: number; bar: number }[] = [];
   let knockLoss = 0;
   let exhaustRestrictionKPa: number | undefined;
   let chargeTemperatureAtTargetK: number | undefined;
   let wastegateLimitBar: number | undefined;
+  let knockFreeBoostBar: number | undefined;
   let mappedTorqueLimitNm: number | undefined;
   let engineModified = false;
 
@@ -190,7 +192,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
     const cam = get('camshaft');
     const head = get('cylinder-head');
     const manifold = get('intake-manifold');
-    const anyEngine = genericMod.coolingFrictionScale || genericMod.coolingKnockScale || ignition || ecu || turboUp || get('intercooler') || boostControl || pistons || get('intake-filter') || exhaust || downpipe || cam || head || manifold || sectionParts.length > 0;
+    const anyEngine = genericMod.coolingFrictionScale || genericMod.coolingKnockScale || ignition || ecu || turboUp || get('intercooler') || boostControl || pistons || chamber || get('intake-filter') || exhaust || downpipe || cam || head || manifold || sectionParts.length > 0;
     if (anyEngine) {
       engineModified = true;
       const r = applyFactoryTurboParts(stockEngine, {
@@ -203,6 +205,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
         boostControl,
         wastegate,
         pistons,
+        chamberCompressionAdd: chamber?.compressionAdd,
         cam,
         head,
         manifold,
@@ -219,9 +222,11 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
       knockLoss = r.knockLoss;
       exhaustRestrictionKPa = r.exhaustRestrictionKPa;
       chargeTemperatureAtTargetK = r.chargeTemperatureAtTargetK;
+      knockFreeBoostBar = r.knockFreeBoostBar;
       if (Number.isFinite(r.torqueLimitNm)) mappedTorqueLimitNm = r.torqueLimitNm;
     } else {
       car.engine = structuredClone(stockEngine);
+      knockFreeBoostBar = factoryKnockFreeBoostBar(stockEngine, family);
       chargeTemperatureAtTargetK = factoryChargeTemperatureK(stockEngine.turbo!.maxBoostBar);
     }
   } else {
@@ -467,7 +472,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   if (errors.length) return { ok: false, errors };
   return {
     ok: true, car: deepFreeze(v.value!), parts, key, peakTorqueNm, peakPowerCv, steadyBoostBar, knockLoss,
-    exhaustRestrictionKPa, chargeTemperatureAtTargetK, wastegateLimitBar, mappedTorqueLimitNm, version: 2,
+    exhaustRestrictionKPa, chargeTemperatureAtTargetK, wastegateLimitBar, knockFreeBoostBar, mappedTorqueLimitNm, version: 2,
   };
 }
 
