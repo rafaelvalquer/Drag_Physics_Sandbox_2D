@@ -395,14 +395,16 @@ test('Gol GTS 1988: garage, sandbox launch, race with results and dyno', async (
   await page.keyboard.press('e');
   await expect.poll(() => mode<number>(page, 'm.runner.player.sim.gear')).toBe(1);
   await page.keyboard.down('w');
+  // Capture front tire slip during launch, before taking screenshots or waiting for accumulated smoke.
+  await expect.poll(
+    () => mode<number>(page, 'm.runner.player.sim.telemetry.wheelOmegaDriven - m.runner.player.sim.telemetry.wheelOmegaFree'),
+    { timeout: 8000, intervals: [50, 100] },
+  ).toBeGreaterThan(0);
   await expect.poll(async () => (await visual(page)).particles.emitted.smoke, { timeout: 8000 }).toBeGreaterThan(5);
   await page.waitForTimeout(250);
   v = await visual(page);
   await shot(page, 'gol-sandbox-launch');
   expectSound(v);
-  // front-wheel drive: the front (driven) wheel turns faster than the rear one while spinning
-  const spin = await mode<{ driven: number; free: number }>(page, '({ driven: m.runner.player.sim.telemetry.wheelOmegaDriven, free: m.runner.player.sim.telemetry.wheelOmegaFree })');
-  expect(spin.driven).toBeGreaterThan(spin.free);
   await expect.poll(() => mode<number>(page, 'm.runner.player.sim.engine.rpm'), { timeout: 10_000 }).toBeGreaterThan(5800);
   await page.keyboard.press('e');
   await expect.poll(() => mode<number>(page, 'm.runner.player.sim.gear'), { timeout: 5000 }).toBe(2);
