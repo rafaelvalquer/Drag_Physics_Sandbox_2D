@@ -9,7 +9,8 @@ import { isChapterComplete, nextEvent } from '../src/game/career/CareerProgressi
 import type { CareerRaceResult, RunSummary } from '../src/game/career/CareerState';
 import { CHAPTERS, CHAPTER_2_ID, CHAPTER_3_ID, type ChapterId } from '../src/game/career/chapters';
 import { DEALER_CARS, offerAvailability } from '../src/game/career/chapter2/dealer';
-import { freeRaceOutcome, resolveFreeOpponent, toFreeRaceOffer } from '../src/game/career/freeEvents/FreeEventService';
+import { estimateFreeTime } from '../src/game/career/freeEvents/FreeEventDifficulty';
+import { freeEligibility, freeRaceOutcome, resolveFreeOpponent, toFreeRaceOffer } from '../src/game/career/freeEvents/FreeEventService';
 import { FREE_TIERS, type FreeAttempt, type FreeOffer } from '../src/game/career/freeEvents/FreeEventTypes';
 import { runHeadlessRace } from '../src/game/career/headlessRace';
 import { ownedCarBuild, rivalBuild } from '../src/game/career/RivalBuildFactory';
@@ -136,14 +137,22 @@ async function race(controller: CareerController, event: CareerEventDef, serial:
 }
 
 async function enterFreeRace(controller: CareerController) {
+  const cars = controller.save!.ownedCars.map((car) => ({ car, build: ownedCarBuild(car) }));
+  const matches: { offer: FreeOffer; carId: string; margin: number }[] = [];
   for (const tier of FREE_TIERS) {
     const offers = assertResult(await controller.freeBoard(tier));
     for (const offer of offers) {
-      const entered = await controller.beginFreeRace(offer.id);
-      if (entered.ok) return entered.value;
+      const track = findCareerTrack(offer.trackId);
+      for (const { car, build } of cars) {
+        if (!build.ok || freeEligibility(offer, car, build)) continue;
+        matches.push({ offer, carId: car.id, margin: offer.estimatedS - estimateFreeTime(build, track, offer.distance) });
+      }
     }
   }
-  return null;
+  const best = matches.sort((a, b) => b.margin - a.margin)[0];
+  if (!best) return null;
+  if (controller.activeCar?.id !== best.carId) assertResult(await controller.setActiveCar(best.carId));
+  return assertResult(await controller.beginFreeRace(best.offer.id));
 }
 
 const store = new MemoryStore();
@@ -171,12 +180,15 @@ for (const chapter of CHAPTERS) {
   let event = nextEvent(controller.save!, chapter.id);
   for (let attempt = 0; event && attempt < maxAttemptsPerChapter; attempt++) {
     await shop(controller, ledger, losses);
+    const storyCarId = controller.activeCar!.id;
     const free = freeRemaining > 0 ? await enterFreeRace(controller) : null;
     if (free) {
       const result = await race(controller, toFreeRaceOffer(free.offer).event, ++serial, free);
       ledger.freeAttempts++;
       if (result.result.outcome === 'win') ledger.freeWins++;
+      else assertResult(await controller.freeBoard(free.offer.tier, false, free.offer.id));
       ledger.freeIncomeCr += result.reward.credits;
+      if (controller.activeCar?.id !== storyCarId) assertResult(await controller.setActiveCar(storyCarId));
       freeRemaining--;
       continue;
     }
@@ -206,7 +218,7 @@ const markdown = [
   '',
   'Uma rota de referência com piloto avançado, Gol GTS inicial e os carros das finais disponíveis na garagem. As corridas foram simuladas com a física do jogo. O controlador da campanha gravou compras, vitórias, perdas e recompensas num save em memória.',
   '',
-  'A rota tenta o próximo evento principal ainda inédito. Após uma derrota, corre na classe livre mais acessível ao carro atual para financiar peças. Na Liga, considera Golf, 320i e Evo. Na Elite, considera GT-R, Giulia e C43. As compras de carro reservam 6.000 CR para a oficina. A execução limita cada capítulo a 150 tentativas.',
+  'A rota tenta o próximo evento principal ainda inédito. Após uma derrota, procura uma prova livre favorável entre as ofertas e os carros da garagem. Troca o adversário livre após perder. Na Liga, considera Golf, 320i e Evo. Na Elite, considera GT-R, Giulia e C43. As compras de carro reservam 6.000 CR para a oficina. A execução limita cada capítulo a 150 tentativas.',
   '',
   '| Capítulo | Início CR | Final CR | Menor saldo CR | Peças CR | Carros CR | Vitórias da história | Derrotas da história | Livres ganhos / corridos | Prêmios dos livres CR | Carros usados | Concluído |',
   '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|',
