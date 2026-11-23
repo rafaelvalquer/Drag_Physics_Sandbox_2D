@@ -23,6 +23,8 @@ export interface AccelerationOptions {
    * sheets are tested with that payload; the Gol's manual figures are tested without it.
    */
   payloadKg?: number;
+  /** N₂O use of the driver: none, only stage 1, or every stage the setup has (default: all). */
+  nitrous?: 'off' | 'stage1' | 'all';
 }
 
 export interface AccelerationResult {
@@ -42,6 +44,9 @@ export interface AccelerationResult {
   wheelspinS: number;
   /** Driven axle and the share of the total wheel load on it at the start and at peak traction. */
   drivenLoadShare: { atRest: number; min: number; max: number };
+  /** N₂O spent and injection time in the run (0 without a kit). */
+  nitrousUsedKg: number;
+  nitrousActiveS: number;
 }
 
 const H = 1 / 120;
@@ -54,6 +59,7 @@ export function runAccelerationTest(car: CarConfig, track: TrackConfig, opts: Ac
   const maxS = opts.maxS ?? 120;
   const sim = new VehicleSimulation(opts.payloadKg ? { ...car, massKg: car.massKg + opts.payloadKg } : car, track);
   const ai = new DragAI(car, opts.level ?? 'advanced', opts.seed ?? 7);
+  ai.maxNitrousStage = opts.nitrous === 'off' ? 0 : opts.nitrous === 'stage1' ? 1 : 2;
 
   // ---- start the engine, select first gear, let everything settle
   let guard = 0;
@@ -138,5 +144,7 @@ export function runAccelerationTest(car: CarConfig, track: TrackConfig, opts: Ac
     maxSlipRatio: maxSlip,
     wheelspinS: spin,
     drivenLoadShare: share,
+    nitrousUsedKg: sim.nitrous?.telemetry().consumedKg ?? 0,
+    nitrousActiveS: sim.nitrous?.telemetry().activeTimeS ?? 0,
   };
 }
