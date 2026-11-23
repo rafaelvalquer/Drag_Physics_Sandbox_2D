@@ -274,7 +274,7 @@ const CH1: readonly Omit<CareerEventDef, 'chapter'>[] = [
     distance: 'quarter',
     rewardCr: 1300,
     reputation: 40,
-    unlocks: ['final-challenge'],
+    unlocks: ['final-challenge', 'part-launch-pro'],
   },
   {
     id: 'e7-rei-da-madrugada',

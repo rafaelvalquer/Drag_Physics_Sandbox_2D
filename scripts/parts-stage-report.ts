@@ -55,6 +55,7 @@ const metrics = [
   'Δ massa kg', 'Δ aderência de largada', 'Δ resistência ao rolamento', 'Δ transferência de carga',
   'Δ capacidade da embreagem N·m', 'Δ eficiência da transmissão p.p.',
   'Δ limite dos internos N·m',
+  'Δ rotação de largada rpm',
   'Δ pressão sustentada pela alimentação clássica bar',
 ];
 const markdown = [
@@ -101,6 +102,7 @@ for (const row of rows) {
       delta(m.clutchBeforeNm, m.clutchAfterNm),
       delta(100 * m.drivelineEfficiencyBefore, 100 * m.drivelineEfficiencyAfter),
       restrictionDelta(m.internalTorqueLimitBeforeNm, m.internalTorqueLimitAfterNm),
+      delta(m.launchRpmBefore, m.launchRpmAfter),
       restrictionDelta(m.legacyFuelLimitBeforeBar, m.legacyFuelLimitAfterBar),
     ] : metrics.map(() => '—');
     const figures = values.join(' | ');

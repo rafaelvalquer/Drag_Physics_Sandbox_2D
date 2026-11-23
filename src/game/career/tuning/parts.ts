@@ -525,12 +525,13 @@ export interface LaunchControlPart extends PartBase {
   category: 'electronics-launch';
   /** Default launch speed added over the clutch logic's (rpm). */
   launchRpmAdd: number;
+  adjustmentStepRpm?: number;
   modernUnlock?: UnlockId;
 }
 
 /** Slot-catalogue part (classic engines, BuildResolver v1): hardware changes in `mod`. */
 export interface ExpandedPart extends PartBase {
-  category: Exclude<PartCategory, V2Category>;
+  category: Exclude<PartCategory, V2Category | 'electronics-launch'>;
   chapter: 1 | 2 | 3;
   mod: MechanicalMods;
   /** This part is only meaningful with a turbo kit already installed. */
@@ -580,6 +581,7 @@ export type UnlockId =
   | 'part-cam'
   | 'workshop-transmission'
   | 'part-clutch'
+  | 'part-launch-pro'
   | 'part-differential'
   | 'part-tires-semislick'
   | 'engine-tuners'
@@ -622,6 +624,7 @@ export const UNLOCK_LABEL: Record<UnlockId, string> = {
   'part-cam': 'Comando esportivo',
   'workshop-transmission': 'Oficina de transmissão',
   'part-clutch': 'Embreagem reforçada',
+  'part-launch-pro': 'Controle de largada de competição',
   'part-differential': 'Diferencial alternativo',
   'part-tires-semislick': 'Pneus semi-slick',
   'engine-tuners': 'Preparadores de motor (dinamômetro da oficina)',
@@ -862,6 +865,19 @@ const DYNO_LAB_PARTS: readonly PartDef[] = [
     safeRpmAdd: 400,
   },
   {
+    id: 'launch-control-street',
+    category: 'electronics-launch',
+    name: 'Controle de largada de rua',
+    price: 560,
+    unlock: 'part-clutch',
+    modernUnlock: 'c2-gearbox',
+    compat: { transmissions: ['manual', 'dual-clutch'] },
+    description: 'Módulo de largada para embreagem manual automatizada ou dupla embreagem.',
+    physics: 'Eleva o alvo inicial da largada em até 200 rpm e permite ajustá-lo no Dyno Lab.',
+    launchRpmAdd: 200,
+    progression: { tier: 1, group: 'launch-control', specialization: 'rua' },
+  },
+  {
     id: 'launch-control',
     category: 'electronics-launch',
     name: 'Controle de largada (two-step)',
@@ -873,6 +889,21 @@ const DYNO_LAB_PARTS: readonly PartDef[] = [
     physics:
       'A embreagem automática (ou o pacote da dupla embreagem) morde a +400 rpm sobre a rotação de largada original, e a rotação de largada passa a ser ajustável no Dyno Lab. No automático com conversor não existe: lá a largada é o estol do conversor.',
     launchRpmAdd: 400,
+    progression: { tier: 2, group: 'launch-control', specialization: 'rua' },
+  },
+  {
+    id: 'launch-control-pro',
+    category: 'electronics-launch',
+    name: 'Controle de largada de competição',
+    price: 1550,
+    unlock: 'part-launch-pro',
+    modernUnlock: 'c2-gearbox',
+    compat: { transmissions: ['manual', 'dual-clutch'] },
+    description: 'Módulo com alvo de largada mais alto e ajuste fino para acertar a saída conforme o pneu.',
+    physics: 'Eleva o alvo inicial da largada em até 550 rpm. O Dyno Lab ajusta a rotação em passos de 50 rpm.',
+    launchRpmAdd: 550,
+    adjustmentStepRpm: 50,
+    progression: { tier: 3, group: 'launch-control', specialization: 'rua' },
   },
 ];
 

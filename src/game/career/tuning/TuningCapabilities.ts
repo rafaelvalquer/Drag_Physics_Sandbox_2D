@@ -92,7 +92,7 @@ export const FINAL_DRIVE_OPTIONS: readonly { value: FinalDrivePreset; label: str
 const REV_ECUS = new Set(['ecu-programmable', 'ecu-stage1-na', 'ecu-street', 'ecu-race']);
 const CLASSIC_THROTTLES = new Set(['throttle-rework', 'throttle-large']);
 const isValveSpring = (id: string): boolean => findPart(id)?.category === 'engine-valvetrain';
-const isOverlayPart = (id: string): boolean => id === 'launch-control' || isValveSpring(id);
+const isOverlayPart = (id: string): boolean => findPart(id)?.category === 'electronics-launch' || isValveSpring(id);
 
 const off = (reason: string, def = 0): RangeControl => ({ enabled: false, reason, min: def, max: def, step: 1, default: def });
 const round = (v: number, step: number): number => Math.round(v / step) * step;
@@ -155,17 +155,20 @@ export function tuningCapabilities(base: CarConfig, partIds: readonly string[], 
 
   // ---- launch ----
   const launchDef = hw.transmission.clutch.launchRpm;
+  const launchPart = parts.find((part) => part.category === 'electronics-launch');
+  const launchStep = launchPart?.adjustmentStepRpm ?? 100;
+  const launchLimit = Math.min(e.redlineRpm - 800, launchDef + 2500);
   const launchOk =
     kind === 'manual'
-      ? has((p) => p.category === 'clutch' || p.id === 'launch-control')
+      ? !!launchPart || has((p) => p.category === 'clutch')
       : kind === 'dual-clutch'
-        ? has((p) => p.id === 'launch-control' || p.category === 'gearbox')
+        ? !!launchPart || has((p) => p.category === 'gearbox')
         : false;
   const launch: RangeControl =
     kind === 'torque-converter-auto'
       ? off('No automático com conversor de torque, a largada é o estol do conversor.', launchDef)
       : launchOk
-        ? { enabled: true, reason: null, min: round(e.idleRpm + 800, 100), max: round(Math.min(e.redlineRpm - 800, launchDef + 2500), 100), step: 100, default: launchDef }
+        ? { enabled: true, reason: null, min: round(e.idleRpm + 800, launchStep), max: round(launchLimit, launchStep), step: launchStep, default: launchDef }
         : off(kind === 'manual' ? 'Exige controle de largada ou embreagem reforçada.' : 'Exige controle de largada ou upgrade do câmbio.', launchDef);
 
   // ---- throttle ----
@@ -270,9 +273,9 @@ function withOverlayParts(hw: CarConfig, partIds: readonly string[]): CarConfig 
   const car = structuredClone(hw);
   const limits = reliabilityLimits(hw, partIds);
   if (partIds.some(isValveSpring)) car.engine.maxSafeRpm = Math.max(car.engine.maxSafeRpm, limits.maxSafeRpm);
-  const lc = findPart('launch-control');
-  if (partIds.includes('launch-control') && lc && 'launchRpmAdd' in lc)
-    car.transmission.clutch.launchRpm = Math.min(car.transmission.clutch.launchRpm + (lc.launchRpmAdd ?? 0), car.engine.redlineRpm - 800);
+  const lc = partIds.map(findPart).find((part) => part?.category === 'electronics-launch');
+  if (lc?.category === 'electronics-launch')
+    car.transmission.clutch.launchRpm = Math.min(car.transmission.clutch.launchRpm + lc.launchRpmAdd, car.engine.redlineRpm - 800);
   return car;
 }
 
