@@ -34,7 +34,26 @@ export interface LabMeasurement {
    * gear ratios: the speed where the next gear gives at least the same wheel torque.
    */
   shiftRpms: number[];
+  /** Present when the car has a N₂O kit: curves measured on the bench with each stage's flow and the run's use. */
+  nitrous?: LabNitrous;
 }
+
+/** N₂O on the Dyno Lab: the bench curves of each stage (measured, not drawn from the preview) and the run. */
+export interface LabNitrous {
+  /** How the driver used the kit in the test run. */
+  mode: LabNitrousMode;
+  stage1Points: LabPoint[];
+  /** Null for a single discharge. */
+  stage2Points: LabPoint[] | null;
+  peakCvStage1: number;
+  peakCvStage2: number | null;
+  /** Cylinder spent and injection time in the test run. */
+  usedKg: number;
+  activeS: number;
+  capacityKg: number;
+}
+
+export type LabNitrousMode = 'off' | 'stage1' | 'all';
 
 /**
  * Best upshift speed of each gear: wheel torque ∝ T(rpm)·ratio. Shifting at rpm lands the engine at
@@ -85,7 +104,7 @@ export async function measureLab(
   track: TrackConfig,
   isStale: () => boolean = () => false,
   progress: (f: number) => void = () => {},
-  opts: { rpmStep?: number; topSpeedS?: number } = {},
+  opts: { rpmStep?: number; topSpeedS?: number; nitrous?: LabNitrousMode } = {},
 ): Promise<LabMeasurement | null> {
   const e = car.engine;
   const d = new EngineDyno(e);
@@ -106,7 +125,29 @@ export async function measureLab(
     await tick();
     if (isStale()) return null;
   }
-  const acc = runAccelerationTest(car, track, { speedsKmh: [100], distancesM: [LAB_EIGHTH_M, LAB_QUARTER_M], maxS: opts.topSpeedS ?? 45 });
+  const mode = opts.nitrous ?? 'off';
+  const acc = runAccelerationTest(car, track, { speedsKmh: [100], distancesM: [LAB_EIGHTH_M, LAB_QUARTER_M], maxS: opts.topSpeedS ?? 45, nitrous: mode });
+  let nitrous: LabNitrous | undefined;
+  if (car.nitrous) {
+    const nz = car.nitrous;
+    const curve = (flowKgS: number): LabPoint[] => {
+      const nd = new EngineDyno(e);
+      if (!nd.start()) return [];
+      const f = Math.max(nz.fuelSupply, 0) / Math.max(nz.fuelNeed, 0.01);
+      nd.nitrous = { flowKgS, fuelFactor: Math.min(1, f) ** 1.5 };
+      const out: LabPoint[] = [];
+      for (const r of rpms.filter((_, i) => i % 2 === 0)) {
+        const p = nd.measure(r, 1, H, e.induction === 'turbo' ? 1.5 : 0.6, 0.15);
+        out.push({ rpm: p.rpm, torqueNm: p.torqueNm, powerCv: p.powerCv });
+      }
+      return out;
+    };
+    const dual = nz.mode === 'dual';
+    const s1 = curve(nz.maxFlowKgS * nz.stage1Flow);
+    const s2 = dual ? curve(nz.maxFlowKgS * nz.stage2Flow) : null;
+    const peak = (pts: LabPoint[]): number => pts.reduce((a, p) => Math.max(a, p.powerCv), 0);
+    nitrous = { mode, stage1Points: s1, stage2Points: s2, peakCvStage1: peak(s1), peakCvStage2: s2 ? peak(s2) : null, usedKg: acc.nitrousUsedKg, activeS: acc.nitrousActiveS, capacityKg: nz.capacityKg };
+  }
   progress(1);
   if (isStale()) return null;
   const pk = points.reduce((a, p) => (p.powerCv > a.powerCv ? p : a));
@@ -125,5 +166,6 @@ export async function measureLab(
     wheelspinS: acc.wheelspinS,
     revLimitRpm: e.revLimitRpm,
     shiftRpms: recommendedShiftRpms(points, car.transmission.gearRatios, e.revLimitRpm),
+    ...(nitrous ? { nitrous } : {}),
   };
 }

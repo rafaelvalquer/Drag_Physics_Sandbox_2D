@@ -54,6 +54,21 @@ function withProject(
   return resolved.ok ? { parts, resolved } : null;
 }
 
+/**
+ * A rival's N₂O kit follows the same rules as the player's (one kit, a full cylinder per race, no refill),
+ * and the kit tier follows the event tier: nothing for beginners, only the mild kit on the street, the
+ * strong direct-port kit only in competition. Rare even where it is allowed.
+ */
+const NITROUS_TIER_KITS: Record<FreeTier, readonly string[]> = {
+  iniciante: [],
+  rua: ['nitrous-street'],
+  preparado: ['nitrous-street', 'nitrous-wet', 'nitrous-progressive'],
+  competicao: ['nitrous-street', 'nitrous-wet', 'nitrous-progressive', 'nitrous-direct'],
+};
+function nitrousAllowed(id: string, tier: FreeTier, rng: Prng): boolean {
+  return NITROUS_TIER_KITS[tier].includes(id) && rng.next() < 0.18;
+}
+
 export function generateFreeBuild(
   base: CarConfig, chapter: ChapterId, tier: FreeTier, progress: Pick<CareerSave, 'completedEventIds'>, rng: Prng,
 ): FreeBuild {
@@ -89,6 +104,7 @@ export function generateFreeBuild(
     if (parts.length + extra.length >= limit) break;
     if ([...parts, ...extra].some((p) => p.category === part.category)) continue;
     if (part.category === 'turbo' || part.category === 'ecu') continue; // installed as projects
+    if (part.category === 'nitrous' && !nitrousAllowed(part.id, tier, rng)) continue;
     if ('requiresTurbo' in part && part.requiresTurbo && !hasTurbo) continue;
     extra.push(part);
   }

@@ -305,6 +305,7 @@ export class RaceController {
         const tf = cross(this.distanceM);
         if (tf !== null) {
           res.finished = true;
+          sim.nitrous?.disable(); // the attempt is over: no injection until the next one
           st.endT = tf;
           res.et = tf - st.leftAt;
           res.total = (res.rt ?? 0) + res.et; // = finish − green
@@ -318,6 +319,7 @@ export class RaceController {
       if (!res.finished && !res.dnf && this.greenAt !== null && t - this.greenAt > this.dnfTimeoutS) {
         res.dnf = true;
         res.dnfReason = 'timeout';
+        sim.nitrous?.disable();
         st.endT = t;
       }
       st.prevX = x1;

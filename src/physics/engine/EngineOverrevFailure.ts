@@ -109,6 +109,24 @@ export class EngineOverrevFailure {
     this.primed = false;
   }
 
+  /**
+   * Torque strain (nitrous): the crank torque against what the internals carry. Above the limit the
+   * exposure grows with the excess (ratio 1.3 breaks in ≈ 4 s); at or under it nothing accumulates and
+   * the exposure is untouched (it only recovers through the speed model). Returns true when it breaks.
+   */
+  updateTorque(h: number, torqueRatio: number, rpm: number, simTime: number): boolean {
+    if (this.broken || !(torqueRatio > 1)) return false;
+    const x = (torqueRatio - 1) / 0.3;
+    this.exposure += (x * Math.sqrt(x) * h) / 4;
+    this.safeTime = 0;
+    if (this.exposure < 1) return false;
+    this.exposure = 1;
+    this.broken = true;
+    this.brokenAt = simTime;
+    this.brokenRpm = rpm;
+    return true;
+  }
+
   /** One physics step. Returns true on the step the engine breaks (once). */
   update(h: number, rpm: number, load: number, boostBar: number, egtFraction: number, simTime: number): boolean {
     if (this.broken) return false;

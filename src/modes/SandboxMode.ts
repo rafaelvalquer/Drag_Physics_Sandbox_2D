@@ -94,6 +94,7 @@ export class SandboxMode implements Mode {
     this.offs.push(
       inp.on('upshift', () => this.shift(1)),
       inp.on('downshift', () => this.shift(-1)),
+      inp.on('nitrous', () => this.nitrous()),
       inp.on('restart', () => this.restart()),
       inp.on('pause', () => this.lab?.togglePause()),
       inp.on('camera', () => (this.cameraMode = CAMERAS[(CAMERAS.indexOf(this.cameraMode) + 1) % CAMERAS.length]!)),
@@ -174,6 +175,12 @@ export class SandboxMode implements Mode {
     } else {
       c.pedal = p.sim.controls.pedal;
     }
+  }
+
+  private nitrous(): void {
+    const p = this.runner.player;
+    if (!p || this.runner.paused) return;
+    p.sim.requestNitrous();
   }
 
   private shift(dir: 1 | -1): void {

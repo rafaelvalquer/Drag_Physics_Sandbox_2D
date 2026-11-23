@@ -262,7 +262,7 @@ const CH1: readonly Omit<CareerEventDef, 'chapter'>[] = [
     distance: 'quarter',
     rewardCr: 1000,
     reputation: 30,
-    unlocks: ['part-tires-semislick'],
+    unlocks: ['part-tires-semislick', 'nitrous-street'],
   },
   {
     id: 'e6-o-aspirado',

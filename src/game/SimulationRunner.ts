@@ -163,7 +163,11 @@ export class SimulationRunner {
     }
     this.stats.lastFrameSteps = n;
     this.publish(n);
-    for (const v of this.vehicles) v.sound?.flush();
+    for (const v of this.vehicles) {
+      const n = v.sim.nitrous;
+      if (n && v.sound) v.sound.syncNitrous(n.status, n.setup.maxFlowKgS > 0 ? n.telemetry().flowKgPerS / n.setup.maxFlowKgS : 0);
+      v.sound?.flush();
+    }
   }
 
   private publish(steps: number): void {

@@ -3,7 +3,9 @@ import { exhaustPreset } from '../../../data/exhaustPresets';
 import { applyEngineParts, curvePeakCv, engineFuel, powerPeakRpm, TURBO_MAX_COMPRESSION, withStockBreathing, type EngineParts } from './breathingModel';
 import { CATEGORY_LABEL, CATEGORY_ORDER_V1, findPart, findPartForVersion, type PartCategory, type PartDef, type TirePart, type FilterPart, type ManifoldPart, type CamPart, type ExhaustPart, type TurboPart, type MechanicalMods } from './parts';
 import { applyTuneOverlay, needsOverlay } from './TuningCapabilities';
-import { tuneKey, resolverTune, sameTune, applyTyre, applyCoolingHardware, CLUTCH_TORQUE_MARGIN, deepFreeze, workshopFinalDrive, workshopGearRatios, fmtBar, MAX_KNOCK_LOSS, type BuildResult, type BuildTune, type ResolverVersion } from './buildCommon';
+import { applyNitrousOverlay, nitrousKitOf } from './nitrousOverlay';
+import { isNitrousKitId } from './nitrousParts';
+import { withoutNitrous, tuneKey, resolverTune, sameTune, applyTyre, applyCoolingHardware, CLUTCH_TORQUE_MARGIN, deepFreeze, workshopFinalDrive, workshopGearRatios, fmtBar, MAX_KNOCK_LOSS, type BuildResult, type BuildTune, type ResolverVersion } from './buildCommon';
 import { resolveV2 } from './BuildResolverV2';
 import { exhaustPressureAfterSections } from './modernBreathing';
 
@@ -50,14 +52,19 @@ export function resolveBuild(base: CarConfig, partIds: readonly string[], tune: 
   const key = buildKey(base.id, partIds, tune, version);
   const hit = cache.get(key);
   if (hit) return hit;
-  const hwTune = resolverTune(tune);
+  // a nitrous kit is not a part of either resolver: the rest is resolved as always, the kit goes on top
+  const kit = partIds.some(isNitrousKitId) ? nitrousKitOf(partIds) : undefined;
+  const ids = kit ? partIds.filter((id) => !isNitrousKitId(id)) : partIds;
+  const dyno = withoutNitrous(tune);
+  const hwTune = resolverTune(dyno);
   let r: BuildResult;
-  if (!needsOverlay(tune, partIds) && sameTune(hwTune, tune)) r = resolveHardware(base, partIds, tune, version);
+  if (!needsOverlay(dyno, ids) && sameTune(hwTune, dyno)) r = resolveHardware(base, ids, dyno, version);
   else {
     // the hardware build (boost included) first, then the Dyno Lab settings / parts on top of it
-    const hw = resolveHardware(base, partIds, hwTune, version);
-    r = hw.ok ? applyTuneOverlay(base, partIds, version, hw, tune, key) : hw;
+    const hw = resolveHardware(base, ids, hwTune, version);
+    r = hw.ok ? applyTuneOverlay(base, ids, version, hw, dyno, buildKey(base.id, ids, dyno, version)) : hw;
   }
+  if (kit && r.ok) r = applyNitrousOverlay(base, ids, r, tune, kit, key);
   if (cache.size > 2000) cache.clear(); // the Dyno Lab previews many settings: keep the cache bounded
   cache.set(key, r);
   return r;
@@ -69,7 +76,8 @@ const hwCache = new Map<string, BuildResult>();
  * The build of the resolvers alone (hardware + boost setting), without the Dyno Lab overlay. Its
  * key is the plain build key, so a build without settings is exactly what it always was.
  */
-export function resolveHardware(base: CarConfig, partIds: readonly string[], tune: BuildTune, version: ResolverVersion): BuildResult {
+export function resolveHardware(base: CarConfig, allPartIds: readonly string[], tune: BuildTune, version: ResolverVersion): BuildResult {
+  const partIds = allPartIds.some(isNitrousKitId) ? allPartIds.filter((id) => !isNitrousKitId(id)) : allPartIds; // the hardware build never sees the kit
   const hwTune = resolverTune(tune);
   const key = buildKey(base.id, partIds, hwTune, version);
   const hit = hwCache.get(key);

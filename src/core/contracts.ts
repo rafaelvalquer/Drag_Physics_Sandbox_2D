@@ -134,6 +134,8 @@ export interface VehicleTelemetry {
   gearboxMode?: 'D' | 'M' | null;
   /** Engine strain 0..1 (over-rev exposure, see EngineOverrevFailure); 0 when failures are off. */
   engineStrain?: number;
+  /** N₂O system state (absent = no kit). */
+  nitrous?: import('../physics/engine/NitrousController').NitrousTelemetry;
 }
 
 export interface InputState {

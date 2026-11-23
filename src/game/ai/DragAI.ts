@@ -111,6 +111,8 @@ export class DragAI {
   private reaction: number;
   private jumpStart: boolean;
   private shiftJitter: number[];
+  /** Highest nitrous stage the driver will start (0 = never): lab tests of one stage or of none. */
+  maxNitrousStage: 0 | 1 | 2 = 2;
   private pedal = 0;
   private lastShiftAt = -10;
   private tcTrim = 0;
@@ -173,6 +175,17 @@ export class DragAI {
     const slip = sim.telemetry.slipRatio;
     this.updateThrottle(h, sim, slip);
     c.pedal = this.pedal;
+
+    // nitrous: deterministic rules from gear, grip and the stage that is next (no extra cylinder, no refill)
+    const nit = sim.nitrous;
+    if (nit && race.timeSinceGreen !== null && !race.finished) {
+      const next = nit.startableStage;
+      const gripOk = slip < (next === 2 ? 0.1 : 0.12);
+      if (next === 0 || next > this.maxNitrousStage) {
+        /* nothing to start, or the test asked for fewer stages */
+      } else if (next === 1 && sim.gear >= 2 && gripOk && sim.speed > 12) sim.requestNitrous();
+      else if (next === 2 && sim.gear >= 3 && gripOk) sim.requestNitrous();
+    }
 
     // shifting
     const g = sim.gear;

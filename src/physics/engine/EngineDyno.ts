@@ -1,6 +1,7 @@
 import type { EngineConfig } from '../../data/schema';
 import { radSToRpm, rpmToRadS, wattsToCv } from '../../core/units';
 import { ConstraintSolver } from '../solver/ConstraintSolver';
+import { NITROUS_ENERGY_J_PER_KG } from '../../game/career/tuning/nitrousParts';
 import { EngineModel, type Ambient, type EngineInputs } from './EngineModel';
 
 export interface DynoPoint {
@@ -23,6 +24,8 @@ export class EngineDyno {
   readonly solver = new ConstraintSolver();
   readonly inputs: EngineInputs = { pedal: 0, throttleOverride: null, sparkCut: 0, ignitionOn: true, starter: false };
   simTime = 0;
+  /** Steady N₂O flow on the bench (kg/s) and its fuel factor: torque = flow·E·factor/ω, only while the engine burns. 0 = off. */
+  nitrous = { flowKgS: 0, fuelFactor: 1 };
 
   constructor(cfg: EngineConfig, ambient?: Ambient) {
     this.engine = new EngineModel(cfg, ambient);
@@ -30,6 +33,8 @@ export class EngineDyno {
 
   step(h: number): void {
     const e = this.engine;
+    const n = this.nitrous;
+    e.nitrousTorqueNm = n.flowKgS > 0 && e.nitrousInjectable ? (n.flowKgS * NITROUS_ENERGY_J_PER_KG * n.fuelFactor) / Math.max(e.omega, 150) : 0;
     const explicit = e.preStep(h, this.inputs);
     e.crank.v += h * e.crank.invMass * explicit;
     this.solver.solve([e.frictionRow, e.starterRow, e.dynoRow], h);

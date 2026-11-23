@@ -74,6 +74,10 @@ export class RacingHUD {
   private readonly strainBar: HTMLElement;
   private readonly strainText: HTMLElement;
   private readonly strainAlert: HTMLElement;
+  private readonly nitroRow: HTMLElement;
+  private readonly nitroBar: HTMLElement;
+  private readonly nitroTitle: HTMLElement;
+  private readonly nitroState: HTMLElement;
   private readonly heatAlert: HTMLElement;
   private readonly risk = new StrainDisplay();
   private riskLastMs: number | null = null;
@@ -136,6 +140,17 @@ export class RacingHUD {
     this.heatAlert = h('div', { class: 'strain-alert-msg', 'data-testid': 'hud-overheat', role: 'status' }, 'Motor quente · potência reduzida');
     this.heatAlert.hidden = true;
     this.strainAlert.style.display = 'none';
+    this.nitroBar = h('div', { class: 'fill' });
+    this.nitroTitle = h('span', { class: 'k', 'data-testid': 'hud-nitrous-title' }, 'N₂O');
+    this.nitroState = h('span', { class: 'val', 'data-testid': 'hud-nitrous-state' }, '');
+    this.nitroRow = h(
+      'div',
+      { class: 'bar-row nitro-row-hud', 'data-testid': 'hud-nitrous', 'data-status': 'READY', role: 'meter', 'aria-label': 'Nitro disponível', 'aria-valuemin': '0', 'aria-valuemax': '100' },
+      this.nitroTitle,
+      h('div', { class: 'hbar' }, this.nitroBar),
+      this.nitroState,
+    );
+    this.nitroRow.style.display = 'none';
     this.strainRow.style.display = 'none';
     this.el = h(
       'div',
@@ -160,6 +175,7 @@ export class RacingHUD {
         h('div', { class: 'bar-row', title: 'Escorregamento longitudinal dos pneus de tração: (ωr − v) / v' }, h('span', { class: 'k' }, 'patinagem'), h('div', { class: 'hbar' }, this.slipBar), this.slipText),
         this.strainRow,
         this.strainAlert,
+        this.nitroRow,
         this.heatAlert,
         this.msg,
       ),
@@ -224,7 +240,35 @@ export class RacingHUD {
     this.slipBar.classList.toggle('hot', slip > 0.15);
     this.slipText.textContent = slip > 9.99 ? '>999 %' : `${(slip * 100).toFixed(0)} %`;
     this.updateStrain(sim);
+    this.updateNitrous(sim);
     this.heatAlert.hidden = sim.engine.thermal.torqueFraction >= 1;
+  }
+
+  /** N₂O gauge: what is left of the cylinder, the mode, the stage and the state — all read from the simulation. */
+  private updateNitrous(sim: VehicleSimulation): void {
+    const n = sim.nitrous;
+    this.nitroRow.style.display = n ? '' : 'none';
+    if (!n) return;
+    const t = n.telemetry();
+    const pct = Math.round(t.remainingFraction * 100);
+    const dual = n.setup.mode === 'dual';
+    const split = dual ? ` · E1 ${Math.round(n.setup.stage1Share * 100)} % | E2 ${Math.round((1 - n.setup.stage1Share) * 100)} %` : ' · descarga única';
+    this.nitroTitle.textContent = `N₂O — ${pct} %${split}`;
+    this.nitroBar.style.width = `${pct}%`;
+    const left = t.estimatedRemainingS !== null ? ` · ${t.estimatedRemainingS.toFixed(1)} s` : '';
+    const state: Record<string, string> = {
+      READY: 'Pronto: Shift',
+      STAGE_1_ACTIVE: `INJETANDO${dual ? ' (E1)' : ''}${left}`,
+      STAGE_2_READY: 'ESTÁGIO 2 PRONTO: Shift',
+      STAGE_2_ACTIVE: `INJETANDO (E2)${left}`,
+      DEPLETED: 'ESGOTADO',
+      DISABLED: 'desativado',
+      UNAVAILABLE: '',
+    };
+    const text = state[t.status] ?? '';
+    if (this.nitroState.textContent !== text) this.nitroState.textContent = text;
+    if (this.nitroRow.dataset.status !== t.status) this.nitroRow.dataset.status = t.status;
+    this.nitroRow.setAttribute('aria-valuenow', String(pct));
   }
 
   /** Engine strain gauge: only when mechanical failures are on for this car. */

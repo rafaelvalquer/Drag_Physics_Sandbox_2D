@@ -2,6 +2,7 @@ import { AF } from '../../core/contracts';
 import { CHANNELS, CHANNEL_COUNT, CH, type AcousticQuality, type AcousticVehicleConfig } from '../dsp/AcousticConfig';
 import { VEHICLE_PROCESSOR, type ToWorklet, type VehicleProcessorOptions, type WorkletStats } from '../worklets/protocol';
 import type { AudioEngine } from './AudioEngine';
+import { NitrousLayer } from './NitrousLayer';
 
 const SPEED_OF_SOUND = 343;
 const MAX_FRAMES_PER_POST = 64;
@@ -45,6 +46,8 @@ export class VehicleSound {
   private batchCount = 0;
   private mix: ChannelMix = { ...DEFAULT_MIX };
   private disposed = false;
+  private nitrous: NitrousLayer | null = null;
+  private nitrousStatus = 'READY';
   lastStats: WorkletStats | null = null;
   droppedFrames = 0;
 
@@ -84,6 +87,24 @@ export class VehicleSound {
     this.delay.connect(this.distanceGain);
     this.distanceGain.connect(engine.master);
     VehicleSound.live++;
+  }
+
+  /**
+   * Follows the N₂O state of the simulation: the hiss tracks the injected flow (0..1 of the kit's
+   * maximum), the solenoid clicks when an injection starts and when it ends. Cheap enough to call
+   * every rendered frame; the layer is created on the first injection.
+   */
+  syncNitrous(status: string, flowNorm: number): void {
+    if (this.disposed) return;
+    const ctx = this.engine.ctx;
+    if (!ctx) return;
+    const active = status === 'STAGE_1_ACTIVE' || status === 'STAGE_2_ACTIVE';
+    const was = this.nitrousStatus === 'STAGE_1_ACTIVE' || this.nitrousStatus === 'STAGE_2_ACTIVE';
+    if (!this.nitrous && active) this.nitrous = new NitrousLayer(ctx, this.bus);
+    if (active && !was) this.nitrous?.click(true);
+    if (!active && was) this.nitrous?.click(false);
+    if (this.nitrousStatus !== status) this.nitrousStatus = status;
+    this.nitrous?.setFlow(active ? flowNorm : 0);
   }
 
   /** Queues one physics audio frame (AF layout). */
@@ -171,6 +192,8 @@ export class VehicleSound {
     if (this.disposed) return;
     this.post({ type: 'dispose' });
     this.disposed = true;
+    this.nitrous?.dispose();
+    this.nitrous = null;
     VehicleSound.live--;
     try {
       this.node.disconnect();

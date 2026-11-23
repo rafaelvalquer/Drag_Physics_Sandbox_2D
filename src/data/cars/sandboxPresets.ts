@@ -2,6 +2,7 @@ import type { CarConfig } from '../schema';
 import { findCampaignCar } from './campaign';
 import { findRival } from '../../game/career/CareerEvents';
 import { resolveBuild } from '../../game/career/tuning/BuildResolver';
+import type { BuildTune } from '../../game/career/tuning/buildCommon';
 
 /** A named free-play build is a recipe, NOT a second factory car. */
 export interface SandboxPreparedPreset {
@@ -9,7 +10,7 @@ export interface SandboxPreparedPreset {
   label: string;
   baseCarId: string;
   partIds: readonly string[];
-  tune: { boostBar?: number };
+  tune: BuildTune;
   car: CarConfig;
 }
 
@@ -22,6 +23,8 @@ const RECIPES = [
   { id: 'gm-corsa-preparado-sandbox', label: 'Corsa — Beto', rival: 'roberto' },
   { id: 'gm-kadett-preparado-sandbox', label: 'Kadett — Paula', rival: 'paula' },
   { id: 'vw-gol-ap-turbo-sandbox', label: 'Gol GTS AP — Turbo de teste', baseCarId: 'vw-gol-gts-1988', parts: ['turbo-basic', 'clutch-reinforced', 'exhaust-sport', 'tires-sport'], tune: { boostBar: 0.5 } },
+  { id: 'vw-gol-nitro-street-sandbox', label: 'Gol GTS AP — Street Shot (N₂O)', baseCarId: 'vw-gol-gts-1988', parts: ['nitrous-street'], tune: {} as BuildTune },
+  { id: 'gm-chevette-nitro-wet-sandbox', label: 'Chevette — Wet Performance (2 estágios)', baseCarId: 'gm-chevette-sl-1988', parts: ['nitrous-wet'], tune: { nitrousMode: 'dual', nitrousShare: 0.4 } as BuildTune },
 ] as const;
 
 const valid: SandboxPreparedPreset[] = [];

@@ -41,11 +41,29 @@ export interface BuildTune {
   finalDrive?: FinalDrivePreset;
   shiftRpm?: number;
   tirePressureKpa?: number;
+  /** Nitrous kit settings (Workshop): one discharge or two, the split of the cylinder, flow and ramp of each. */
+  nitrousMode?: 'single' | 'dual';
+  nitrousShare?: number;
+  nitrousFlow1?: number;
+  nitrousRamp1?: number;
+  nitrousFlow2?: number;
+  nitrousRamp2?: number;
 }
 
 /** Fields of BuildTune in their canonical order (keys, comparison, migration). */
-export const TUNE_FIELDS = ['boostBar', 'revLimitRpm', 'launchRpm', 'throttleResponse', 'finalDrive', 'shiftRpm', 'tirePressureKpa'] as const;
+export const TUNE_FIELDS = ['boostBar', 'revLimitRpm', 'launchRpm', 'throttleResponse', 'finalDrive', 'shiftRpm', 'tirePressureKpa', 'nitrousMode', 'nitrousShare', 'nitrousFlow1', 'nitrousRamp1', 'nitrousFlow2', 'nitrousRamp2'] as const;
 export type TuneField = (typeof TUNE_FIELDS)[number];
+
+/** The nitrous settings: applied by the nitrous overlay, not by the Dyno Lab overlay. */
+export const NITROUS_TUNE_FIELDS = ['nitrousMode', 'nitrousShare', 'nitrousFlow1', 'nitrousRamp1', 'nitrousFlow2', 'nitrousRamp2'] as const;
+export const isNitrousField = (f: string): boolean => (NITROUS_TUNE_FIELDS as readonly string[]).includes(f);
+
+/** The tune without its nitrous settings (what the hardware / Dyno Lab resolvers see). */
+export function withoutNitrous(t: BuildTune): BuildTune {
+  const o: BuildTune = {};
+  for (const f of TUNE_FIELDS) if (!isNitrousField(f) && t[f] !== undefined) (o as Record<string, unknown>)[f] = t[f];
+  return o;
+}
 
 /** Canonical string of the tune (build key); '' for the default tune. boostBar keeps its old format. */
 export function tuneKey(t: BuildTune): string {
@@ -56,6 +74,12 @@ export function tuneKey(t: BuildTune): string {
   if (t.finalDrive !== undefined) k += `|f${t.finalDrive}`;
   if (t.shiftRpm !== undefined) k += `|s${Math.round(t.shiftRpm)}`;
   if (t.tirePressureKpa !== undefined) k += `|p${Math.round(t.tirePressureKpa)}`;
+  if (t.nitrousMode !== undefined) k += `|nm${t.nitrousMode}`;
+  if (t.nitrousShare !== undefined) k += `|ns${Math.round(t.nitrousShare * 100)}`;
+  if (t.nitrousFlow1 !== undefined) k += `|nf${Math.round(t.nitrousFlow1 * 100)}`;
+  if (t.nitrousRamp1 !== undefined) k += `|nr${Math.round(t.nitrousRamp1 * 100)}`;
+  if (t.nitrousFlow2 !== undefined) k += `|ng${Math.round(t.nitrousFlow2 * 100)}`;
+  if (t.nitrousRamp2 !== undefined) k += `|nq${Math.round(t.nitrousRamp2 * 100)}`;
   return k;
 }
 
