@@ -87,6 +87,7 @@ export class RaceMode implements Mode {
     this.offs.push(
       inp.on('upshift', () => this.shift(1)),
       inp.on('downshift', () => this.shift(-1)),
+      inp.on('nitrous', () => this.nitrous()),
       inp.on('restart', () => this.newRace()),
       inp.on('pause', () => (this.runner.paused = !this.runner.paused)),
       inp.on('camera', () => (this.cameraMode = CAMERAS[(CAMERAS.indexOf(this.cameraMode) + 1) % CAMERAS.length]!)),
@@ -102,6 +103,12 @@ export class RaceMode implements Mode {
     this.banner?.remove();
     this.resultCard?.remove();
     clear(this.ctx.panel);
+  }
+
+  private nitrous(): void {
+    const p = this.runner.player;
+    if (!p || this.runner.paused || this.race?.phase === 'finished') return;
+    p.sim.requestNitrous();
   }
 
   private shift(dir: 1 | -1): void {

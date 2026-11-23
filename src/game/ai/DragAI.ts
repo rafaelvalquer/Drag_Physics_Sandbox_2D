@@ -174,6 +174,15 @@ export class DragAI {
     this.updateThrottle(h, sim, slip);
     c.pedal = this.pedal;
 
+    // nitrous: deterministic rules from gear, grip and the stage that is next (no extra cylinder, no refill)
+    const nit = sim.nitrous;
+    if (nit && race.timeSinceGreen !== null && !race.finished) {
+      const next = nit.startableStage;
+      const gripOk = slip < (next === 2 ? 0.1 : 0.12);
+      if (next === 1 && sim.gear >= 2 && gripOk && sim.speed > 12) sim.requestNitrous();
+      else if (next === 2 && sim.gear >= 3 && gripOk) sim.requestNitrous();
+    }
+
     // shifting
     const g = sim.gear;
     // an automatic with torque converter is driven in D: its shift schedule does the shifting

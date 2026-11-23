@@ -910,3 +910,22 @@ th.win {
 .ws-req-blockers { margin: 6px 0; font-size: 12px; color: #ffb4b4; }
 .ws-req > button.primary { width: 100%; margin-top: 8px; }
 .ws-bundle-list { margin: 8px 0; padding-left: 18px; line-height: 1.6; }
+
+/* workshop: nitrous settings */
+.nitro-panel { margin: 10px 0; padding: 10px 12px; border: 1px solid rgba(110, 190, 255, 0.4); border-radius: 8px; background: rgba(110, 190, 255, 0.06); display: grid; gap: 6px; }
+.nitro-title { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #9fd4ff; }
+.nitro-info { display: grid; gap: 2px; font-size: 12px; color: var(--muted, #aab); }
+.nitro-row { display: grid; grid-template-columns: minmax(120px, 1.3fr) 2fr minmax(52px, auto); gap: 8px; align-items: center; font-size: 12.5px; }
+.nitro-row output { text-align: right; font-variant-numeric: tabular-nums; }
+.nitro-prev { font-size: 12px; font-variant-numeric: tabular-nums; }
+.nitro-risk[data-level='safe'] { color: #7fd99a; }
+.nitro-risk[data-level='sport'] { color: #e8c547; }
+.nitro-risk[data-level='aggressive'] { color: #ff9c4a; }
+.nitro-risk[data-level='critical'] { color: #ff6b6b; font-weight: 700; }
+.nitro-grip[data-level='good'] { color: #7fd99a; }
+.nitro-grip[data-level='limit'] { color: #e8c547; }
+.nitro-grip[data-level='spin'] { color: #ff6b6b; }
+.nitro-hint { margin: 0; font-size: 11.5px; color: var(--muted, #aab); }
+.nitro-dirty { font-size: 11px; color: var(--muted, #aab); }
+.nitro-dirty.on { color: #ffcf8a; }
+.nitro-msg.bad { color: #ff9c9c; }

@@ -34,6 +34,7 @@ import type { RaceRecord } from '../game/career/CareerController';
 import { TelemetryProbe, runHeadlessRace } from '../game/career/headlessRace';
 import { ownedCarBuild, ownedCarConfig, ownedCarLook, rivalBuild, rivalCar } from '../game/career/RivalBuildFactory';
 import { BUILD_RESOLVER_VERSION, resolveBuild, type BuildResult } from '../game/career/tuning/BuildResolver';
+import { buildNitrousPanel } from '../ui/career/nitrousPanel';
 import { compareTorqueBands } from '../game/career/tuning/breathingModel';
 import type { BuildTune } from '../game/career/tuning/buildCommon';
 import { failureSpecFor, reconcileTune, tuneReliability } from '../game/career/tuning/TuningCapabilities';
@@ -196,6 +197,7 @@ export class CareerMode implements Mode {
     this.offs.push(
       inp.on('upshift', () => this.shift(1)),
       inp.on('downshift', () => this.shift(-1)),
+      inp.on('nitrous', () => this.nitrous()),
       inp.on('pause', () => (this.runner.paused = !this.runner.paused)),
       inp.on('camera', () => (this.cameraMode = CAMERAS[(CAMERAS.indexOf(this.cameraMode) + 1) % CAMERAS.length]!)),
     );
@@ -240,6 +242,14 @@ export class CareerMode implements Mode {
     this.warn?.remove();
     this.warn = h('div', { class: 'career-warning', 'data-testid': 'career-warning' }, text);
     this.ctx.overlay.append(this.warn);
+  }
+
+  /** The nitrous key: starts the next discharge of the player's car (only in a running race). */
+  private nitrous(): void {
+    if (this.screen !== 'race' || this.autopilot || this.runner.paused) return;
+    const p = this.runner.player;
+    if (!p || this.race?.phase === 'finished') return;
+    p.sim.requestNitrous();
   }
 
   private shift(dir: 1 | -1): void {
@@ -1127,6 +1137,19 @@ export class CareerMode implements Mode {
       h('div', { class: 'hint' }, `Requisitos: ${reqs.join(' · ')}`),
       h('div', { class: 'hint' }, `Compatibilidade: ${installed ? (after.ok ? 'instalada e removível' : 'instalada e compatível; outras peças dependem dela') : after.ok ? 'compatível com este carro' : 'faltam requisitos para instalar (veja abaixo)'}`),
       plan ? this.requirementsPanel(plan, act) : '',
+      // the installed nitrous kit: mode, flow and ramp of each discharge, with a live preview
+      installed && p.category === 'nitrous'
+        ? buildNitrousPanel({
+            kit: p,
+            saved: car.tune ?? {},
+            resolve: (tune) => resolveBuild(findCampaignCar(car.baseCarId)!, car.installedParts, tune, buildVersionFor(car, car.installedParts)),
+            save: (tune) => this.controller.applyTune(car.id, tune),
+            done: () => {
+              toast('Regulagem do nitro salva.');
+              this.show('workshop');
+            },
+          })
+        : '',
       cmpHost,
       h('div', { class: 'row' }, buttons),
     );

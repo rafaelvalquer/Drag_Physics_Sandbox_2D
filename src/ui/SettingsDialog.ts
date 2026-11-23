@@ -1,5 +1,5 @@
 import { GRAPHICS_LABELS, TIME_OF_DAY_LABELS } from '../app/graphics';
-import { ACTION_LABELS, DEFAULT_BINDINGS, DRIVE_ACTIONS, META_ACTIONS, keyLabel, validateBindings, type ActionId, type Bindings, type InputManager } from '../game/input/InputManager';
+import { ACTION_LABELS, DEFAULT_BINDINGS, DRIVE_ACTIONS, META_ACTIONS, SPECIAL_ACTIONS, keyLabel, validateBindings, type ActionId, type Bindings, type InputManager } from '../game/input/InputManager';
 import { PEDAL_RISE_RANGE, ZOOM_RANGE, type AppSettings } from '../app/settings';
 import { h } from './dom';
 
@@ -18,7 +18,7 @@ export function openSettingsDialog(deps: SettingsDialogDeps): void {
 
   const renderBindings = (): void => {
     table.replaceChildren(
-      ...([...DRIVE_ACTIONS, ...META_ACTIONS] as ActionId[]).map((a) => {
+      ...([...DRIVE_ACTIONS, ...SPECIAL_ACTIONS, ...META_ACTIONS] as ActionId[]).map((a) => {
         const keys = bindings[a];
         return h(
           'div',

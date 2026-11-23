@@ -8,10 +8,13 @@
  * remappable. Key auto-repeat is ignored; losing focus releases everything.
  */
 export type DriveAction = 'throttle' | 'upshift' | 'downshift';
+/** Optional car equipment key: the N₂O kit (Shift by default). A car without the kit ignores it. */
+export type SpecialAction = 'nitrous';
 export type MetaAction = 'restart' | 'pause' | 'mute' | 'camera' | 'telemetry';
-export type ActionId = DriveAction | MetaAction;
+export type ActionId = DriveAction | SpecialAction | MetaAction;
 
 export const DRIVE_ACTIONS: readonly DriveAction[] = ['throttle', 'upshift', 'downshift'];
+export const SPECIAL_ACTIONS: readonly SpecialAction[] = ['nitrous'];
 export const META_ACTIONS: readonly MetaAction[] = ['restart', 'pause', 'mute', 'camera', 'telemetry'];
 
 export type Bindings = Record<ActionId, string[]>;
@@ -20,6 +23,7 @@ export const DEFAULT_BINDINGS: Bindings = {
   throttle: ['KeyW', 'ArrowUp'],
   upshift: ['KeyE'],
   downshift: ['KeyQ'],
+  nitrous: ['ShiftLeft'],
   restart: ['KeyR'],
   pause: ['KeyP', 'Escape'],
   mute: ['KeyM'],
@@ -31,6 +35,7 @@ export const ACTION_LABELS: Record<ActionId, string> = {
   throttle: 'Acelerador',
   upshift: 'Subir marcha',
   downshift: 'Descer marcha',
+  nitrous: 'Nitro (N₂O)',
   restart: 'Reiniciar simulação',
   pause: 'Pausar',
   mute: 'Silenciar áudio',
@@ -64,7 +69,7 @@ const RESERVED = new Set(['Tab', 'MetaLeft', 'MetaRight', 'F5', 'F11', 'F12']);
 export function validateBindings(b: Bindings): string[] {
   const errors: string[] = [];
   const owner = new Map<string, ActionId>();
-  for (const a of [...DRIVE_ACTIONS, ...META_ACTIONS]) {
+  for (const a of [...DRIVE_ACTIONS, ...SPECIAL_ACTIONS, ...META_ACTIONS]) {
     const codes = b[a] ?? [];
     if (codes.length === 0 && DRIVE_ACTIONS.includes(a as DriveAction)) errors.push(`${ACTION_LABELS[a]}: nenhuma tecla atribuída`);
     for (const c of codes) {
@@ -92,7 +97,7 @@ export class InputManager {
   private readonly target: Window;
 
   constructor(bindings: Bindings = DEFAULT_BINDINGS, target: Window = window) {
-    this.bindings = structuredClone(bindings);
+    this.bindings = { ...structuredClone(DEFAULT_BINDINGS), ...structuredClone(bindings) }; // settings saved before an action existed get its default key
     this.target = target;
     this.rebuild();
     target.addEventListener('keydown', this.onDown);

@@ -1127,3 +1127,20 @@ details.fold[open] > summary {
     border-top: 1px solid var(--line);
   }
 }
+
+/* nitrous gauge of the race HUD: the state is text first; colour and the pulse only add to it */
+.rhud .nitro-row-hud .k { font-size: 10px; letter-spacing: 0.04em; }
+.rhud .nitro-row-hud .val { min-width: 96px; font-weight: 600; font-size: 11px; }
+.rhud .nitro-row-hud .fill { background: #5aaeff; }
+.rhud .nitro-row-hud[data-status='STAGE_1_ACTIVE'] .fill,
+.rhud .nitro-row-hud[data-status='STAGE_2_ACTIVE'] .fill { background: #7fe3ff; animation: nitro-flow 0.5s linear infinite alternate; }
+.rhud .nitro-row-hud[data-status='STAGE_2_READY'] .val { color: #7fe3ff; animation: nitro-ready 1.1s ease-in-out infinite; }
+.rhud .nitro-row-hud[data-status='DEPLETED'] .fill,
+.rhud .nitro-row-hud[data-status='DISABLED'] .fill { background: #5c6670; }
+.rhud .nitro-row-hud[data-status='DEPLETED'] .val,
+.rhud .nitro-row-hud[data-status='DISABLED'] .val { color: #8b97a3; }
+@keyframes nitro-flow { from { filter: brightness(0.9); } to { filter: brightness(1.25); } }
+@keyframes nitro-ready { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+@media (prefers-reduced-motion: reduce) {
+  .rhud .nitro-row-hud .fill, .rhud .nitro-row-hud .val { animation: none !important; }
+}
