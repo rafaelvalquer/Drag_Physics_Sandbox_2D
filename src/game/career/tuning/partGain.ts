@@ -1,8 +1,8 @@
 import type { CarConfig, TrackConfig } from '../../../data/schema';
-import { MonotoneCubic } from '../../../core/math';
 import { runAccelerationTest } from '../../race/accelerationTest';
 import { RACE_DISTANCES } from '../../race/RaceController';
 import { boostRangeForParts, resolveBuild, type BuildResult, type ResolverVersion } from './BuildResolver';
+import { compareTorqueBands } from './breathingModel';
 import { familyOf, incompatibility, transmissionKindOf } from './BuildResolverV2';
 import { findPart, type PartDef } from './parts';
 import { reliabilityLimits } from './EngineReliability';
@@ -26,7 +26,7 @@ export interface PartGain {
   cvAfter: number;
   torqueBeforeNm: number;
   torqueAfterNm: number;
-  torqueBands: { fromRpm: number; toRpm: number; beforeNm: number; afterNm: number }[];
+  torqueBands: ReturnType<typeof compareTorqueBands>;
   redlineBeforeRpm: number;
   redlineAfterRpm: number;
   massBeforeKg: number;
@@ -176,23 +176,6 @@ function physicsSignature(car: CarConfig): string {
 
 type ValidBuild = Extract<BuildResult, { ok: true }>;
 
-function torqueBands(base: CarConfig['engine'], after: CarConfig['engine']): PartGain['torqueBands'] {
-  const a = new MonotoneCubic(base.torqueCurve.rpm, base.torqueCurve.torqueNm);
-  const b = new MonotoneCubic(after.torqueCurve.rpm, after.torqueCurve.torqueNm);
-  const floor = 1.5 * Math.max(base.idleRpm, after.idleRpm);
-  const span = Math.min(base.revLimitRpm, after.revLimitRpm) - floor;
-  return [0, 1, 2].map((index) => {
-    const fromRpm = Math.round(floor + span * index / 3);
-    const toRpm = Math.round(floor + span * (index + 1) / 3);
-    const mean = (curve: MonotoneCubic): number => {
-      let sum = 0;
-      for (let i = 0; i < 16; i++) sum += curve.evaluate(fromRpm + (toRpm - fromRpm) * (i + 0.5) / 16);
-      return sum / 16;
-    };
-    return { fromRpm, toRpm, beforeNm: mean(a), afterNm: mean(b) };
-  });
-}
-
 function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, context: string[], track: TrackConfig, extendedSplits: boolean): PartAudit {
   let a: ReturnType<typeof measure>;
   let b: ReturnType<typeof measure>;
@@ -219,7 +202,7 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     cvAfter: after.peakPowerCv,
     torqueBeforeNm: base.peakTorqueNm,
     torqueAfterNm: after.peakTorqueNm,
-    torqueBands: torqueBands(base.car.engine, after.car.engine),
+    torqueBands: compareTorqueBands(base.car.engine, after.car.engine),
     redlineBeforeRpm: base.car.engine.revLimitRpm,
     redlineAfterRpm: after.car.engine.revLimitRpm,
     massBeforeKg: base.car.massKg,

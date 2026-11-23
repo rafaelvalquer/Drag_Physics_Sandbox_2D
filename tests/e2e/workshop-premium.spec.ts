@@ -24,6 +24,10 @@ test('oficina premium: nove sistemas, grupos distintos, estados e adaptação pa
   for (const name of ['engine', 'intake', 'exhaust', 'transmission', 'tires', 'turbo', 'electronics', 'cooling', 'chassis'])
     await expect(page.getByTestId(`ws-tab-${name}`)).toHaveCount(1);
 
+  const turboCams = page.getByTestId('ws-group-camshaft').locator('[data-testid^="ws-part-cam-turbo"]');
+  expect(await turboCams.evaluateAll((cards) => cards.map((card) => card.getAttribute('data-tier')))).toEqual(['1', '2', '3']);
+  await expect(turboCams.first()).toContainText('1.050 CR');
+
   await page.getByTestId('ws-tab-intake').click();
   for (const slot of ['intake-filter', 'intake-manifold', 'intake-throttle', 'intake-airbox']) {
     await expect(page.getByTestId(`ws-group-${slot}`)).toBeVisible();
@@ -119,8 +123,11 @@ test('oficina moderna: libera, substitui e guarda estágios da mesma peça', asy
   await page.getByTestId('ws-tab-electronics').click();
   await page.getByTestId('ws-part-fuel-bmw-n20-s1').click();
   await expect(page.getByTestId('ws-compare')).toContainText('Vazão de combustível');
+  await page.getByTestId('ws-part-boost-solenoid-bmw-n20-s1').click();
+  await expect(page.getByTestId('ws-compare')).toContainText('Constante de enchimento do turbo');
   await page.getByTestId('ws-tab-engine').click();
   await page.getByTestId('ws-part-compression-chamber-bmw-n20-s1').click();
+  await expect(page.getByTestId('ws-compare')).toContainText('Torque médio');
   await expect(page.getByTestId('ws-compare')).toContainText('Taxa de compressão');
   await expect(page.getByTestId('ws-compare')).toContainText('Pressão sem atraso por detonação');
 });

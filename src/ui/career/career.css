@@ -843,15 +843,6 @@ th.win {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.ws-new-tag {
-  position: absolute;
-  bottom: 7px;
-  right: 8px;
-  font: 9px var(--mono);
-  color: #f4bf75;
-  opacity: .72;
-  letter-spacing: .12em;
-}
 .ws-right {
   position: sticky;
   top: 10px;

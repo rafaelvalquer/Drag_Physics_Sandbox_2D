@@ -1,4 +1,5 @@
 import type { EngineConfig } from '../../../data/schema';
+import { MonotoneCubic } from '../../../core/math';
 import { ATMOSPHERIC_PRESSURE, R_AIR, STANDARD_TEMPERATURE_K } from '../../../core/units';
 import { EngineModel, WILLANS_OFFSET } from '../../../physics/engine/EngineModel';
 import { engineGeometry } from '../../../physics/engine/EngineGeometry';
@@ -384,6 +385,24 @@ function calibrateEngineParts(stock: EngineConfig, parts: EngineParts): Breathin
 /** Fuel of an engine: the field when present, else inferred from the id (older data). */
 export function engineFuel(e: EngineConfig): 'gasoline' | 'ethanol' {
   return e.fuel ?? (/ethanol|etanol|alcool/i.test(e.id) ? 'ethanol' : 'gasoline');
+}
+
+/** Compare mean torque over thirds of the rev range shared by both configurations. */
+export function compareTorqueBands(before: EngineConfig, after: EngineConfig) {
+  const a = new MonotoneCubic(before.torqueCurve.rpm, before.torqueCurve.torqueNm);
+  const b = new MonotoneCubic(after.torqueCurve.rpm, after.torqueCurve.torqueNm);
+  const floor = 1.5 * Math.max(before.idleRpm, after.idleRpm);
+  const span = Math.min(before.revLimitRpm, after.revLimitRpm) - floor;
+  return [0, 1, 2].map((index) => {
+    const fromRpm = Math.round(floor + span * index / 3);
+    const toRpm = Math.round(floor + span * (index + 1) / 3);
+    const mean = (curve: MonotoneCubic): number => {
+      let sum = 0;
+      for (let i = 0; i < 16; i++) sum += curve.evaluate(fromRpm + (toRpm - fromRpm) * (i + 0.5) / 16);
+      return sum / 16;
+    };
+    return { fromRpm, toRpm, beforeNm: mean(a), afterNm: mean(b) };
+  });
 }
 
 /** Highest compression ratio that takes 0.6 bar of boost with ignition retard alone. */

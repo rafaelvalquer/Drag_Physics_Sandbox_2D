@@ -32,6 +32,7 @@ import type { RaceRecord } from '../game/career/CareerController';
 import { TelemetryProbe, runHeadlessRace } from '../game/career/headlessRace';
 import { ownedCarBuild, ownedCarConfig, ownedCarLook, rivalBuild, rivalCar } from '../game/career/RivalBuildFactory';
 import { BUILD_RESOLVER_VERSION, resolveBuild, type BuildResult } from '../game/career/tuning/BuildResolver';
+import { compareTorqueBands } from '../game/career/tuning/breathingModel';
 import type { BuildTune } from '../game/career/tuning/buildCommon';
 import { failureSpecFor, reconcileTune, tuneReliability } from '../game/career/tuning/TuningCapabilities';
 import { playBlownEngine, playRiskWarning } from '../audio/core/blownEngineSound';
@@ -809,9 +810,16 @@ export class CareerMode implements Mode {
     const groups = tab.categories.map((cat, index) => {
       const inSlot = equipped.find((p) => p.category === cat);
       const categoryParts = allInTab.filter((p) => p.category === cat);
-      const entries = categoryParts.map((p) => {
-        const st = partStatus(s, car, p, family);
+      const positionByGroup = new Map<string, number>();
+      const ordered = categoryParts.map((p, index) => {
         const progression = progressionOf(p, family, car.baseCarId);
+        const group = progression?.group ?? p.id;
+        const position = positionByGroup.get(group) ?? index;
+        positionByGroup.set(group, position);
+        return { p, progression, position };
+      }).sort((a, b) => a.position - b.position || (a.progression?.tier ?? 0) - (b.progression?.tier ?? 0));
+      const entries = ordered.map(({ p, progression }) => {
+        const st = partStatus(s, car, p, family);
         return h('li', {
           class: `ws-part-card ${sel?.id === p.id ? 'sel' : ''} ${st.state}`,
           'data-testid': `ws-part-${p.id}`,
@@ -828,10 +836,9 @@ export class CareerMode implements Mode {
             h('span', { class: 'ws-part-name' }, p.name),
             h('span', { class: `pill ${st.state}`, 'data-testid': `ws-pill-${p.id}` }, st.label)),
           h('small', { class: 'ws-part-meta' },
-            `CAP. ${partChapter(p)} · `,
+            `CAP. ${partChapter(p)} · ${cr(p.price)} · `,
             progression ? `Stage ${progression.tier} · ${progression.specialization} · ` : null,
             st.state === 'locked' ? st.detail : p.physics),
-          ('chapter' in p && p.chapter === 1) ? h('span', { class: 'ws-new-tag' }, 'NOVO') : null,
         );
       });
       return h(
@@ -1002,6 +1009,13 @@ export class CareerMode implements Mode {
       const t1 = after.car.transmission;
       const torque = (n: number): string => `${f1(n)} N·m`;
       const ms = (n: number): string => `${f1(n * 1000)} ms`;
+      const rpm = (n: number): string => n.toLocaleString('pt-BR');
+      const bandRows = compareTorqueBands(before.car.engine, after.car.engine)
+        .filter(({ beforeNm, afterNm }) => Math.abs(afterNm - beforeNm) >= 0.1)
+        .map(({ fromRpm, toRpm, beforeNm, afterNm }) =>
+          row(`Torque médio, ${rpm(fromRpm)}–${rpm(toRpm)} rpm`, torque(beforeNm), torque(afterNm), beforeNm, afterNm));
+      const turbo0 = before.car.engine.turbo;
+      const turbo1 = after.car.engine.turbo;
       const fuel0 = before.car.engine.fueling;
       const fuel1 = after.car.engine.fueling;
       const fuelBase = fuel0 || fuel1 ? findCampaignCar(before.car.id) : undefined;
@@ -1013,11 +1027,13 @@ export class CareerMode implements Mode {
           h('tr', {}, h('th', {}, ''), h('th', {}, 'Antes'), h('th', {}, afterLabel)),
           row('Potência', `${f1(before.peakPowerCv)} cv`, `${f1(after.peakPowerCv)} cv`, before.peakPowerCv, after.peakPowerCv, 'higher', 0.05),
           row('Torque', `${f1(before.peakTorqueNm)} N·m`, `${f1(after.peakTorqueNm)} N·m`, before.peakTorqueNm, after.peakTorqueNm, 'higher', 0.05),
+          ...bandRows,
           row('Faixa útil (90 % do torque)', range(before), range(after), width(before), width(after), 'higher'),
           row(t0.powershift ? 'Capacidade do câmbio' : 'Embreagem', torque(t0.clutch.maxTorqueNm), torque(t1.clutch.maxTorqueNm), t0.clutch.maxTorqueNm, t1.clutch.maxTorqueNm),
           changed('Capacidade dos internos', before.internalTorqueLimitNm, after.internalTorqueLimitNm, torque, 'higher'),
           changed('Taxa de compressão', before.car.engine.compressionRatio, after.car.engine.compressionRatio, (n) => `${f2(n)}:1`, 'neutral'),
           changed('Rotação de largada', t0.clutch.launchRpm, t1.clutch.launchRpm, (n) => `${n} rpm`, 'neutral'),
+          changed('Constante de enchimento do turbo', turbo0?.spoolTimeS, turbo1?.spoolTimeS, ms, 'lower'),
           changed('Temperatura da carga na pressão-alvo', before.chargeTemperatureAtTargetK, after.chargeTemperatureAtTargetK, (n) => `${f1(n - 273.15)} °C`, 'lower'),
           changed('Pressão sem atraso por detonação', before.knockFreeBoostBar, after.knockFreeBoostBar, (n) => `${f2(n)} bar`, 'higher'),
           changed('Fase de torque da troca', t0.powershift?.torquePhaseS, t1.powershift?.torquePhaseS, ms, 'lower'),
