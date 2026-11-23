@@ -24,6 +24,7 @@ import type { PartProgression } from './partProgression';
  * (e.g. semi-slick tyres replace sport tyres; nothing stacks).
  */
 import { CELTA_TURBO_COMPRESSION, EXPANDED_PARTS } from './expandedParts';
+import { NITROUS_KITS } from './nitrousParts';
 
 export type PartCategory =
   | 'intake-filter' | 'intake-manifold' | 'intake-throttle' | 'intake-airbox'
@@ -35,7 +36,7 @@ export type PartCategory =
   | 'electronics-ecu' | 'electronics-fuel' | 'electronics-ignition'
   | 'cooling-radiator' | 'cooling-oil' | 'cooling-fan'
   | 'chassis-weight' | 'chassis-suspension'
-  | 'engine-valvetrain' | 'electronics-launch'
+  | 'engine-valvetrain' | 'electronics-launch' | 'nitrous'
   | V2Category;
 
 /** Slots of the Chapter 2 parts (BuildResolver v2, modern engine families only). */
@@ -81,6 +82,7 @@ export const WORKSHOP_TABS: readonly WorkshopTab[] = [
   { id: 'turbo', label: 'Turbo', icon: '◌', description: 'Pressão, spool e temperatura', categories: ['turbo', 'turbo-turbine', 'turbo-intercooler', 'turbo-wastegate', 'turbo-boost', 'intercooler'] },
   { id: 'electronics', label: 'Eletrônica', icon: '⌘', description: 'ECU, combustível e ignição', categories: ['electronics-ecu', 'electronics-fuel', 'electronics-ignition', 'ecu', 'boost-control', 'electronics-launch'] },
   { id: 'cooling', label: 'Arrefecimento', icon: '❄', description: 'Gerenciamento térmico', categories: ['cooling-radiator', 'cooling-oil', 'cooling-fan', 'turbo-intercooler'] },
+  { id: 'nitrous', label: 'Nitro', icon: '✦', description: 'Kit de N₂O e regulagem das descargas', categories: ['nitrous'] },
   { id: 'chassis', label: 'Estrutura', icon: '◇', description: 'Massa e geometria', categories: ['chassis-weight', 'chassis-suspension', 'suspension'] },
 ];
 /** One mechanical slot can appear in more than one navigation tab (intercooler: turbo + cooling).
@@ -119,6 +121,7 @@ export const CATEGORY_LABEL: Record<PartCategory, string> = {
   suspension: 'Suspensão de arrancada',
   'engine-valvetrain': 'Molas de válvula',
   'electronics-launch': 'Controle de largada',
+  nitrous: 'Nitro / N₂O',
 };
 export const CATEGORY_DESCRIPTION: Record<PartCategory, string> = {
   'intake-filter': 'Restrição do filtro de ar em alta vazão.', 'intake-manifold': 'Comprimento e área dos dutos de admissão.',
@@ -147,6 +150,7 @@ export const CATEGORY_DESCRIPTION: Record<PartCategory, string> = {
   suspension: 'Altura efetiva do centro de gravidade na transferência de carga.',
   'engine-valvetrain': 'Rotação em que as válvulas deixam de seguir o comando (flutuação).',
   'electronics-launch': 'Rotação mantida na linha de largada (two-step).',
+  nitrous: 'Kit de N₂O: uma ou duas descargas, acionadas com Shift.',
 };
 
 /** Numeric mechanical changes use SI units or the documented suffix (Bar, KPa, Mm, Rpm).
@@ -531,7 +535,7 @@ export interface LaunchControlPart extends PartBase {
 
 /** Slot-catalogue part (classic engines, BuildResolver v1): hardware changes in `mod`. */
 export interface ExpandedPart extends PartBase {
-  category: Exclude<PartCategory, V2Category | 'electronics-launch'>;
+  category: Exclude<PartCategory, V2Category | 'electronics-launch' | 'nitrous'>;
   chapter: 1 | 2 | 3;
   mod: MechanicalMods;
   /** This part is only meaningful with a turbo kit already installed. */
@@ -542,7 +546,32 @@ export interface ExpandedPart extends PartBase {
   modernBreathing?: true;
 }
 
+/** Physical data of a nitrous kit (see NitrousController): capacity, flow, mass and what it asks of the car. */
+export interface NitrousKitSpec {
+  level: 1 | 2 | 3 | 4;
+  /** Extra power at the kit's maximum flow, on a car with enough fuel (cv): the nominal figure. */
+  maxPowerCvRef: number;
+  /** N₂O in the cylinder (kg). */
+  capacityKg: number;
+  /** Highest flow the kit passes (kg/s). */
+  maxFlowKgS: number;
+  /** Mass of the cylinder, lines and solenoids (kg): carried even with the nitro off. */
+  massKg: number;
+  /** Fuel system capacity the kit asks for (1 = stock). */
+  fuelNeed: number;
+  /** Lowest engine speed the injection starts and runs at (rpm). */
+  minRpm: number;
+  /** How precisely the ramp-in can be set (0.5 = coarse … 1 = full range). */
+  rampControl: number;
+}
+
+export interface NitrousKitPart extends PartBase {
+  category: 'nitrous';
+  kit: NitrousKitSpec;
+}
+
 export type PartDef =
+  | NitrousKitPart
   | DownpipePart
   | FilterPart
   | ExhaustPart
@@ -617,9 +646,17 @@ export type UnlockId =
   | 'c3-workshop-sport'
   | 'c3-workshop-race'
   | 'c3-dealer-gtr'
-  | 'c3-final-challenge';
+  | 'c3-final-challenge'
+  | 'nitrous-street'
+  | 'nitrous-wet'
+  | 'nitrous-progressive'
+  | 'nitrous-direct';
 
 export const UNLOCK_LABEL: Record<UnlockId, string> = {
+  'nitrous-street': 'Kit de nitro Street Shot',
+  'nitrous-wet': 'Kit de nitro Wet Performance',
+  'nitrous-progressive': 'Kit de nitro Progressive Race',
+  'nitrous-direct': 'Kit de nitro Direct Port',
   'workshop-basic': 'Oficina básica',
   'part-filter': 'Filtro esportivo',
   'part-exhaust': 'Escape esportivo',
@@ -937,6 +974,7 @@ export const ALL_PARTS: readonly PartDef[] = [
   ...MODERN_ECU_PARTS,
   ...COOLING_PARTS,
   ...MODERN_SUSPENSION_PARTS,
+  ...NITROUS_KITS,
 ];
 
 export function findPart(id: string): PartDef | undefined {

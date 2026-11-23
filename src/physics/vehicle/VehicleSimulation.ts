@@ -11,9 +11,14 @@ import { PowershiftController, autoShiftDecision, type GearboxMode } from '../dr
 import { TorqueConverterController, converterState } from '../drivetrain/TorqueConverter';
 import { TireModel } from './TireModel';
 import { EngineOverrevFailure, type OverrevSpec } from '../engine/EngineOverrevFailure';
+import { NitrousController } from '../engine/NitrousController';
 
 /** Events of one simulation (emitted once each). */
-export type VehicleEvent = { type: 'ENGINE_BLOWN'; simTime: number; rpm: number };
+export type VehicleEvent =
+  | { type: 'ENGINE_BLOWN'; simTime: number; rpm: number }
+  | { type: 'NITROUS_START'; simTime: number; stage: 1 | 2 }
+  | { type: 'NITROUS_STAGE_END'; simTime: number; stage: 1 | 2 }
+  | { type: 'NITROUS_DEPLETED'; simTime: number };
 
 export interface VehicleControls {
   /** Driver/AI throttle request 0..1 (already progressive). */
@@ -122,6 +127,8 @@ export class VehicleSimulation {
   failure: EngineOverrevFailure | null = null;
   /** Listener of the simulation events (ENGINE_BLOWN). */
   onEvent: ((e: VehicleEvent) => void) | null = null;
+  /** N₂O system of the car (null = no kit): full cylinder at creation and at every reset. */
+  nitrous: NitrousController | null = null;
   private autoStartCooldown = 0;
   private autoStartAttempts = 0;
   private ignitionEventsStep = 0;
@@ -152,6 +159,7 @@ export class VehicleSimulation {
       temperatureK: celsiusToKelvin(track.ambientTempC),
     };
     this.engine = new EngineModel(car.engine, ambient);
+    if (car.nitrous) this.nitrous = new NitrousController(car.nitrous);
     this.gearbox = new Gearbox(car.transmission);
     this.transmissionKind = car.transmission.kind ?? 'manual';
     if (this.transmissionKind === 'manual') {
@@ -261,6 +269,8 @@ export class VehicleSimulation {
   reset(x = 0): void {
     this.engine.reset();
     this.failure?.reset(); // a restart is a fresh engine (failures stay enabled)
+    this.nitrous?.reset(); // …and a full cylinder
+    this.engine.nitrousTorqueNm = 0;
     this.gearbox.reset();
     this.shift.reset();
     this.clutchCtl.reset();
@@ -374,6 +384,24 @@ export class VehicleSimulation {
   }
 
   /** Turns the over-rev failure model on (career races, sandbox option) or off (null). */
+  /** A press of the nitrous key: starts the next stage when the engine can take it (see NitrousController.request). */
+  requestNitrous(): boolean {
+    const n = this.nitrous;
+    if (!n) return false;
+    const eng = this.engine;
+    const started = n.request({ rpm: eng.rpm, injectable: eng.nitrousInjectable, broken: eng.runState === 'BROKEN' });
+    if (started) this.flushNitrousEvents(n);
+    return started;
+  }
+
+  private flushNitrousEvents(n: NitrousController): void {
+    for (const e of n.drainEvents()) {
+      if (e.type === 'START') this.onEvent?.({ type: 'NITROUS_START', simTime: this.simTime, stage: e.stage });
+      else if (e.type === 'STAGE_END') this.onEvent?.({ type: 'NITROUS_STAGE_END', simTime: this.simTime, stage: e.stage });
+      else this.onEvent?.({ type: 'NITROUS_DEPLETED', simTime: this.simTime });
+    }
+  }
+
   enableEngineFailure(spec: OverrevSpec | null): void {
     this.failure = spec ? new EngineOverrevFailure(spec) : null;
   }
@@ -494,6 +522,11 @@ export class VehicleSimulation {
     ei.sparkCut = this.shift.sparkCut;
     ei.ignitionOn = ignitionOn;
     ei.starter = starter;
+    if (this.nitrous) {
+      this.nitrous.update(h, { rpm: eng.rpm, injectable: eng.nitrousInjectable, broken: eng.runState === 'BROKEN' });
+      eng.nitrousTorqueNm = this.nitrous.additionalTorqueNm;
+      this.flushNitrousEvents(this.nitrous);
+    }
     const engineTorque = eng.preStep(h, ei);
 
     // ---------- loads & external forces ----------
@@ -713,6 +746,10 @@ export class VehicleSimulation {
       if (fl.update(h, eng.rpm, eng.load, eng.turbo ? Math.max(0, eng.turbo.boostPa) / 1e5 : 0, egt, this.simTime)) {
         eng.breakEngine();
         this.onEvent?.({ type: 'ENGINE_BLOWN', simTime: this.simTime, rpm: fl.brokenRpm });
+      } else if (this.nitrous?.active && fl.updateTorque(h, this.nitrous.torqueRatio(eng.torqueCombustion), eng.rpm, this.simTime)) {
+        // the injected torque was more than the internals carry for long enough: deterministic failure
+        eng.breakEngine();
+        this.onEvent?.({ type: 'ENGINE_BLOWN', simTime: this.simTime, rpm: fl.brokenRpm });
       }
     }
     this.ignitionEventsStep = eng.ignition.eventsLastStep;
@@ -774,6 +811,7 @@ export class VehicleSimulation {
     t.converterSpeedRatio = this.turbine ? this.converterSr : 1;
     t.gearboxMode = this.gearboxMode;
     t.engineStrain = this.failure ? this.failure.strain : 0;
+    t.nitrous = this.nitrous ? this.nitrous.telemetry() : undefined;
   }
 
   private fillAudioFrame(slipVel: number, drivenLoad: number): void {

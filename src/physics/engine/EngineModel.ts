@@ -631,6 +631,8 @@ export class EngineModel {
     const indicated = this.wotIndicatedTorque(Math.max(rpm, cfg.torqueCurve.rpm[0]!));
     const willans = this.willansFactor(this.manifoldPressure);
     this.torqueCombustion = omega > 0 ? indicated * willans * burn * this.fueledFraction(this.airMassFlow) * this.thermal.torqueFraction : 0;
+    // N₂O: extra combustion torque from the injected oxidiser (NitrousController), only while the engine burns
+    if (omega > 0 && burn > 0) this.torqueCombustion += this.nitrousTorqueNm;
 
     // ----- losses -----
     const back = this.backPressure();
@@ -763,6 +765,14 @@ export class EngineModel {
     this.fuelCut = true;
     this.lastMessage = message;
     this.frame.runState = 'BROKEN';
+  }
+
+  /** Extra crank torque from the nitrous system this step (N·m); written by the simulation before preStep. */
+  nitrousTorqueNm = 0;
+
+  /** The engine is burning cleanly right now: a nitrous injection can start and run. */
+  get nitrousInjectable(): boolean {
+    return this.runState === 'RUNNING' && !this.fuelCut && !this.ignition.limiterActive && this.lastSparkCut < 0.2;
   }
 
   /** Can the engine produce combustion right now (used by the acoustic model). */
