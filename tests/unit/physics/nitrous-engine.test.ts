@@ -20,6 +20,7 @@ function race(car: CarConfig, gear: number | null): { et: number; maxSpeed: numb
   const sim = new VehicleSimulation(car, track);
   sim.controls.autoStart = true;
   const ai = new DragAI(car, 'advanced', 7);
+  ai.maxNitrousStage = 0; // the test presses the key itself (or never)
   for (let i = 0; i < 120 * 6; i++) {
     ai.update(H, sim, { timeSinceGreen: null, staged: true, finished: false });
     sim.controls.holdBrake = sim.gear === 0 || sim.controls.pedal < 0.02;

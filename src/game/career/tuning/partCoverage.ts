@@ -8,6 +8,7 @@ export const WORKSHOP_SLOTS = [...new Set(CATEGORY_ORDER.map(physicalSlotOfCateg
 /** Assess applicability independently of whether the catalog happens to cover the slot. */
 export function workshopSlotExclusion(car: CarConfig, slot: PartCategory): string | null {
   const transmission = transmissionKindOf(car);
+  if (slot === 'nitrous') return 'Kits de N₂O têm quatro portes próprios e ganho só enquanto injetam; ficam fora das sequências de três estágios.';
   if (slot === 'awd' && car.drivenAxle !== 'awd') return 'Veículo sem tração integral.';
   if ((slot === 'engine-flywheel' || slot === 'clutch') && transmission !== 'manual')
     return 'Componente de câmbio manual. A preparação compatível pertence ao slot do câmbio.';

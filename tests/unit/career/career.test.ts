@@ -70,7 +70,7 @@ describe('chapter data', () => {
     ]);
     expect(EVENTS[0]!.unlocks).toEqual(['workshop-basic', 'part-filter', 'part-exhaust', 'c1-dealer-celta']);
     expect(EVENTS[3]!.unlocks).toEqual(['part-clutch', 'part-differential', 'part-turbo', 'engine-tuners']);
-    expect(EVENTS[4]!.unlocks).toEqual(['part-tires-semislick']);
+    expect(EVENTS[4]!.unlocks).toEqual(['part-tires-semislick', 'nitrous-street']);
     expect(EVENTS[5]!.unlocks).toEqual(['final-challenge', 'part-launch-pro', 'c1-dealer-kadett']);
   });
 

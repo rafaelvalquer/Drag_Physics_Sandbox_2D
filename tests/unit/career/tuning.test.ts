@@ -161,9 +161,9 @@ describe('physical effects', () => {
 });
 
 describe('expanded premium workshop', () => {
-  it('has nine navigable systems and uniquely grouped subcategories', () => {
+  it('has ten navigable systems and uniquely grouped subcategories', () => {
     expect(WORKSHOP_TABS.map((t) => t.label)).toEqual([
-      'Motor', 'Admissão', 'Escape', 'Transmissão', 'Pneus', 'Turbo', 'Eletrônica', 'Arrefecimento', 'Estrutura',
+      'Motor', 'Admissão', 'Escape', 'Transmissão', 'Pneus', 'Turbo', 'Eletrônica', 'Arrefecimento', 'Nitro', 'Estrutura',
     ]);
     const all = WORKSHOP_TABS.flatMap((t) => t.categories);
     expect(new Set(all).size).toBe(CATEGORY_ORDER.length);
