@@ -41,6 +41,30 @@ Uma peça nunca soma potência: ela muda um parâmetro físico e a curva nova sa
   ignição por detonação proporcional à pressão e à taxa de compressão (gasolina 0,10/bar, etanol 0,025/bar), perda
   máxima de 25 %. Gasolina acima de 10,5:1 ou etanol acima de 13:1 recusam o kit. Exige embreagem com 1,2× o torque
   de pico. Acrescenta 18 kg. Pressão ajustável de 0,4 a 1,0 bar nos preparadores.
+- **Cruzamento de válvulas × turbo** (`breathingModel.ts`, `SHORT_CIRCUIT_PER_DEG`): com boost, a admissão fica acima do
+  escape durante o cruzamento (IVO/EVC) e parte da carga fresca passa direto pelo cilindro e sai pelo escape
+  (curto-circuito): perda = 2,8 %/° de cruzamento adicional × √(cruzamento/15°) × (p_adm − p_esc)/p_adm × √(rpm
+  nominal/rpm) (1 a 1,3), a área de fluxo cresce mais que linearmente com o cruzamento e a perda é pior em baixa
+  rotação. A pressão do turbo cai junto, pelo ponto fixo do turbo (menos torque, menos vazão na turbina). Quando o
+  escape passa da admissão (contrapressão da turbina), o cruzamento devolve gás queimado ao coletor (0,35 %/°). O
+  termo de diluição do aspirado não se soma a esses no turbo. Em aspirado nada muda. Os ganhos de fechamento da
+  admissão e de levantamento continuam, mas o cruzamento grande do Comando aspirado agressivo (+27°) os consome.
+  Medido no Chevette (dinamômetro, resolvedor v1):
+
+  | Comando | Aspirado cv | Turbo street (`turbo-street`, `fuel-pump`, `clutch-reinforced`) cv, antes → depois | N·m a 2.000 / 2.400 / 3.000 rpm, antes → depois |
+  |---|---|---|---|
+  | original | 72,0 | 123,7 → 123,7 | 157 / 181 / 196 → igual |
+  | Comando aspirado agressivo | 81,1 | 137,9 → 121,7 | 136 / 158 / 187 → 118 / 130 / 149 |
+  | Comando turbo | 77,0 | 131,5 → 129,2 | 149 / 171 / 193 → 149 / 169 / 192 |
+
+  Em um turbo completo (`turbo-strong`, cabeçote completo, taxa baixa, kit forjado, escape esportivo) o Comando turbo
+  entrega 207,8 cv contra 206,9 cv do aspirado agressivo, com 152 / 185 / 228 N·m contra 112 / 124 / 140 N·m a
+  2.000 / 2.400 / 3.000 rpm; no teste de arrancada fecha 402 m em 14,81 s contra 15,57 s (0–100 km/h: 6,79 s contra
+  7,83 s). O Comando turbo agora vence o aspirado agressivo em potência, torque e tempo em todos os kits turbo
+  testados; o aspirado agressivo continua melhor só no aspirado. Os demais comandos (`cam-sport`,
+  `cam-street-strong`) só mudam em carros turbo, na proporção do cruzamento; carros sem comando trocado e todos os
+  aspirados com comando clássico ficam idênticos (comparação de 2.350 combinações antes/depois). Travado em
+  `tests/unit/career/cam-overlap.test.ts`.
 - **Transmissão e pneus** mudam a configuração do carro (capacidade da embreagem, relação final, coeficientes de
   Pacejka, inércia, resistência ao rolamento, temperatura ideal).
 

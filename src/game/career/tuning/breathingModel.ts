@@ -43,6 +43,20 @@ const IVC_PIVOT = 0.78;
 const LIFT_GAIN_PER_MM = 0.03;
 /** Low-speed dilution per degree of extra valve overlap. */
 const OVERLAP_LOSS_PER_DEG = 0.0016;
+/**
+ * Short-circuit scavenging of a boosted engine: while both valves are open the intake (boost) is
+ * above the exhaust pressure, so fresh charge flows straight through the cylinder into the
+ * exhaust. Lost fraction of the trapped charge per degree of extra overlap, at a full pressure
+ * ratio across the overlap ((p_intake - p_exhaust) / p_intake = 1) and at the rated speed; the
+ * time spent in the overlap grows with 1/rpm (taken as its square root: the flow also drops), so it is worst at low speed (the lost mass is also
+ * the air the compressor already paid for, which is why the boost and the low-end torque fall).
+ */
+const SHORT_CIRCUIT_PER_DEG = 0.028;
+/** Overlap (deg) at which the loss per degree equals SHORT_CIRCUIT_PER_DEG; it grows with the flow area, i.e. ~ overlap^1.5. */
+const SHORT_CIRCUIT_REF_OVERLAP_DEG = 15;
+/** Burnt gas pushed back into a boosted intake per degree of extra overlap (exhaust above the intake). */
+const BOOSTED_REVERSION_PER_DEG = 0.0035;
+const SHORT_CIRCUIT_MAX = 0.35;
 
 export interface EngineParts {
   filter?: FilterPart;
@@ -212,6 +226,7 @@ export function applyEngineParts(stock: EngineConfig, parts: EngineParts): Breat
   const na: number[] = [];
   const naIndicated: number[] = [];
   const naMap: number[] = [];
+  const naOverlapDilution: number[] = [];
   for (const rpm of grid) {
     const op = stockModel.wotOperatingPoint(rpm);
     const r = op.flow / b0.referenceFlowKgS;
@@ -224,10 +239,12 @@ export function applyEngineParts(stock: EngineConfig, parts: EngineParts): Breat
     const residual = (p: number, pm: number): number => Math.pow(p / pm, 1 / GAMMA_EXHAUST) / stock.compressionRatio;
     const residualRatio = (1 - residual(back, map)) / (1 - residual(op.back, op.map));
     const x = rpm / ratedRpm;
+    // reversion of the exhaust into the intake at low speed (valid while the manifold is below the exhaust)
+    const overlapDilution = hasCam ? 1 - OVERLAP_LOSS_PER_DEG * overlapAdd * Math.max(0, 0.6 - x) / 0.6 : 1;
     const camRatio = hasCam
       ? (1 + IVC_SENSITIVITY_PER_DEG * camDelta.ivc * (x - IVC_PIVOT)) *
         (1 + LIFT_GAIN_PER_MM * camDelta.lift * smoothstep(0.55, 1.15, x)) *
-        (1 - OVERLAP_LOSS_PER_DEG * overlapAdd * Math.max(0, 0.6 - x) / 0.6)
+        overlapDilution
       : 1;
     // Port flow, throttle cross-section and Otto efficiency alter trapped mass / indicated work,
     // not an arbitrary power multiplier; strongest flow effect near peak rated air demand.
@@ -245,6 +262,7 @@ export function applyEngineParts(stock: EngineConfig, parts: EngineParts): Breat
     na.push(indicated - friction - pumping);
     naIndicated.push(indicated);
     naMap.push(map);
+    naOverlapDilution.push(overlapDilution);
   }
 
   const base: EngineConfig = {
@@ -308,10 +326,17 @@ export function applyEngineParts(stock: EngineConfig, parts: EngineParts): Breat
       // boosted MAP scaled from the NA point (same restriction ratio, higher upstream pressure)
       const mapT = naMap[i]! * pr;
       const willans = (p: number): number => p - WILLANS_OFFSET * ATMOSPHERIC_PRESSURE;
-      const density = (mapT * STANDARD_TEMPERATURE_K) / tCharge;
+      // boosted: the intake is above the exhaust, so the overlap blows fresh charge out (short circuit)
+      // instead of letting exhaust back in; the NA reversion term is replaced by that loss
+      const dpFraction = Math.max(0, (mapT - op.back) / mapT);
+      const shortCircuit = Math.min(SHORT_CIRCUIT_MAX, SHORT_CIRCUIT_PER_DEG * Math.max(0, overlapAdd) * Math.sqrt(Math.max(0, overlapAdd) / SHORT_CIRCUIT_REF_OVERLAP_DEG) * dpFraction * Math.min(1.3, Math.max(1, Math.sqrt(ratedRpm / grid[i]!))));
+      // when the exhaust is above the intake (turbine back pressure at high speed) the overlap does
+      // the opposite: hot burnt gas is pushed back into the intake and dilutes the charge
+      const reversion = BOOSTED_REVERSION_PER_DEG * Math.max(0, overlapAdd) * Math.min(1, Math.max(0, (op.back - mapT) / mapT) / 0.1);
+      const density = ((mapT * STANDARD_TEMPERATURE_K) / tCharge) * (1 - shortCircuit) * (1 - reversion);
       const knock = 1 - knockPerBar * (mod.knockRetardScale ?? 1) * (mod.coolingKnockScale ?? 1) * (op.boost / 1e5) * crExcess;
       knockLoss = Math.max(knockLoss, 1 - knock);
-      const indicated = (naIndicated[i]! * willans(density) * knock) / willans(naMap[i]!);
+      const indicated = ((naIndicated[i]! / naOverlapDilution[i]!) * willans(density) * knock) / willans(naMap[i]!);
       const back = op.back;
       const pumping = (back - mapT) * vdOver4pi;
       next.push(round1(Math.max(indicated - op.frictionNm * (mod.coolingFrictionScale ?? 1) - pumping, 1)));
