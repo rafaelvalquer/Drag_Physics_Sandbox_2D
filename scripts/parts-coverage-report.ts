@@ -82,7 +82,7 @@ const value = (n: number | null): string => n === null ? '—' : n.toFixed(2);
 const lines = [
   '# Matriz de cobertura da oficina',
   '',
-  `Distância oficial de ${WORKSHOP_DISTANCE_M.toFixed(3)} m, pista de testes e piloto avançado. Opções do catálogo atual ainda não representam estágios validados.`,
+  `Distância oficial de ${WORKSHOP_DISTANCE_M.toFixed(3)} m, pista de testes e piloto avançado. Os pares de estágios são medidos separadamente no relatório de progressão.`,
   '',
   '| Carro | Cap. | Família | Resolver | cv | N·m | ¼ milha (s) | 0–100 (s) | 100–200 (s) | Categorias cobertas/aplicáveis | Compatíveis | Builds válidos¹ | Sem efeito | Sem ganho² |',
   '|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
@@ -105,4 +105,10 @@ mkdirSync(output, { recursive: true });
 writeFileSync(join(output, 'parts-coverage.json'), JSON.stringify({
   distanceM: WORKSHOP_DISTANCE_M, extendedSplits, accelerationLimitS: WORKSHOP_ACCELERATION_LIMIT_S, cars, rivals,
 }, null, 2) + '\n');
+const gaps = cars.flatMap((car) => car.categories.filter((category) => category.applicable && category.tiers.length !== 3)
+  .map((category) => `${car.id}/${category.slot}`));
+const bad = cars.reduce((sum, car) => sum + car.parts.filter((part) => part.status !== 'gain' && part.status !== 'incompatible').length, 0);
+if (gaps.length) console.log(`Categorias com estágios ausentes: ${gaps.join(', ')}`);
+console.log(`${bad} combinações compatíveis sem ganho comprovado.`);
+if (args.includes('--fail') && (gaps.length || bad)) process.exitCode = 1;
 writeFileSync(join(output, 'parts-coverage.md'), lines.join('\n'));

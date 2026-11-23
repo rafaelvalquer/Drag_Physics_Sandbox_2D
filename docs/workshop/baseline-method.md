@@ -12,4 +12,6 @@ As contagens por categoria refletem opções compatíveis e opções com ganho. 
 
 Na matriz atual, `npx tsx scripts/parts-coverage-report.ts docs/workshop --extended` acrescenta as medições de 100–200 km/h aos resultados por peça. Para os pares de estágios use `npx tsx scripts/parts-stage-report.ts --out=docs/workshop --extended --fail`. O teste segue até a distância de referência e até 200 km/h, com limite de 45 s simulados. O JSON registra um valor nulo para esse intervalo se a montagem não alcançar 200 km/h. Os tempos nos 402,336 m e no 0–100 continuam sendo medidos na mesma passagem.
 
-O workflow da oficina testa uma referência de cada capítulo em pushes e pull requests. A execução manual gera a cobertura, a matriz de estágios e o relatório por peça em jobs separados.
+O workflow da oficina testa uma referência de cada capítulo em pushes e pull requests. A execução manual gera a cobertura, a matriz de estágios, o relatório por peça e a simulação da economia em jobs separados.
+
+A simulação é reproduzida com `npx tsx scripts/parts-economy-report.ts docs/workshop --fail`. Ela usa o saldo real de uma campanha nova, adquire as peças pelo controlador e registra a premiação calculada a partir das corridas simuladas. O relatório indica quantas provas livres a rota precisou disputar e em qual evento ela terminou.

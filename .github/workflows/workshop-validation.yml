@@ -67,7 +67,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        report: [coverage, stages, gains]
+        report: [coverage, stages, gains, economy]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -80,9 +80,10 @@ jobs:
         run: |
           mkdir -p audit
           case "${{ matrix.report }}" in
-            coverage) npx tsx scripts/parts-coverage-report.ts audit --extended ;;
+            coverage) npx tsx scripts/parts-coverage-report.ts audit --extended --fail ;;
             stages) npx tsx scripts/parts-stage-report.ts --out=audit --extended --fail ;;
             gains) npx tsx scripts/parts-gain-report.ts --fail | tee audit/parts-gain.log ;;
+            economy) npx tsx scripts/parts-economy-report.ts audit --fail ;;
           esac
       - name: Upload report
         if: always()
