@@ -42,6 +42,8 @@ export interface RenderVehicle {
   cranking: boolean;
   /** The engine is broken (blown engine): light smoke from under the bonnet. */
   blown?: boolean;
+  /** N₂O injection flow, 0..1 of the kit's maximum (0 / absent: not injecting). */
+  nitrous?: number;
   /** Engine load 0..1. */
   load: number;
   /** The automatic brakes are applied (held on the line or stopping after the finish). */

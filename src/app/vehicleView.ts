@@ -58,6 +58,7 @@ export class VehicleViews {
         running: s.engine.runState === 'RUNNING',
         cranking: s.engine.runState === 'CRANKING',
         blown: s.engine.runState === 'BROKEN',
+        nitrous: s.nitrous && s.nitrous.setup.maxFlowKgS > 0 ? s.nitrous.telemetry().flowKgPerS / s.nitrous.setup.maxFlowKgS : 0,
         braking: s.controls.autoBrake || s.controls.holdBrake,
         shifting: s.shift.active,
         load: s.engine.load,

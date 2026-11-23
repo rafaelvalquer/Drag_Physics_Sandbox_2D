@@ -122,6 +122,7 @@ export class VehicleVisualController {
   private puffCooldown = 0;
   private crankPuff = 0;
   private blownPuff = 0;
+  private nitroPuff = 0;
   private wasRunning = false;
   private lastX = 0;
   private destroyed = false;
@@ -310,6 +311,15 @@ export class VehicleVisualController {
         this.particles.exhaustPuff(hoodX, hoodY, v.speed, 0.55, 1, sc * 1.4);
       }
     }
+    // N₂O: a purge-like burst of puffs while injecting, denser with more flow; none when it is idle
+    const nf = v.nitrous ?? 0;
+    if (nf > 0.02) {
+      this.nitroPuff += dtS;
+      if (this.nitroPuff > 0.14 - 0.08 * nf) {
+        this.nitroPuff = 0;
+        this.particles.exhaustPuff(exX, exY, v.speed, 0.4 + 0.5 * nf, 1, sc);
+      }
+    } else this.nitroPuff = 0;
     if (env.dustTint !== null && v.speed > 8) this.particles.dust(this.id, v.x - m.wheelbaseM - 0.4, v.lane, v.speed, env.dustTint, dtS);
   }
 
