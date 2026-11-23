@@ -30,6 +30,12 @@ a resistência; só o hardware aumenta.
 - Faixas do painel do Dyno (pela posição do corte entre recomendado e limite): Seguro, Esportivo (até 35 %),
   Agressivo (até 75 %), Crítico. Turbo mais de 0,15 bar acima do padrão sobe uma faixa.
 
+## Corte de giro por estágio da ECU
+
+Toda ECU libera o ajuste do corte no Dyno Lab; o máximo que ela permite cresce com o estágio: Stage 1 até 35 % do caminho
+entre o giro recomendado e o limite mecânico (faixa Esportivo), Stage 2 até 70 % (Agressivo), Stage 3 e ECU programável até
+100 % (Crítico). `ecu-programmable`, `ecu-stage1-na`, `ecu-street` e `ecu-race` seguem com a faixa inteira.
+
 ## Resistência por família (s segurando um corte no limite mecânico)
 
 Todos os valores são **decisões de balanceamento** calibradas com o script abaixo, ordenadas por estimativas

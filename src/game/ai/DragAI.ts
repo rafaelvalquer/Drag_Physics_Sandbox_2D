@@ -177,12 +177,13 @@ export class DragAI {
     // shifting
     const g = sim.gear;
     // an automatic with torque converter is driven in D: its shift schedule does the shifting
-    const selfShifting = sim.transmissionKind === 'torque-converter-auto';
+    const selfShifting = sim.transmissionKind === 'torque-converter-auto' && !sim.car.transmission.playerShifts;
     if (!selfShifting && g >= 1 && g < sim.gearbox.gearCount && !sim.shift.active && sim.simTime - this.lastShiftAt > 0.4) {
       const target = this.shiftPoints[g - 1]! + p.shiftOffsetRpm + (this.shiftJitter[g - 1] ?? 0);
       // Engine rpm only reflects road speed once the clutch is locked; skilled drivers also ignore
       // revs produced by wheelspin.
-      const locked = sim.clutchCtl.mode === 'LOCKED';
+      // an automatic has no clutch to lock: its converter is coupled once input and output turn alike
+      const locked = sim.transmissionKind === 'torque-converter-auto' ? (sim.telemetry.converterSpeedRatio ?? 1) > 0.85 : sim.clutchCtl.mode === 'LOCKED';
       const spinning = slip > 0.5 && p.traction !== null;
       const roadRpm = (sim.speed / sim.car.tires.radiusM) * sim.gearbox.overallRatio(g) * (60 / (2 * Math.PI));
       const limit = sim.car.engine.revLimitRpm - 60;

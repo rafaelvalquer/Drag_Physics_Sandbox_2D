@@ -41,6 +41,8 @@ export class PowershiftController {
   throttleOverride: number | null = null;
   launchAfter = false;
   mode: GearboxMode = 'D';
+  /** An upgraded box has no D schedule: it stays in M and the player shifts. */
+  readonly playerShifts: boolean;
   pending: { dir: 1 | -1; age: number } | null = null;
   readonly bufferWindowS = 0.35;
   lastResult: ShiftRequestResult | 'completed' | null = null;
@@ -55,7 +57,10 @@ export class PowershiftController {
     public cfg: TransmissionConfig,
     private readonly gearbox: Gearbox,
     readonly transmissionKind: TransmissionKind,
-  ) {}
+  ) {
+    this.playerShifts = !!cfg.playerShifts;
+    if (this.playerShifts) this.mode = 'M';
+  }
 
   get active(): boolean {
     return this.state !== 'IDLE';
@@ -78,7 +83,7 @@ export class PowershiftController {
     this.pending = null;
     this.lastResult = null;
     this.history.length = 0;
-    this.mode = 'D';
+    this.mode = this.playerShifts ? 'M' : 'D';
   }
 
   /** Manual request (paddles / E-Q). Any request in gear puts an automatic in manual mode. */
@@ -270,7 +275,7 @@ export class PowershiftController {
     this.lastResult = 'completed';
     this.state = 'IDLE';
     this.kind = null;
-    if (this.gearbox.gear === 0) this.mode = 'D';
+    if (this.gearbox.gear === 0) this.mode = this.playerShifts ? 'M' : 'D';
     const p = this.pending;
     this.pending = null;
     if (p && p.age <= this.bufferWindowS) this.pendingRetry = p.dir;

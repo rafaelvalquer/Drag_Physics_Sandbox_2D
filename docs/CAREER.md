@@ -139,16 +139,28 @@ ter peças só dele: basta cadastrar a família e as peças, sem mexer no resolv
   - largura e pressão de pneu na etapa 2;
   - peso e arrefecimento na etapa 5;
   - os níveis de competição só no Capítulo 3.
-- **Stage 2 do turbo de fábrica (etapa 8):**
-  - **peças:** downpipe sem catalisador (contrapressão ≈ 4 kPa), admissão direta
-    turbo e Remap Stage 2;
-  - **mapa:** +0,55 bar, com solenoide que segura até +0,7 bar, e torque no máximo 28 % acima do original
-    em cada rotação;
-  - **requisitos:** o mapa exige o downpipe e o intercooler maior. Acima de 85 % do limite dos internos de
-    fábrica, exige pistões e bielas forjados, e o câmbio precisa aguentar o torque (embreagem reforçada nos
-    manuais; os automáticos e DSG de fábrica já seguram o Stage 2);
-  - **resultado:** +28 % de potência em todos os turbo de fábrica (320i: 184 → 235 cv).
-- **Stage 3** (mapa para a turbina híbrida e motor forjado) já está cadastrado e aparece como "Capítulo 3".
+- **ECU por família (Stage 1 a 3):** cada motor com turbo de fábrica tem seu mapa (`ecu-map-<família>-s1|s2|s3`: Rua,
+  Esportivo e Competição). Os mapas genéricos antigos (`ecu-stage1/2/3`) saíram do catálogo; saves antigos migram
+  para o mapa da família no mesmo estágio (`legacyEcuMigration.ts`, ao carregar e ao importar). Se o carro não rodar
+  com o mapa novo (ele pede o seu próprio combustível, intercooler e internos), a peça sai e o preço volta em créditos.
+  - **Stage 2** (etapa 8 da Liga): +12–15 % de potência; pede a alimentação do estágio 1.
+  - **Stage 3 / Competição** (5º duelo do Capítulo 3): reproduz o nível do antigo Stage 3: +0,8 bar sobre a pressão de
+    fábrica, sem teto de ganho próprio (os limites são dos internos, da wastegate e do combustível); +50–60 % de
+    potência nos carros do Capítulo 2 (320i: 184 → 292 cv, 425 N·m, 1,70 bar). Pede o downpipe, a turbina de maior
+    fluxo (≥ 1,4×), intercooler ≥ 80 %, internos forjados ≥ 1,45× e alimentação ≥ 1,32× (a oficina lista o que falta).
+  - Cada estágio rende mais que o anterior em todas as 12 famílias turbo; o Stage 3 passa do ECU programável.
+- **Pressão do turbo e corte de giro em toda ECU:** qualquer ECU (mapa, remap ou programável) libera os dois ajustes
+  no Dyno Lab, com faixa que cresce com o estágio. Pressão: Stage 1 até +0,25 bar sobre a de fábrica, Stage 2 +0,5,
+  Stage 3 e programável +0,8 (sempre limitada pela wastegate, pelo combustível e pelos internos). Corte: Stage 1 até 35 %
+  do caminho entre o giro recomendado e o limite mecânico, Stage 2 até 70 %, Stage 3 até 100 % (as mesmas faixas
+  Esportivo/Agressivo/Crítico do painel de confiabilidade; as ECUs que já liberavam o corte inteiro continuam assim).
+- **Câmbio automático ou dupla embreagem melhorado:** o carro original continua automático (D/M). Ao instalar um
+  câmbio melhor (`at-upgrade`, `dct-upgrade` ou os Stage 1–3 da família) o carro **vira manual: é trocado pelo jogador**
+  (E/Q, sem o modo D; `transmission.playerShifts`): a caixa mantém as trocas por power shift, o conversor e os
+  ganhos da peça (capacidade, eficiência, trocas ≈ 36 % mais curtas no último estágio). Medido com o piloto da IA em
+  402 m nos 11 carros automáticos: o câmbio melhorado é mais rápido em média (−0,06 s) e cada estágio melhora o
+  anterior; em poucos casos (C200 e IS 350 nos Stage 1–3) fica até 0,04 s atrás do automático de fábrica com a IA.
+  O ajuste "Ponto de troca" do Dyno some junto com o modo D. Os rivais com esses câmbios também são trocados pela IA.
 
 O relatório completo, com todas as peças em todos os carros, sai com `npx tsx scripts/parts-gain-report.ts`. O
 teste `tests/unit/career/parts-gain.test.ts` confere uma amostra.

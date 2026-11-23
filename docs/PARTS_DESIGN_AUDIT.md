@@ -10,12 +10,13 @@ que a mudança pode tornar inválido um build que um jogador já salvou (regra d
 |---|---|---|
 | 1 | `rods-reinforced` (310 N·m) e `pistons-forged` (340 N·m) **baixavam** o limite de torque dos internos no Chevette/Saveiro (limite de fábrica 320–341 N·m) | Limites 400 / 440 / 520 N·m (bielas / pistões / kit forjado). Só relaxa uma validação: nenhum build válido muda. Teste: `tests/unit/career/parts-design.test.ts` |
 | 6 | Texto de `compression-high` dizia "não aceita turbo com gasolina", o que só vale acima de 10,5:1 | Texto corrigido com o limite real (10,5:1 gasolina, 13:1 etanol) |
+| 4–5 | Stage 2 e Stage 3 perdiam para a ECU programável; o Stage 3 novo rendia 254 cv contra 299 cv do antigo | As ECUs genéricas `ecu-stage1/2/3` saíram; o mapa Competição da família reproduz o antigo Stage 3 (320i: 292 cv, 425 N·m, 1,70 bar) e cada estágio rende mais que o anterior nas 12 famílias turbo. Saves migram (`legacyEcuMigration.ts`) |
 
 ## Entregue em outra frente
 
 | # | Problema | Onde |
 |---|---|---|
-| 10 | `cam-turbo` perde para `cam-na-race` até em carro turbo (Chevette turbo: 131 contra 138 cv) | Sessão "Rebalancear comando aspirado vs comando turbo" |
+| 10 | `cam-turbo` perdia para `cam-na-race` até em carro turbo (Chevette turbo: 131 contra 138 cv) | Resolvido na `main`: com turbo o cruzamento de válvulas custa pressão (`breathingModel.ts`) |
 
 ## Pendentes (precisam de decisão de balanceamento)
 
@@ -23,7 +24,6 @@ que a mudança pode tornar inválido um build que um jogador já salvou (regra d
 |---|---|---|
 | 2 | O limite de combustível (`fuelBoostLimitBar`) ignora os bônus de `wastegateHoldAddBar` (turbo-medium + bicos + taxa baixa + wastegate race roda ~1,27 bar com bicos de 1,05) | Salvo em risco: o Chevette do usuário (turbo forte, bomba 1,5 bar, 1,5 bar no Dyno) passaria a ser inválido |
 | 3 | `boost-street`/`boost-race` repetem o slider grátis do Dyno e podem **baixar** a pressão do kit | Decidir: virar peça que sobe o teto ou ser removida |
-| 4–5 | Stage 2 e Stage 3 perdem para `ecu-programmable` (+ `boost-control`), que abre antes | Salvo em risco (v2) e exige decidir o que cada ECU oferece de único |
 | 7 | Celta VHC (12,6:1) nunca aceita turbo: `compression-low` tira 1,2 e o limite é 10,5 | Exige peça nova ou exclusão explícita |
 | 8 | Sentido de `turboFlowScale` e do spool das turbinas contradiz os textos | Exige reler `Turbocharger.ts` e recalibrar as quatro turbinas |
 | 9 | `turbine-medium` é dominada por `turbine-small` pela metade do preço | Mesmo ponto do item 8 |

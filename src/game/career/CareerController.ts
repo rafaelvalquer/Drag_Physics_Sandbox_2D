@@ -30,6 +30,7 @@ import {
   type OwnedCar,
 } from './CareerState';
 import { resolveBuild, type ResolverVersion } from './tuning/BuildResolver';
+import { hasLegacyEcus, migrateLegacyEcus } from './legacyEcuMigration';
 import { findPart, type PartCategory, type UnlockId } from './tuning/parts';
 import { familyOf } from './tuning/BuildResolverV2';
 import { careerResolverVersion } from './tuning/resolverVersion';
@@ -104,11 +105,18 @@ const fail = (error: string): { ok: false; error: string } => ({ ok: false, erro
 
 export class CareerController {
   save: CareerSave | null = null;
+  /** What the load changed in an old save (replaced ECU maps, refunds); the screen shows it once. */
+  migrationNotices: string[] = [];
 
   constructor(readonly repo: CareerRepository) {}
 
   async load(): Promise<CareerSave | null> {
     this.save = await this.repo.load();
+    if (this.save && hasLegacyEcus(this.save)) {
+      let notices: string[] = [];
+      this.save = await this.commit((n) => void (notices = migrateLegacyEcus(n)));
+      this.migrationNotices = notices;
+    }
     return this.save && (await this.dropUnknownParts());
   }
 
@@ -429,10 +437,14 @@ export class CareerController {
     const s = this.save;
     const car = this.activeCar;
     if (!s || !car) return fail('nenhum carro ativo');
-    const programmable = car.installedParts.includes('ecu-programmable');
-    if (!programmable && !canTuneBoost(s)) return fail('os preparadores de motor ainda não trabalham para você');
-    if (!programmable && !car.installedParts.some((id) => findPart(id)?.category === 'turbo'))
-      return fail('sem turbo (ou sem ECU programável) não há pressão para ajustar');
+    // a modern ECU with a pressure range (any stage map or the programmable ECU) sets the boost itself
+    const ecuSetsBoost = car.installedParts.some((id) => {
+      const p = findPart(id);
+      return p?.category === 'ecu' && !!(p as { boostRangeAddBar?: unknown }).boostRangeAddBar;
+    });
+    if (!ecuSetsBoost && !canTuneBoost(s)) return fail('os preparadores de motor ainda não trabalham para você');
+    if (!ecuSetsBoost && !car.installedParts.some((id) => findPart(id)?.category === 'turbo'))
+      return fail('sem turbo (ou sem ECU com ajuste de pressão) não há pressão para ajustar');
     const { boostBar: _old, ...rest } = car.tune ?? {};
     return this.applyTune(car.id, boostBar === undefined ? rest : { ...rest, boostBar });
   }
@@ -744,6 +756,8 @@ export class CareerController {
   async importJson(text: string): Promise<OpResult> {
     const r = importCareer(text);
     if (!r.ok) return fail(`importação recusada: ${r.errors.slice(0, 3).join('; ')}`);
+    // old ECU maps move to the new ones before the builds are checked
+    this.migrationNotices = hasLegacyEcus(r.save) ? migrateLegacyEcus(r.save) : [];
     for (const c of r.save.ownedCars) {
       if (!findCampaignCar(c.baseCarId)) return fail(`importação recusada: carro desconhecido ${c.baseCarId}`);
       const chk = this.checkBuild(c, c.installedParts);

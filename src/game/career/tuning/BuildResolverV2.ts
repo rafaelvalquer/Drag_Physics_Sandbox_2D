@@ -44,6 +44,13 @@ export function familyOf(car: CarConfig): string {
   return car.engine.family ?? LEGACY_FAMILY;
 }
 
+/**
+ * Exponent applied to a gearbox part's shift-time scale. Measured against the factory automatic (AI driver,
+ * 402 m, all 11 automatic / dual-clutch cars): the upgraded box, shifted by the player, is quicker on
+ * average and each stage is quicker than the one before (docs/CAREER.md).
+ */
+export const POWERSHIFT_SHIFT_EXPONENT = 2;
+
 export function transmissionKindOf(car: CarConfig): TransmissionKind {
   return car.transmission.kind ?? 'manual';
 }
@@ -172,7 +179,8 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
       if ((fuelSupply?.fuelCapacityScale ?? 1) < 1.32) errors.push('a turbina de competição exige alimentação de maior vazão');
     }
     if (tune.boostBar !== undefined) {
-      if (ecu?.level !== 'programmable') return { ok: false, errors: ['ajuste de pressão exige ECU programável'] };
+      // any ECU with a pressure range lets the player set the boost; the range grows with the stage
+      if (!ecu?.boostRangeAddBar) return { ok: false, errors: ['ajuste de pressão exige ECU programável'] };
       const b0 = base.engine.turbo!.maxBoostBar;
       const [lo, hi] = ecu.boostRangeAddBar ?? [0, 0];
       if (!(tune.boostBar >= b0 + lo - 1e-9 && tune.boostBar <= b0 + hi + 1e-9))
@@ -401,14 +409,16 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   const gb = get('gearbox');
   if (gb) {
     const t = car.transmission;
+    // the box's shift time compounds over the phases of a power shift (a quicker box is quicker overall)
+    const shiftK = gb.shiftTimeScale ** POWERSHIFT_SHIFT_EXPONENT;
     t.clutch.maxTorqueNm = Math.round(t.clutch.maxTorqueNm * gb.capacityScale);
     t.clutch.launchRpm = Math.min(t.clutch.launchRpm + gb.launchRpmAdd, car.engine.redlineRpm - 800);
     if (t.powershift) {
       t.powershift = {
         ...t.powershift,
-        torquePhaseS: Math.max(0.02, t.powershift.torquePhaseS * gb.shiftTimeScale),
-        inertiaPhaseMaxS: Math.max(0.05, t.powershift.inertiaPhaseMaxS * gb.shiftTimeScale),
-        downshiftReleaseS: Math.max(0.02, t.powershift.downshiftReleaseS * gb.shiftTimeScale),
+        torquePhaseS: Math.max(0.02, t.powershift.torquePhaseS * shiftK),
+        inertiaPhaseMaxS: Math.max(0.05, t.powershift.inertiaPhaseMaxS * shiftK),
+        downshiftReleaseS: Math.max(0.02, t.powershift.downshiftReleaseS * shiftK),
       };
     }
     if (t.torqueConverter) {
@@ -419,6 +429,9 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
       };
     }
   }
+  // a better automatic / dual-clutch box is shifted by the player: the schedule (D) goes away, the box
+  // keeps its quick power shifts, its capacity and its efficiency (the part's gains)
+  if (gb && (kind === 'torque-converter-auto' || kind === 'dual-clutch')) car.transmission.playerShifts = true;
   const diff = get('differential');
   const awd = get('awd');
   if (awd && car.awd) {

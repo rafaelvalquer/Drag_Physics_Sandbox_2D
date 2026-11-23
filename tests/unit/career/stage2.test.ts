@@ -6,10 +6,10 @@ import { CHAPTER2_EVENTS, CHAPTER3_EVENTS, EVENTS } from '../../../src/game/care
 import { isPartUnlocked, partStatus } from '../../../src/game/career/CareerProgression';
 import { resolveBuild } from '../../../src/game/career/tuning/BuildResolver';
 import { familyOf, incompatibility } from '../../../src/game/career/tuning/BuildResolverV2';
+import { planInstall } from '../../../src/game/career/tuning/ProjectRequirements';
 import { findPart, GENERIC_V2_CATEGORIES } from '../../../src/game/career/tuning/parts';
 
 const bmw = findCampaignCar('bmw-320i-f30-2014')!;
-const s2 = ['ecu-stage2', 'downpipe-catless', 'intercooler-race', 'intake-direct-turbo'];
 const ch1Done = EVENTS.map((e) => e.id);
 const upTo = (order: number) => [...ch1Done, ...CHAPTER2_EVENTS.filter((e) => e.order <= order).map((e) => e.id)];
 
@@ -50,52 +50,59 @@ describe('generic car hardware on modern engines', () => {
   });
 });
 
-describe('Stage 2 of the factory turbo', () => {
-  it('gains 20–30 % on every factory-turbo car of chapter 2', () => {
+describe('Stage maps of the factory turbo (one map per engine family)', () => {
+  const mapOf = (car: { engine: { family?: string } }, tier: number) => `ecu-map-${car.engine.family}-s${tier}`;
+  const save = { completedEventIds: [], inventoryPartIds: [], credits: 9e9 };
+
+  it('each stage gains more than the one before on every factory-turbo car of chapter 2 (Stage 3 reaches the old generic Stage 3 level)', () => {
     for (const car of CHAPTER2_CARS.filter((c) => c.engine.induction === 'turbo')) {
       const stock = resolveBuild(car, [], {}, 2);
       if (!stock.ok) throw new Error(car.id);
-      const r = [[], ['at-upgrade'], ['dct-upgrade'], ['clutch-reinforced'], ['pistons-forged-modern', 'at-upgrade'], ['pistons-forged-modern', 'dct-upgrade'], ['pistons-forged-modern', 'clutch-reinforced']]
-        .map((x) => resolveBuild(car, [...s2, ...x], {}, 2))
-        .find((b) => b.ok);
-      if (!r?.ok) throw new Error(`${car.id}: Stage 2 sem build válido`);
-      const gain = r.peakPowerCv / stock.peakPowerCv - 1;
-      expect(gain, car.id).toBeGreaterThanOrEqual(0.2);
-      expect(gain, car.id).toBeLessThanOrEqual(0.3);
+      const gains = [1, 2, 3].map((tier) => {
+        // the planner finds the hardware each map asks for (fuel, intercooler, internals, gearbox...)
+        const plan = planInstall({ base: car, car: { baseCarId: car.id, installedParts: [] }, save, partId: mapOf(car, tier), versionOf: () => 2 });
+        const r = resolveBuild(car, plan.parts, {}, 2);
+        if (!r.ok) throw new Error(`${car.id} Stage ${tier}: ${r.errors.join('; ')}`);
+        return r.peakPowerCv / stock.peakPowerCv - 1;
+      });
+      expect(gains[0], car.id).toBeGreaterThan(0.03);
+      expect(gains[1], car.id).toBeGreaterThan(gains[0]! + 0.04);
+      expect(gains[2], car.id).toBeGreaterThan(gains[1]! + 0.25);
+      expect(gains[2], car.id).toBeLessThan(0.75);
     }
   });
 
-  it('refuses the map without its hardware, forged internals or a stronger gearbox', () => {
-    const noDp = resolveBuild(bmw, ['ecu-stage2', 'intercooler-race'], {}, 2);
-    expect(noDp.ok).toBe(false);
-    if (!noDp.ok) expect(noDp.errors.join()).toMatch(/downpipe/);
-    const noIc = resolveBuild(bmw, ['ecu-stage2', 'downpipe-catless'], {}, 2);
-    expect(noIc.ok).toBe(false);
-    if (!noIc.ok) expect(noIc.errors.join()).toMatch(/intercooler/);
-    const evo = findCampaignCar('mitsubishi-evo-x-2012')!;
-    const bare = resolveBuild(evo, s2, {}, 2);
+  it('Stage 3 refuses the map without its hardware: downpipe, intercooler, forged internals, fuel, big turbine and a gearbox that carries the torque', () => {
+    const n20 = mapOf(bmw, 3);
+    const bare = resolveBuild(bmw, [n20], {}, 2);
     expect(bare.ok).toBe(false);
-    if (!bare.ok) expect(bare.errors.join()).toMatch(/forjados/);
-    // the gearbox has to carry the new torque (manual 208: reinforced clutch)
+    const text = bare.ok ? '' : bare.errors.join(' | ');
+    for (const need of [/downpipe/, /intercooler/, /pistões/, /alimentação/, /turbina/]) expect(text).toMatch(need);
+    // the manual 208 also needs a clutch that carries the torque
     const p208 = findCampaignCar('peugeot-208-gt-2017')!;
-    const cl = resolveBuild(p208, [...s2, 'pistons-forged-modern'], {}, 2);
+    const hw = ['fuel-psa-prince-thp-s3', 'charge-cooler-psa-prince-thp-s3', 'rotating-assembly-psa-prince-thp-s3', 'exhaust-downpipe-psa-prince-thp-s3', 'factory-turbo-psa-prince-thp-s3', mapOf(p208, 3)];
+    const cl = resolveBuild(p208, hw, {}, 2);
     expect(cl.ok).toBe(false);
     if (!cl.ok) expect(cl.errors.join()).toMatch(/embreagem/);
-    expect(resolveBuild(p208, [...s2, 'pistons-forged-modern', 'clutch-reinforced'], {}, 2).ok).toBe(true);
+    expect(resolveBuild(p208, [...hw, 'clutch-reinforced'], {}, 2).ok).toBe(true);
   });
 
-  it('opens at the 8th event; Stage 3 opens at the 5th duel of chapter 3; never fits an NA engine', () => {
-    expect(isPartUnlocked({ completedEventIds: upTo(7) }, findPart('ecu-stage2')!)).toBe(false);
-    expect(isPartUnlocked({ completedEventIds: upTo(8) }, findPart('ecu-stage2')!)).toBe(true);
+  it('Stage 2 opens at the 8th event; Stage 3 opens at the 5th duel of chapter 3; a map never fits an NA engine or another family', () => {
+    const s2map = findPart(mapOf(bmw, 2))!;
+    const s3map = findPart(mapOf(bmw, 3))!;
+    const fam = familyOf(bmw);
+    expect(isPartUnlocked({ completedEventIds: upTo(7) }, s2map, fam)).toBe(false);
+    expect(isPartUnlocked({ completedEventIds: upTo(8) }, s2map, fam)).toBe(true);
     // chapter 2 complete: chapter 3 is open, but the map of Stage 3 waits for the 5th duel
     const ch3 = (k: number) => [...upTo(10), ...CHAPTER3_EVENTS.filter((e) => e.order <= k).map((e) => e.id)];
-    const st3 = partStatus({ completedEventIds: upTo(10), inventoryPartIds: [], credits: 1e6 }, { baseCarId: bmw.id, installedParts: [] }, findPart('ecu-stage3')!);
-    expect(st3.state).toBe('locked');
-    expect(st3.label).toBe('Duelo 5');
-    expect(partStatus({ completedEventIds: ch3(4), inventoryPartIds: [], credits: 1e6 }, { baseCarId: bmw.id, installedParts: [] }, findPart('ecu-stage3')!).state).toBe('locked');
-    expect(partStatus({ completedEventIds: ch3(5), inventoryPartIds: [], credits: 1e6 }, { baseCarId: bmw.id, installedParts: [] }, findPart('ecu-stage3')!).state).toBe('available');
+    const status = (done: string[]) => partStatus({ completedEventIds: done, inventoryPartIds: [], credits: 1e6 }, { baseCarId: bmw.id, installedParts: [] }, s3map, fam);
+    expect(status(upTo(10)).state).toBe('locked');
+    expect(status(upTo(10)).label).toBe('Duelo 5');
+    expect(status(ch3(4)).state).toBe('locked');
+    expect(status(ch3(5)).state).toBe('available');
     // chapter 2 not complete: chapter 3 is still closed
-    expect(partStatus({ completedEventIds: upTo(9), inventoryPartIds: [], credits: 1e6 }, { baseCarId: bmw.id, installedParts: [] }, findPart('ecu-stage3')!).label).toBe('Capítulo 3');
-    expect(incompatibility(findCampaignCar('honda-civic-si-2008')!, findPart('ecu-stage2')!)).not.toBeNull();
+    expect(status(upTo(9)).label).toBe('Capítulo 3');
+    expect(incompatibility(findCampaignCar('honda-civic-si-2008')!, s2map)).not.toBeNull();
+    expect(incompatibility(findCampaignCar('mitsubishi-evo-x-2012')!, s2map)).not.toBeNull(); // the N20 map is not for the 4B11
   });
 });

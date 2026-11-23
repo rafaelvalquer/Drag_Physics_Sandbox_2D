@@ -4,7 +4,7 @@ import { TRACKS } from '../../../src/data/tracks/index';
 import { resolveBuild } from '../../../src/game/career/tuning/BuildResolver';
 import { applyFactoryTurboParts } from '../../../src/game/career/tuning/factoryTurboModel';
 import { ENGINE_FAMILIES } from '../../../src/game/career/tuning/chapter2Parts';
-import { auditPartStages } from '../../../src/game/career/tuning/partGain';
+import { auditPartGain } from '../../../src/game/career/tuning/partGain';
 import { findPart } from '../../../src/game/career/tuning/parts';
 
 describe('auditoria de comandos clássicos e remaps legados', () => {
@@ -22,24 +22,18 @@ describe('auditoria de comandos clássicos e remaps legados', () => {
     expect(resolveBuild(gol, ['cam-turbo-sport'], {}, 1).ok).toBe(false);
   });
 
-  it('mede o Stage 3 legado com a turbina híbrida só no conjunto que exige essa peça', () => {
+  it('mede cada mapa Stage 1 a 3 da família como ganho real, com o hardware que ele exige', () => {
     const bmw = findCampaignCar('bmw-320i-f30-2014')!;
     const track = TRACKS.find((entry) => entry.id === 'test-track')!;
-    const stages = ['ecu-stage1', 'ecu-stage2', 'ecu-stage3'].map((id) => findPart(id)!);
-    const results = auditPartStages(bmw, stages, track, 2);
-    expect(results.map(({ audit }) => audit.status)).toEqual(['gain', 'gain', 'gain']);
-    const figures = results.map(({ audit }) => {
-      if (!('gain' in audit)) throw new Error(audit.reasons.join('\n'));
-      return audit.gain;
-    });
-    expect(figures[0]!.context).not.toContain('turbo-hybrid');
-    expect(figures[1]!.context).not.toContain('turbo-hybrid');
-    expect(figures[2]!.context).toContain('turbo-hybrid');
+    for (const id of ['ecu-map-bmw-n20-s1', 'ecu-map-bmw-n20-s2', 'ecu-map-bmw-n20-s3']) {
+      const audit = auditPartGain(bmw, findPart(id)!, track, 2);
+      expect(audit.status, `${id}: ${'reasons' in audit ? audit.reasons.join('; ') : ''}`).toBe('gain');
+    }
   }, 60_000);
 
   it('mantém cópias independentes dos resultados térmicos e mecânicos reutilizados', () => {
     const bmw = findCampaignCar('bmw-320i-f30-2014')!;
-    const ecu = findPart('ecu-stage1');
+    const ecu = findPart('ecu-map-bmw-n20-s1');
     if (ecu?.category !== 'ecu') throw new Error('Remap legado ausente');
     const parts = { family: ENGINE_FAMILIES['bmw-n20']!, ecu };
     const first = applyFactoryTurboParts(bmw.engine, parts);

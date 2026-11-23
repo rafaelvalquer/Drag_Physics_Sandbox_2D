@@ -94,8 +94,23 @@ export const FINAL_DRIVE_OPTIONS: readonly { value: FinalDrivePreset; label: str
   { value: 'long', label: 'Longa (−5 %)' },
 ];
 
-/** ECUs that move the ignition cut (programmable, or the NA remap). */
-const REV_ECUS = new Set(['ecu-programmable', 'ecu-stage1-na', 'ecu-street', 'ecu-race']);
+/** ECUs whose cut setting always reached the mechanical limit (kept so saved settings stay valid). */
+const FULL_RANGE_ECUS = new Set(['ecu-programmable', 'ecu-stage1-na', 'ecu-street', 'ecu-race']);
+
+/**
+ * How far an ECU lets the cut go between the recommended speed and the mechanical limit: every ECU
+ * unlocks the setting, the range grows with the stage (the same bands as the reliability levels:
+ * Esportivo 35 %, Agressivo 70 %, Crítico 100 %).
+ */
+export function ecuRevFraction(p: PartDef): number | null {
+  if (p.category !== 'ecu' && p.category !== 'electronics-ecu') return null;
+  if (FULL_RANGE_ECUS.has(p.id)) return 1;
+  if (p.category === 'ecu') {
+    const level = (p as EcuPart).level;
+    return level === 'stage1' ? 0.35 : level === 'stage2' ? 0.7 : 1;
+  }
+  return p.id === 'ecu-remap' ? 0.35 : 1;
+}
 const CLASSIC_THROTTLES = new Set(['throttle-rework', 'throttle-large']);
 const isValveSpring = (id: string): boolean => findPart(id)?.category === 'engine-valvetrain';
 const isOverlayPart = (id: string): boolean => findPart(id)?.category === 'electronics-launch' || isValveSpring(id);
@@ -160,14 +175,14 @@ export function tuningCapabilities(base: CarConfig, partIds: readonly string[], 
 
   // ---- boost ----
   let boost: RangeControl;
-  const programmable = parts.find((p) => p.id === 'ecu-programmable') as EcuPart | undefined;
+  const ecuPart = parts.find((p) => p.category === 'ecu') as EcuPart | undefined;
   const factoryBoost = base.engine.induction === 'turbo' ? base.engine.turbo?.maxBoostBar : undefined;
   const conversion = parts.find((p) => p.category === 'turbo' && 'conversion' in p && p.conversion);
   const classicRange = boostRangeForParts(partIds.filter((id) => (findPart(id)?.since ?? 1) === 1));
   if (factoryBoost !== undefined && modern) {
-    if (!programmable) boost = off('Exige ECU programável.', factoryBoost);
+    if (!ecuPart?.boostRangeAddBar) boost = off(ecuPart ? 'Esta ECU não permite ajustar a pressão: use um mapa ou a ECU programável.' : 'Exige uma ECU (mapa ou programável).', factoryBoost);
     else {
-      const [lo, hi] = programmable.boostRangeAddBar ?? [0.1, 0.8];
+      const [lo, hi] = ecuPart.boostRangeAddBar;
       const def = hwR.steadyBoostBar.length ? Math.max(...hwR.steadyBoostBar.map((x) => x.bar), factoryBoost) : factoryBoost;
       // the wastegate (factory actuator, or the boost-control kit) caps what the ECU can ask for
       const wg = hwR.wastegateLimitBar ?? factoryBoost;
@@ -191,9 +206,18 @@ export function tuningCapabilities(base: CarConfig, partIds: readonly string[], 
   if (boost.enabled && ctx.exactBoostMax) boost = capBoostToBuild(base, partIds, version, boost);
 
   // ---- rev limit ----
-  const revLimit: RangeControl = has((p) => REV_ECUS.has(p.id))
-    ? { enabled: true, reason: null, min: round(Math.max(e.idleRpm * 3, e.revLimitRpm - 600), 50), max: Math.floor(limits.maxSafeRpm / 50) * 50, step: 50, default: e.revLimitRpm }
-    : off('Exige ECU programável.', e.revLimitRpm);
+  const revFraction = Math.max(0, ...parts.map((p) => ecuRevFraction(p) ?? 0));
+  const revCeiling = limits.recommendedSafeRpm + revFraction * (limits.maxSafeRpm - limits.recommendedSafeRpm);
+  const revLimit: RangeControl = revFraction > 0
+    ? {
+        enabled: true,
+        reason: null,
+        min: round(Math.max(e.idleRpm * 3, e.revLimitRpm - 600), 50),
+        max: Math.max(Math.floor(revCeiling / 50) * 50, Math.ceil(e.revLimitRpm / 50) * 50),
+        step: 50,
+        default: e.revLimitRpm,
+      }
+    : off('Exige uma ECU (mapa, remap ou programável).', e.revLimitRpm);
 
   // ---- launch ----
   const launchDef = hw.transmission.clutch.launchRpm;
@@ -235,8 +259,8 @@ export function tuningCapabilities(base: CarConfig, partIds: readonly string[], 
   const auto = hw.transmission.autoShift;
   const shiftDef = auto ? round(auto.wotUpshiftFraction * e.revLimitRpm, 50) : e.revLimitRpm;
   const shift: RangeControl =
-    kind === 'manual' || !auto
-      ? off('Câmbio manual: o ponto de troca é do piloto.', shiftDef)
+    kind === 'manual' || !auto || hw.transmission.playerShifts
+      ? off(hw.transmission.playerShifts ? 'Câmbio melhorado: as trocas são suas (E/Q), sem ponto de troca automático.' : 'Câmbio manual: o ponto de troca é do piloto.', shiftDef)
       : has((p) => p.category === 'gearbox')
         ? { enabled: true, reason: null, min: round(e.revLimitRpm * 0.75, 50), max: Math.max(...[revLimit.max, e.revLimitRpm]) - 50, step: 50, default: shiftDef }
         : off('Exige upgrade do câmbio (TCU reprogramada).', shiftDef);

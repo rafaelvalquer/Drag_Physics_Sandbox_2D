@@ -173,7 +173,7 @@ describe('the ten events and rivals', () => {
   it('Ricardo comes back with a Golf Stage 2 and Bianca with a much more prepared Evo X', () => {
     const ricardo = CHAPTER3_RIVALS.find((r) => r.id === 'ricardo-elite')!;
     const bianca = CHAPTER3_RIVALS.find((r) => r.id === 'bianca-elite')!;
-    expect(ricardo.parts).toContain('ecu-stage2');
+    expect(ricardo.parts).toContain('ecu-map-vw-ea113-s2');
     for (const need of ['downpipe-catless', 'intercooler-race', 'intake-direct-turbo', 'clutch-reinforced', 'suspension-drag-fwd']) expect(ricardo.parts).toContain(need);
     const golf0 = resolveBuild(findCampaignCar('vw-golf-gti-mk4-2003')!, [], {}, 2);
     const rb = rivalBuild(ricardo);
@@ -182,7 +182,7 @@ describe('the ten events and rivals', () => {
       expect(rb.peakPowerCv).toBeGreaterThan(golf0.peakPowerCv * 1.2);
       expect(rb.peakTorqueNm).toBeGreaterThan(golf0.peakTorqueNm * 1.2);
     }
-    for (const need of ['ecu-stage3', 'turbo-hybrid', 'pistons-forged-modern', 'intercooler-race', 'dct-upgrade', 'awd-center-tune', 'tires-slick', 'suspension-drag-awd']) expect(bianca.parts).toContain(need);
+    for (const need of ['ecu-map-mitsubishi-4b11-s3', 'turbo-hybrid', 'pistons-forged-modern', 'intercooler-race', 'dct-upgrade', 'awd-center-tune', 'tires-slick', 'suspension-drag-awd']) expect(bianca.parts).toContain(need);
     const evo2 = CHAPTER3_RIVALS.find((r) => r.id === 'bianca-elite')!;
     const evoCh2 = rivalBuild(rivalOf(findEvent('c2e9-tracao-total')!));
     expect(rivalBuild(evo2).peakPowerCv).toBeGreaterThan(evoCh2.peakPowerCv * 1.25);
@@ -284,7 +284,7 @@ describe('workshop of the V6 families', () => {
 
   it('aspirated V6: no boost parts, no remap of other engines, but the generic parts fit', () => {
     for (const id of ['nissan-350z-2006', 'lexus-is350-2015', 'nissan-370z-2014']) {
-      for (const p of ['ecu-stage1', 'ecu-stage2', 'turbo-hybrid', 'boost-control', 'intercooler-race', 'ecu-programmable']) expect(incompatibility(car(id), part(p)), `${id} ${p}`).not.toBeNull();
+      for (const p of ['ecu-map-bmw-n20-s1', 'ecu-map-bmw-n20-s2', 'turbo-hybrid', 'boost-control', 'intercooler-race', 'ecu-programmable']) expect(incompatibility(car(id), part(p)), `${id} ${p}`).not.toBeNull();
       for (const p of ['cam-k20', 'cam-familia2', 'manifold-k20-rbc', 'head-ported', 'ecu-stage1-na']) expect(incompatibility(car(id), part(p)), `${id} ${p}`).not.toBeNull();
       for (const p of ['tires-semislick', 'weight-light', 'suspension-drag-rwd']) expect(incompatibility(car(id), part(p)), `${id} ${p}`).toBeNull();
     }
@@ -292,7 +292,8 @@ describe('workshop of the V6 families', () => {
 
   it('biturbo V6: the whole turbo tree fits, and the gearbox parts only the right gearbox', () => {
     for (const id of ['mercedes-amg-c43-2017', 'kia-stinger-gt-2019', 'maserati-ghibli-sq4-2015', 'alfa-giulia-qv-2017', 'nissan-gtr-r35-2015']) {
-      for (const p of ['ecu-stage1', 'ecu-stage2', 'ecu-stage3', 'turbo-hybrid', 'boost-control', 'intercooler-race', 'pistons-forged-modern', 'downpipe-catless']) expect(incompatibility(car(id), part(p)), `${id} ${p}`).toBeNull();
+      const fam = car(id).engine.family;
+      for (const p of ['ecu-map-' + fam + '-s1', 'ecu-map-' + fam + '-s2', 'ecu-map-' + fam + '-s3', 'turbo-hybrid', 'boost-control', 'intercooler-race', 'pistons-forged-modern', 'downpipe-catless']) expect(incompatibility(car(id), part(p)), `${id} ${p}`).toBeNull();
     }
     expect(incompatibility(car('nissan-gtr-r35-2015'), part('dct-upgrade'))).toBeNull();
     expect(incompatibility(car('nissan-gtr-r35-2015'), part('at-upgrade'))).not.toBeNull();
@@ -304,7 +305,7 @@ describe('workshop of the V6 families', () => {
 
   it('a Stage 1 on a twin turbo raises the power with the same engine model (no multiplier)', () => {
     const base = resolveBuild(car('alfa-giulia-qv-2017'), [], {}, 2);
-    const s1 = resolveBuild(car('alfa-giulia-qv-2017'), ['ecu-stage1'], {}, 2);
+    const s1 = resolveBuild(car('alfa-giulia-qv-2017'), ['ecu-map-alfa-690t-s1'], {}, 2);
     expect(base.ok && s1.ok).toBe(true);
     if (base.ok && s1.ok) {
       expect(s1.peakPowerCv).toBeGreaterThan(base.peakPowerCv * 1.05);
@@ -315,7 +316,7 @@ describe('workshop of the V6 families', () => {
   });
 
   it('a Stage 2 map refuses to be installed without the hardware it needs', () => {
-    const r = resolveBuild(car('nissan-gtr-r35-2015'), ['ecu-stage2'], {}, 2);
+    const r = resolveBuild(car('nissan-gtr-r35-2015'), ['ecu-map-nissan-vr38dett-s2'], {}, 2);
     expect(r.ok).toBe(false);
   });
 });

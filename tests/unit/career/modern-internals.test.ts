@@ -60,7 +60,7 @@ describe('internos e compressão dos carros modernos', () => {
 
   it('reconhece a capacidade dos dois conjuntos forjados aceitos pelo mapa turbo Stage 3', () => {
     const n20 = modern.find((car) => car.engine.family === 'bmw-n20')!;
-    const support = ['ecu-stage3', 'turbo-hybrid', 'downpipe-catless', 'intercooler-race', 'at-upgrade'];
+    const support = ['ecu-map-bmw-n20-s3', 'fuel-bmw-n20-s3', 'turbo-hybrid', 'downpipe-catless', 'intercooler-race', 'at-upgrade'];
     for (const id of ['pistons-forged-modern', 'rotating-assembly-bmw-n20-s3']) {
       const build = resolveBuild(n20, [...support, id], {}, 2);
       if (!build.ok) throw new Error(build.errors.join('\n'));

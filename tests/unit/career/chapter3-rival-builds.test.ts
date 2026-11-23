@@ -20,7 +20,7 @@ const POWER_CV: Record<string, [number, number]> = {
   bruno: [350, 370],
   davi: [430, 475],
   valentina: [465, 525],
-  maya: [465, 530],
+  maya: [455, 530], // the family Stage 2 map (replaced the generic one) lands a few cv under the old range
   'bianca-elite': [430, 490],
   dante: [575, 660],
   akira: [650, 710],
@@ -90,7 +90,7 @@ describe('rival builds', () => {
 
   it("Akira's GT-R is a prepared Stage 2", () => {
     const akira = findRival('akira')!;
-    expect(akira.parts).toContain('ecu-stage2');
+    expect(akira.parts).toContain('ecu-map-nissan-vr38dett-s2');
     const stock = resolveBuild(findCampaignCar(akira.baseCarId)!, [], {}, 2);
     expect(stock.ok && rivalBuild(akira).peakPowerCv > stock.peakPowerCv * 1.2).toBe(true);
   });

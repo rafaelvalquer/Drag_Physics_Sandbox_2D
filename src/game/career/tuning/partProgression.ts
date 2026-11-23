@@ -103,9 +103,6 @@ const existing: Readonly<Record<string, PartProgression>> = {
   'compression-classic-na-s2': { tier: 2, group: 'classic-na-compression', specialization: 'aspirado' },
   'compression-high': { tier: 3, group: 'classic-na-compression', specialization: 'aspirado' },
   'compression-low': { tier: 3, group: 'classic-turbo-compression', specialization: 'turbo' },
-  'ecu-stage1': { tier: 1, group: 'factory-turbo-ecu', specialization: 'turbo' },
-  'ecu-stage2': { tier: 2, group: 'factory-turbo-ecu', specialization: 'turbo' },
-  'ecu-stage3': { tier: 3, group: 'factory-turbo-ecu', specialization: 'turbo' },
 };
 
 // Shared original parts belong to classic series only. They remain standalone options on modern cars.

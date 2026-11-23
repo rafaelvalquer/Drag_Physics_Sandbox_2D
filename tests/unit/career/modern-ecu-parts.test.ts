@@ -9,12 +9,13 @@ import { MODERN_ECU_PARTS } from '../../../src/game/career/tuning/modernEcuParts
 
 const modern = [...CHAPTER2_CARS, ...CHAPTER3_CARS];
 
-function supportFor(car: CarConfig): string[] {
+/** Hardware the maps ask for. `competition` adds what the Competition map needs on top (downpipe, big turbine). */
+function supportFor(car: CarConfig, competition = false): string[] {
   const f = car.engine.family!;
   const kind = transmissionKindOf(car);
   const gearbox = kind === 'manual' ? 'clutch-reinforced' : kind === 'dual-clutch' ? 'dct-upgrade' : 'at-upgrade';
   return [`fuel-${f}-s3`, gearbox, ...(car.engine.induction === 'turbo'
-    ? [`charge-cooler-${f}-s3`, `rotating-assembly-${f}-s3`] : [])];
+    ? [`charge-cooler-${f}-s3`, `rotating-assembly-${f}-s3`, ...(competition ? [`exhaust-downpipe-${f}-s3`, `factory-turbo-${f}-s3`] : [])] : [])];
 }
 
 describe('mapas de ECU modernos', () => {
@@ -26,7 +27,9 @@ describe('mapas de ECU modernos', () => {
     if (!baseline.ok) throw new Error(baseline.errors.join('\n'));
     let previous = baseline;
     for (const map of maps) {
-      const next = resolveBuild(car, [...support, map.id], {}, 2);
+      // the Competition map also asks for the downpipe and the big turbine (turbo cars)
+      const hardware = map.progression?.tier === 3 ? supportFor(car, true) : support;
+      const next = resolveBuild(car, [...hardware, map.id], {}, 2);
       if (!next.ok) throw new Error(`${map.id}: ${next.errors.join('\n')}`);
       expect(next.car.engine.fueling!.airFuelRatio).toBeLessThan(previous.car.engine.fueling!.airFuelRatio);
       expect(next.car.engine.revLimitRpm).toBeGreaterThanOrEqual(previous.car.engine.revLimitRpm);

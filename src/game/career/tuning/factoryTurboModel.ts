@@ -106,7 +106,7 @@ export function wastegateMaxBar(stock: EngineConfig, bc?: BoostControlPart, ecu?
 export function ecuBoostTarget(stock: EngineConfig, ecu?: EcuPart, tuneBar?: number): number {
   const b0 = stock.turbo!.maxBoostBar;
   if (!ecu) return b0;
-  if (ecu.level === 'programmable' && tuneBar !== undefined) return tuneBar;
+  if (ecu.boostRangeAddBar && tuneBar !== undefined) return tuneBar;
   return b0 + ecu.boostAddBar;
 }
 

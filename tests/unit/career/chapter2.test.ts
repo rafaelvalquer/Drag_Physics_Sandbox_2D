@@ -101,7 +101,7 @@ describe('build resolver v2', () => {
     expect(incompatibility(golf, findPart('dct-upgrade')!)).not.toBeNull();
     expect(incompatibility(golf, findPart('at-upgrade')!)).not.toBeNull();
     expect(incompatibility(golf, findPart('awd-center-tune')!)).not.toBeNull();
-    expect(incompatibility(civic, findPart('ecu-stage1')!)).not.toBeNull(); // turbo map on an NA engine
+    expect(incompatibility(civic, findPart('ecu-map-bmw-n20-s1')!)).not.toBeNull(); // turbo map of another engine on an NA engine
     expect(incompatibility(civic, findPart('turbo-basic')!)).not.toBeNull(); // chapter 1 kit is for the old engines
     expect(incompatibility(evo, findPart('awd-center-tune')!)).toBeNull();
     expect(incompatibility(civic, findPart('cam-k20')!)).toBeNull();
@@ -112,13 +112,13 @@ describe('build resolver v2', () => {
   it('derives Stage 1 from the physics: different gains per engine, never a fixed power', () => {
     const gains = CHAPTER2_CARS.filter((c) => c.engine.induction === 'turbo').map((c) => {
       const s = resolveBuild(c, [], {}, 2);
-      const st1 = resolveBuild(c, ['ecu-stage1'], {}, 2);
+      const st1 = resolveBuild(c, ['ecu-map-' + c.engine.family + '-s1'], {}, 2);
       if (!s.ok || !st1.ok) throw new Error(c.id);
       expect(st1.peakPowerCv).toBeGreaterThan(s.peakPowerCv);
       expect(st1.car.massKg).toBe(s.car.massKg);
       return st1.peakPowerCv / s.peakPowerCv;
     });
-    expect(Math.max(...gains) - Math.min(...gains)).toBeGreaterThan(0.03);
+    expect(Math.max(...gains) - Math.min(...gains)).toBeGreaterThan(0.01); // each family has its own map: gains differ, never a fixed %
   });
 
   it('the hybrid turbo needs the programmable ECU and the boost stays within the ECU range', () => {

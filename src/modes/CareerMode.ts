@@ -103,6 +103,8 @@ export function driveLabel(c: CarConfig): string {
 export function gearboxLabel(c: CarConfig): string {
   const n = c.transmission.gearRatios.length;
   const k = c.transmission.kind ?? 'manual';
+  // an upgraded box has no D schedule: the player does every shift
+  if (c.transmission.playerShifts) return `manual (câmbio melhorado), ${n} marchas, você troca`;
   if (k === 'dual-clutch') return `dupla embreagem, ${n} marchas (D/M)`;
   if (k === 'torque-converter-auto') return `automático com conversor, ${n} marchas (D/M)`;
   return `manual, ${n} marchas`;
@@ -208,6 +210,8 @@ export class CareerMode implements Mode {
     else if (this.readOnly) this.showWarning('Esta campanha já está aberta em outra aba. Aqui ela fica só para leitura.');
     try {
       await this.controller.load();
+      for (const n of this.controller.migrationNotices) toast(n);
+      this.controller.migrationNotices = [];
     } catch (e) {
       this.showWarning(`O save da campanha não pôde ser lido: ${(e as Error).message}`);
     }
@@ -516,6 +520,8 @@ export class CareerMode implements Mode {
     if (!r.ok) toast(r.error, 'error');
     else {
       toast('Campanha importada.');
+      for (const n of this.controller.migrationNotices) toast(n);
+      this.controller.migrationNotices = [];
       this.show('menu');
     }
   }
@@ -1884,7 +1890,9 @@ export class CareerMode implements Mode {
 function rivalNote(parts: readonly string[], car: CarConfig, base: CarConfig): string {
   const turbo = car.engine.induction === 'turbo';
   const aspiration = !turbo ? 'aspirado' : car.engine.turbo?.layout === 'parallel-twin' ? 'biturbo' : 'turbo';
-  const stage = parts.includes('ecu-stage3') ? 'Stage 3' : parts.includes('ecu-stage2') ? 'Stage 2' : parts.includes('ecu-stage1') ? 'Stage 1' : parts.length ? 'preparado' : 'de fábrica';
+  const ecuLevel = parts.map((id) => findPart(id)).find((p) => p?.category === 'ecu') as { level?: string } | undefined;
+  const stageOf = ecuLevel?.level === 'stage3' ? 'Stage 3' : ecuLevel?.level === 'stage2' ? 'Stage 2' : ecuLevel?.level === 'stage1' ? 'Stage 1' : null;
+  const stage = stageOf ?? (parts.length ? 'preparado' : 'de fábrica');
   return `${aspiration} · ${stage}${turbo && base.engine.induction !== 'turbo' ? ' (turbo não original)' : ''}`;
 }
 

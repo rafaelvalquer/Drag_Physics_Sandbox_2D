@@ -49,9 +49,9 @@ describe('turbinas para motores com turbo de fábrica', () => {
       expect.stringContaining('intercooler'),
       expect.stringContaining('alimentação'),
     ]));
-    const old = ['ecu-stage3', 'downpipe-catless', 'pistons-forged-modern', 'intercooler-race', 'at-upgrade'];
+    const old = ['ecu-map-bmw-n20-s3', 'fuel-bmw-n20-s3', 'downpipe-catless', 'pistons-forged-modern', 'intercooler-race', 'at-upgrade'];
     expect(resolveBuild(bmw, [...old, 'turbo-hybrid'], {}, 2).ok).toBe(true);
-    const staged = [...supportFor(bmw).filter((id) => id !== 'ecu-programmable'), 'ecu-stage3', 'downpipe-catless', race!.id];
+    const staged = [...supportFor(bmw).filter((id) => id !== 'ecu-programmable'), 'ecu-map-bmw-n20-s3', 'downpipe-catless', race!.id];
     const prepared = resolveBuild(bmw, staged, {}, 2);
     if (!prepared.ok) throw new Error(prepared.errors.join('\n'));
   }, 60_000);
@@ -71,7 +71,7 @@ describe('turbinas para motores com turbo de fábrica', () => {
       expect(result.car.engine.intake.manifoldVolumeL).toBeGreaterThan(original.car.engine.intake.manifoldVolumeL);
       lastTemperature = result.chargeTemperatureAtTargetK!;
     }
-    const support = ['ecu-stage2', 'downpipe-catless', 'pistons-forged-modern', 'at-upgrade'];
+    const support = ['ecu-map-mercedes-m276-s2', 'fuel-mercedes-m276-s1', 'downpipe-catless', 'pistons-forged-modern', 'at-upgrade'];
     const built = resolveBuild(c43, [...support, options[1]!.id], {}, 2);
     if (!built.ok) throw new Error(built.errors.join('\n'));
   }, 60_000);

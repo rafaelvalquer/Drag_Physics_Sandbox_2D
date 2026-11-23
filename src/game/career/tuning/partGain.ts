@@ -4,7 +4,7 @@ import { RACE_DISTANCES } from '../../race/RaceController';
 import { boostRangeForParts, resolveBuild, type BuildResult, type ResolverVersion } from './BuildResolver';
 import { compareTorqueBands } from './breathingModel';
 import { familyOf, incompatibility, transmissionKindOf } from './BuildResolverV2';
-import { findPart, type PartDef } from './parts';
+import { findPart, type EcuPart, type PartDef } from './parts';
 import { reliabilityLimits } from './EngineReliability';
 import { physicalSlotOf, progressionOf } from './partProgression';
 import { EngineThermalModel } from '../../../physics/engine/EngineThermalModel';
@@ -393,13 +393,31 @@ function breathingGain(part: PartDef, gain: PartGain): boolean {
   return reduction(gain.exhaustRestrictionBeforeKPa, gain.exhaustRestrictionAfterKPa);
 }
 
+/** The Competition map of a factory turbo (it asks for the big turbine, which itself needs a programmable or Competition ECU). */
+const isCompetitionMap = (part: PartDef): part is EcuPart => part.category === 'ecu' && !!(part as EcuPart).minTurboFlowScale;
+
+/**
+ * The Competition map cannot be measured against "no ECU": its hardware (big turbine) is only valid with a
+ * programmable ECU or the map itself. It is compared with the programmable ECU on the same hardware.
+ */
+function auditCompetitionMap(car: CarConfig, part: EcuPart, track: TrackConfig, version: ResolverVersion, extendedSplits: boolean): PartAudit {
+  const family = familyOf(car);
+  const context = [
+    `fuel-${family}-s3`, supportedTransmission(car), `rotating-assembly-${family}-s3`, `charge-cooler-${family}-s3`,
+    `exhaust-downpipe-${family}-s3`, `factory-turbo-${family}-s3`,
+  ];
+  const before = resolveBuild(car, [...context, 'ecu-programmable'], {}, version);
+  const after = resolveBuild(car, [...context, part.id], {}, version);
+  if (!before.ok || !after.ok) return { status: 'invalid-build', reasons: [...(before.ok ? [] : before.errors), ...(after.ok ? [] : after.errors)] };
+  return compareBuilds(before, after, part, context, track, extendedSplits);
+}
+
 /** Classifies every attempted pairing, including failures to produce comparable runs. */
 export function auditPartGain(car: CarConfig, part: PartDef, track: TrackConfig, version: ResolverVersion, extendedSplits = false): PartAudit {
   const incompatible = incompatibility(car, part);
   if (incompatible) return { status: 'incompatible', reasons: [incompatible] };
   if (version === 1 && part.since === 2) return { status: 'incompatible', reasons: ['Peça requer resolver 2.'] };
-  if (progressionOf(part)?.group === 'factory-turbo-ecu')
-    return auditLegacyEcuStages(car, track, version, extendedSplits).find((result) => result.next === part.id)!.audit;
+  if (isCompetitionMap(part)) return auditCompetitionMap(car, part, track, version, extendedSplits);
   if (progressionOf(part)?.objective === 'boost-headroom')
     return auditBoostHeadroom(car, [part], track, version, extendedSplits)[0]!.audit;
   if ('conversionPreparation' in part && part.conversionPreparation)
@@ -438,26 +456,6 @@ export interface StageComparison {
 function supportedTransmission(car: CarConfig): string {
   const kind = transmissionKindOf(car);
   return kind === 'manual' ? 'clutch-reinforced' : kind === 'dual-clutch' ? 'dct-upgrade' : 'at-upgrade';
-}
-
-function auditLegacyEcuStages(car: CarConfig, track: TrackConfig, version: ResolverVersion, extendedSplits: boolean): StageComparison[] {
-  const stages = ['ecu-stage1', 'ecu-stage2', 'ecu-stage3'];
-  const support = ['pistons-forged-modern', supportedTransmission(car)];
-  const packages = [support, [...support, 'downpipe-catless', 'intercooler-race'], [...support, 'downpipe-catless', 'intercooler-race', 'turbo-hybrid']];
-  const builds = [
-    resolveBuild(car, support, {}, version),
-    ...stages.map((id, index) => resolveBuild(car, [...packages[index]!, id], {}, version)),
-  ];
-  return stages.map((next, index) => {
-    const previous = stages[index - 1] ?? null;
-    const before = builds[index]!;
-    const after = builds[index + 1]!;
-    if (!before.ok || !after.ok) {
-      const reasons = [...(before.ok ? [] : before.errors), ...(after.ok ? [] : after.errors)];
-      return { previous, next, audit: { status: 'invalid-build', reasons } };
-    }
-    return { previous, next, audit: compareBuilds(before, after, findPart(next)!, packages[index]!, track, extendedSplits) };
-  });
 }
 
 function conversionSupport(car: CarConfig): string[] {
@@ -557,7 +555,15 @@ function auditBoostHeadroom(car: CarConfig, stages: readonly PartDef[], track: T
 export function auditPartStages(car: CarConfig, stages: readonly PartDef[], track: TrackConfig, version: ResolverVersion, extendedSplits = false): StageComparison[] {
   const first = stages[0];
   if (!first) return [];
-  if (progressionOf(first)?.group === 'factory-turbo-ecu') return auditLegacyEcuStages(car, track, version, extendedSplits);
+  if (stages.some(isCompetitionMap)) {
+    // the Competition map is measured on its own; the stages below it keep the usual chain
+    const rest = stages.filter((part) => !isCompetitionMap(part));
+    const chain = rest.length ? auditPartStages(car, rest, track, version, extendedSplits) : [];
+    return stages.map((part, index) => {
+      if (isCompetitionMap(part)) return { previous: stages[index - 1]?.id ?? null, next: part.id, audit: auditCompetitionMap(car, part, track, version, extendedSplits) };
+      return chain.find((entry) => entry.next === part.id)!;
+    });
+  }
   if (progressionOf(first)?.objective === 'boost-headroom') return auditBoostHeadroom(car, stages, track, version, extendedSplits);
   const slot = physicalSlotOf(first);
   const specialization = progressionOf(first)?.specialization;

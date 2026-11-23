@@ -314,6 +314,11 @@ export const TransmissionSchema = z.object({
     antiStallRpm: finite(300, 2000),
   }),
   shift: ShiftSchema,
+  /**
+   * The player does every shift (E/Q): the D schedule is off. Set by an upgraded automatic / dual-clutch
+   * box (the Workshop's "câmbio melhorado"): the box keeps its power shifts, its launch and its gains.
+   */
+  playerShifts: z.boolean().optional(),
   torqueConverter: TorqueConverterSchema.optional(),
   powershift: PowershiftSchema.optional(),
   autoShift: AutoShiftSchema.optional(),
