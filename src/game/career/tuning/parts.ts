@@ -238,6 +238,8 @@ export interface ExhaustPart extends PartBase {
   acousticPreset: 'sport';
   /** Diameter scale of the primaries (header). */
   headerDiameterScale: number;
+  tailpipeDiameterScale?: number;
+  mufflerAbsorptionScale?: number;
   /** Factory turbo: a freer path after the turbine lets it reach speed sooner (spool time scale). */
   spoolTimeScale?: number;
   /** A downpipe changes its own section and can coexist with the rest of the exhaust. */
@@ -666,6 +668,40 @@ const BASE_PARTS: readonly PartDef[] = [
     headerDiameterScale: 1.08,
   },
   {
+    id: 'exhaust-classic-flow',
+    category: 'exhaust',
+    name: 'Escape completo de alta vazão',
+    chapter: 2,
+    price: 1340,
+    unlock: 'part-exhaust',
+    compat: { families: [LEGACY_FAMILY] },
+    progression: { tier: 2, group: 'classic-exhaust-system', specialization: 'rua' },
+    description: 'Coletor, linha e abafador dimensionados como um único conjunto.',
+    physics: 'Contrapressão de 5,5 kPa no fluxo nominal, com tubo de saída de maior seção e menor absorção sonora.',
+    backPressureKPa: 5.5,
+    acousticPreset: 'sport',
+    headerDiameterScale: 1.12,
+    tailpipeDiameterScale: 1.06,
+    mufflerAbsorptionScale: 0.76,
+  },
+  {
+    id: 'exhaust-classic-race',
+    category: 'exhaust',
+    name: 'Escape completo de competição',
+    chapter: 3,
+    price: 2150,
+    unlock: 'part-exhaust',
+    compat: { families: [LEGACY_FAMILY] },
+    progression: { tier: 3, group: 'classic-exhaust-system', specialization: 'rua' },
+    description: 'Linha completa de competição, com primários largos e escape de baixa restrição.',
+    physics: 'Contrapressão de 4,1 kPa no fluxo nominal, diâmetros maiores e menor absorção sonora que o sistema de alta vazão.',
+    backPressureKPa: 4.1,
+    acousticPreset: 'sport',
+    headerDiameterScale: 1.16,
+    tailpipeDiameterScale: 1.12,
+    mufflerAbsorptionScale: 0.49,
+  },
+  {
     id: 'manifold-sport',
     category: 'intake-manifold',
     name: 'Coletor de admissão',
@@ -786,6 +822,22 @@ const BASE_PARTS: readonly PartDef[] = [
 
 /** Dyno Lab hardware: fits the classic and the modern engines (the parts are not engine specific). */
 const DYNO_LAB_PARTS: readonly PartDef[] = [
+  ...([1, 3] as const).map((tier): ValveSpringPart => {
+    const safeRpmAdd = tier === 1 ? 200 : 600;
+    return {
+      id: `valve-springs-classic-s${tier}`,
+      category: 'engine-valvetrain',
+      name: `Molas e pratos Stage ${tier}`,
+      chapter: tier,
+      price: tier === 1 ? 480 : 1420,
+      unlock: 'part-cam',
+      compat: { families: [LEGACY_FAMILY] },
+      progression: { tier, group: 'classic-valve-springs', specialization: 'rua' },
+      description: 'Molas e pratos adequados ao trem de válvulas dos motores clássicos.',
+      physics: `O trem de válvulas suporta ${safeRpmAdd} rpm adicionais. O corte permanece definido pela ignição.`,
+      safeRpmAdd,
+    };
+  }),
   {
     id: 'valve-springs',
     category: 'engine-valvetrain',

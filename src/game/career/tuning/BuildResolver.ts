@@ -5,6 +5,7 @@ import { CATEGORY_LABEL, CATEGORY_ORDER_V1, findPart, findPartForVersion, type P
 import { applyTuneOverlay, needsOverlay } from './TuningCapabilities';
 import { tuneKey, resolverTune, sameTune, applyTyre, applyCoolingHardware, CLUTCH_TORQUE_MARGIN, deepFreeze, workshopFinalDrive, workshopGearRatios, fmtBar, MAX_KNOCK_LOSS, type BuildResult, type BuildTune, type ResolverVersion } from './buildCommon';
 import { resolveV2 } from './BuildResolverV2';
+import { exhaustPressureAfterSections } from './modernBreathing';
 
 export { CLUTCH_TORQUE_MARGIN, MAX_KNOCK_LOSS, type BuildResult, type BuildTune, type ResolverVersion };
 
@@ -182,6 +183,7 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
   }
   const ratedRpm = powerPeakRpm(base.engine.torqueCurve, base.engine.revLimitRpm);
   const stockEngine = withStockBreathing(base.engine, ratedRpm);
+  const exhaust = engineParts.exhaust;
   let steadyBoostBar: { rpm: number; bar: number }[] = [];
   let knockLoss = 0;
   // Non-engine upgrades (clutch, tyres, mass, suspension, internals) must not resample
@@ -191,7 +193,20 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
   const changesEngine = !!(engineParts.filter || engineParts.manifold || engineParts.cam || engineParts.exhaust || engineParts.turbo)
     || engineMods.length > 0;
   if (changesEngine) {
-    const r = applyEngineParts(stockEngine, { ...engineParts, mod: Object.fromEntries(engineMods) });
+    const engineMod: MechanicalMods = Object.fromEntries(engineMods);
+    if (exhaust) {
+      const sectionReduction = parts.reduce((sum, part) => {
+        const section = part.category === 'exhaust-header' || part.category === 'exhaust-pipe' || part.category === 'exhaust-muffler';
+        return sum + (section && 'mod' in part ? part.mod.backPressureReductionKPa ?? 0 : 0);
+      }, 0);
+      engineMod.backPressureKPa = exhaustPressureAfterSections(
+        stockEngine.breathing!.exhaustBackPressureKPa, exhaust.backPressureKPa, false,
+        { backPressureReductionKPa: sectionReduction },
+      );
+      // A turbine's relief is independent of the overlapping work on the exhaust line.
+      engineMod.backPressureReductionKPa = Math.max(0, (mod.backPressureReductionKPa ?? 0) - sectionReduction);
+    }
+    const r = applyEngineParts(stockEngine, { ...engineParts, mod: engineMod });
     car.engine = r.engine;
     steadyBoostBar = r.steadyBoostBar;
     knockLoss = r.knockLoss;
@@ -207,7 +222,6 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
     car.massKg += turboInstalled.massAddKg + (mod.intercoolerMassAddKg ?? 0); // charging hardware
     car.acoustic = { ...car.acoustic, turboGain: Math.max(car.acoustic.turboGain, 0.7) };
   }
-  const exhaust = engineParts.exhaust;
   if (exhaust || mod.headerDiameterScale || mod.exhaustDiameterScale || mod.exhaustAbsorptionScale) {
     // new geometry: wider primaries, the acoustic preset of a free-flowing system
     const acousticBase = exhaust ? exhaustPreset(exhaust.acousticPreset, {
@@ -217,9 +231,9 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
     }) : structuredClone(base.exhaust);
     car.exhaust = {
       ...acousticBase,
-      headerDiameterMm: Math.min(70, acousticBase.headerDiameterMm * (mod.headerDiameterScale ?? 1)),
-      tailpipeDiameterMm: Math.min(120, acousticBase.tailpipeDiameterMm * (mod.exhaustDiameterScale ?? 1)),
-      mufflerAbsorption: Math.max(0, acousticBase.mufflerAbsorption * (mod.exhaustAbsorptionScale ?? 1)),
+      headerDiameterMm: Math.min(70, Math.max(acousticBase.headerDiameterMm, base.exhaust.headerDiameterMm * (mod.headerDiameterScale ?? 1))),
+      tailpipeDiameterMm: Math.min(120, Math.max(acousticBase.tailpipeDiameterMm * (exhaust?.tailpipeDiameterScale ?? 1), base.exhaust.tailpipeDiameterMm * (mod.exhaustDiameterScale ?? 1))),
+      mufflerAbsorption: Math.max(0, Math.min(acousticBase.mufflerAbsorption * (exhaust?.mufflerAbsorptionScale ?? 1), base.exhaust.mufflerAbsorption * (mod.exhaustAbsorptionScale ?? 1))),
       outputGain: base.exhaust.outputGain,
     };
   }

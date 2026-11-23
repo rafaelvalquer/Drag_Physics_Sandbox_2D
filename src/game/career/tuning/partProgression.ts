@@ -61,14 +61,32 @@ const existing: Readonly<Record<string, PartProgression>> = {
   'suspension-classic-street': { tier: 1, group: 'launch-suspension', specialization: 'rua' },
   'suspension-drag': { tier: 2, group: 'launch-suspension', specialization: 'rua' },
   'suspension-classic-race': { tier: 3, group: 'launch-suspension', specialization: 'rua' },
+  'header-4x1': { tier: 1, group: 'classic-exhaust-header', specialization: 'rua' },
+  'header-421': { tier: 2, group: 'classic-exhaust-header', specialization: 'rua' },
+  'header-classic-race': { tier: 3, group: 'classic-exhaust-header', specialization: 'rua' },
+  'pipe-sport': { tier: 1, group: 'classic-exhaust-pipe', specialization: 'rua' },
+  'pipe-classic-flow': { tier: 2, group: 'classic-exhaust-pipe', specialization: 'rua' },
+  'pipe-race': { tier: 3, group: 'classic-exhaust-pipe', specialization: 'rua' },
+  'muffler-sport': { tier: 1, group: 'classic-exhaust-muffler', specialization: 'rua' },
+  'muffler-classic-flow': { tier: 2, group: 'classic-exhaust-muffler', specialization: 'rua' },
+  'muffler-straight': { tier: 3, group: 'classic-exhaust-muffler', specialization: 'rua' },
+  'exhaust-sport': { tier: 1, group: 'classic-exhaust-system', specialization: 'rua' },
+  'fuel-classic-regulation': { tier: 1, group: 'classic-fuel', specialization: 'rua' },
+  injectors: { tier: 2, group: 'classic-fuel', specialization: 'rua' },
+  'fuel-pump': { tier: 3, group: 'classic-fuel', specialization: 'rua' },
+  'ignition-street': { tier: 1, group: 'classic-ignition', specialization: 'rua' },
+  'ignition-classic-sport': { tier: 2, group: 'classic-ignition', specialization: 'rua' },
+  'ignition-race': { tier: 3, group: 'classic-ignition', specialization: 'rua' },
+  'valve-springs': { tier: 2, group: 'classic-valve-springs', specialization: 'rua' },
   'ecu-stage1': { tier: 1, group: 'factory-turbo-ecu', specialization: 'turbo' },
   'ecu-stage2': { tier: 2, group: 'factory-turbo-ecu', specialization: 'turbo' },
   'ecu-stage3': { tier: 3, group: 'factory-turbo-ecu', specialization: 'turbo' },
 };
 
 export function progressionOf(part: PartDef, family?: string): PartProgression | undefined {
-  // The original sport filter is shared with modern cars as a standalone option.
-  if (part.id === 'filter-sport' && family && family !== 'legacy') return undefined;
+  // Shared original parts belong to classic series only. They remain standalone options on modern cars.
+  if ((part.id === 'filter-sport' || part.id === 'exhaust-sport' || part.id === 'valve-springs') &&
+    family && family !== 'legacy') return undefined;
   return part.progression ?? existing[part.id];
 }
 

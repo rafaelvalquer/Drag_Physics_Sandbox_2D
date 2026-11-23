@@ -62,6 +62,8 @@ export interface PartGain {
   sustainedTemperature?: { circuit: 'coolant' | 'oil'; beforeC: number; afterC: number };
   fuelCapacityBeforeKgS: number | null;
   fuelCapacityAfterKgS: number | null;
+  legacyFuelLimitBeforeBar: number | null;
+  legacyFuelLimitAfterBar: number | null;
   etBefore: number;
   etAfter: number;
   t100Before: number;
@@ -225,6 +227,8 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     fuelCapacityBeforeKgS: base.car.engine.fueling?.maxFuelKgS ??
       ('fuelCapacityScale' in part && after.car.engine.fueling ? after.car.engine.fueling.maxFuelKgS / part.fuelCapacityScale : null),
     fuelCapacityAfterKgS: after.car.engine.fueling?.maxFuelKgS ?? null,
+    legacyFuelLimitBeforeBar: legacyFuelLimit(base),
+    legacyFuelLimitAfterBar: legacyFuelLimit(after),
     etBefore: a.et,
     etAfter: b.et,
     t100Before: a.t100,
@@ -267,7 +271,11 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     gain.engineInertiaAfterKgM2 < gain.engineInertiaBeforeKgM2 && gain.etAfter - gain.etBefore <= 0.05;
   const compressionGain = group === 'modern-na-compression' &&
     gain.cvAfter - gain.cvBefore >= 0.15 && gain.etAfter - gain.etBefore <= NOT_WORSE_S;
-  const ignitionGain = (group === 'modern-ignition' || group === 'classic-ecu') && gain.burnBeforeDeg - gain.burnAfterDeg >= 0.1 &&
+  const ignitionGain = (group === 'modern-ignition' || group === 'classic-ignition' || group === 'classic-ecu') &&
+    gain.burnBeforeDeg - gain.burnAfterDeg >= 0.1 &&
+    gain.etAfter - gain.etBefore <= 0.05;
+  const legacyFuelGain = group === 'classic-fuel' && gain.legacyFuelLimitBeforeBar !== null &&
+    gain.legacyFuelLimitAfterBar !== null && gain.legacyFuelLimitAfterBar - gain.legacyFuelLimitBeforeBar >= 0.05 - 1e-9 &&
     gain.etAfter - gain.etBefore <= 0.05;
   // Track time can trade off against high-flow output, as for the high-rpm cylinder-head series.
   const turboFlowGain = group === 'modern-factory-turbo' && gain.etAfter - gain.etBefore <= 0.08 &&
@@ -278,8 +286,16 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     gain.chargeTemperatureBeforeK - gain.chargeTemperatureAfterK >= 0.5;
   const improvement = isGain(gain) || breathingGain(part, gain) || drivelineGain(part, gain) ||
     topEndGain(part, gain) || fuelGain || internalGain || compressionGain || ignitionGain || turboFlowGain || chargeCoolingGain ||
-    pressureControlGain(group, gain) || coolingGain || chassisGain(group, gain);
+    pressureControlGain(group, gain) || coolingGain || chassisGain(group, gain) || legacyFuelGain;
   return { status: !effect ? 'no-effect' : improvement ? 'gain' : 'no-gain', gain };
+}
+
+function legacyFuelLimit(build: ValidBuild): number | null {
+  if (build.version !== 1 || build.car.engine.induction !== 'turbo') return null;
+  for (const part of build.parts) {
+    if ('mod' in part && part.mod.fuelBoostLimitBar !== undefined) return part.mod.fuelBoostLimitBar;
+  }
+  return 0.95;
 }
 
 function chassisGain(group: string | undefined, gain: PartGain): boolean {
@@ -335,7 +351,8 @@ function drivelineGain(part: PartDef, gain: PartGain): boolean {
 
 function breathingGain(part: PartDef, gain: PartGain): boolean {
   const group = progressionOf(part)?.group;
-  if (!isModernBreathingPart(part) && group !== 'classic-throttle' && group !== 'modern-intake-filter') return false;
+  if (!isModernBreathingPart(part) && group !== 'classic-throttle' && group !== 'modern-intake-filter' &&
+    !group?.startsWith('classic-exhaust-')) return false;
   // These street parts should not worsen the reference pass enough to outweigh the hardware gain.
   if (gain.etAfter - gain.etBefore > 0.05) return false;
   const reduction = (before: number | null, after: number | null): boolean =>
@@ -424,6 +441,7 @@ function conversionSupport(car: CarConfig): string[] {
 
 function auditContexts(car: CarConfig, part: PartDef): readonly string[][] {
   const group = progressionOf(part)?.group;
+  if (group === 'classic-fuel') return CONTEXTS.filter((context) => context.some((id) => findPart(id)?.category === 'turbo'));
   if (car.engine.family === 'toyota-2gr-fse' && group === 'weight-reduction') return [['tires-sport']];
   if (car.engine.family === 'mercedes-m276' && (group === 'tire-compound' || group === 'tire-width'))
     return [['at-upgrade']];
