@@ -78,15 +78,25 @@ const existing: Readonly<Record<string, PartProgression>> = {
   'ignition-classic-sport': { tier: 2, group: 'classic-ignition', specialization: 'rua' },
   'ignition-race': { tier: 3, group: 'classic-ignition', specialization: 'rua' },
   'valve-springs': { tier: 2, group: 'classic-valve-springs', specialization: 'rua' },
+  'clutch-reinforced': { tier: 1, group: 'classic-clutch', specialization: 'rua' },
+  'clutch-ceramic-street': { tier: 2, group: 'classic-clutch', specialization: 'rua' },
+  'clutch-ceramic-race': { tier: 3, group: 'classic-clutch', specialization: 'rua' },
+  'differential-short': { tier: 1, group: 'classic-final-drive', specialization: 'rua' },
+  'diff-short-strong': { tier: 2, group: 'classic-final-drive', specialization: 'rua' },
+  'diff-classic-race': { tier: 3, group: 'classic-final-drive', specialization: 'rua' },
+  'gearbox-classic-sport': { tier: 1, group: 'classic-manual-gearbox', specialization: 'rua' },
+  'gearbox-street': { tier: 2, group: 'classic-manual-gearbox', specialization: 'rua' },
+  'gearbox-race': { tier: 3, group: 'classic-manual-gearbox', specialization: 'rua' },
   'ecu-stage1': { tier: 1, group: 'factory-turbo-ecu', specialization: 'turbo' },
   'ecu-stage2': { tier: 2, group: 'factory-turbo-ecu', specialization: 'turbo' },
   'ecu-stage3': { tier: 3, group: 'factory-turbo-ecu', specialization: 'turbo' },
 };
 
+// Shared original parts belong to classic series only. They remain standalone options on modern cars.
+const sharedClassicSeries = new Set(['filter-sport', 'exhaust-sport', 'valve-springs', 'clutch-reinforced', 'differential-short']);
+
 export function progressionOf(part: PartDef, family?: string): PartProgression | undefined {
-  // Shared original parts belong to classic series only. They remain standalone options on modern cars.
-  if ((part.id === 'filter-sport' || part.id === 'exhaust-sport' || part.id === 'valve-springs') &&
-    family && family !== 'legacy') return undefined;
+  if (family && family !== 'legacy' && sharedClassicSeries.has(part.id)) return undefined;
   return part.progression ?? existing[part.id];
 }
 

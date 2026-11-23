@@ -53,6 +53,7 @@ const metrics = [
   'Δ pressão alvo bar', 'Δ corte rpm', 'Δ alvo ar/combustível', 'Δ limite de torque do mapa N·m',
   'Δ temperatura sob carga sustentada °C',
   'Δ massa kg', 'Δ aderência de largada', 'Δ resistência ao rolamento', 'Δ transferência de carga',
+  'Δ capacidade da embreagem N·m', 'Δ eficiência da transmissão p.p.',
   'Δ pressão sustentada pela alimentação clássica bar',
 ];
 const markdown = [
@@ -96,6 +97,8 @@ for (const row of rows) {
       delta(m.gripBefore, m.gripAfter),
       (m.rollingAfter - m.rollingBefore).toFixed(5),
       delta(m.axleLoadTransferBefore, m.axleLoadTransferAfter),
+      delta(m.clutchBeforeNm, m.clutchAfterNm),
+      delta(100 * m.drivelineEfficiencyBefore, 100 * m.drivelineEfficiencyAfter),
       restrictionDelta(m.legacyFuelLimitBeforeBar, m.legacyFuelLimitAfterBar),
     ] : metrics.map(() => '—');
     const figures = values.join(' | ');

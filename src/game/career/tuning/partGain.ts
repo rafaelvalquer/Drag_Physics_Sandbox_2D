@@ -340,7 +340,9 @@ function drivelineGain(part: PartDef, gain: PartGain): boolean {
   if (!progression || gain.etAfter - gain.etBefore > 0.05) return false;
   if (part.category === 'flywheel' || part.category === 'engine-flywheel')
     return gain.engineInertiaBeforeKgM2 - gain.engineInertiaAfterKgM2 >= 0.001;
-  if (part.since !== 2) return false;
+  const classicDriveline = progression.group === 'classic-clutch' || progression.group === 'classic-final-drive' ||
+    progression.group === 'classic-manual-gearbox';
+  if (part.since !== 2 && !classicDriveline) return false;
   if (part.category === 'clutch' || part.category === 'gearbox') return gain.clutchAfterNm - gain.clutchBeforeNm >= GAIN_CLUTCH_NM;
   if (part.category === 'awd')
     return gain.couplingAfterNm !== null && gain.couplingBeforeNm !== null && gain.couplingAfterNm - gain.couplingBeforeNm >= 10;
