@@ -30,7 +30,7 @@ import { DEFAULT_SLOT, STARTER_CARS, type CareerRaceResult, type OutcomeSchema, 
 import { SPEAKER_NAME, pendingScenes, type StoryScene, type StoryTrigger } from '../game/career/CareerStory';
 import type { RaceRecord } from '../game/career/CareerController';
 import { TelemetryProbe, runHeadlessRace } from '../game/career/headlessRace';
-import { ownedCarBuild, ownedCarConfig, rivalBuild, rivalCar } from '../game/career/RivalBuildFactory';
+import { ownedCarBuild, ownedCarConfig, ownedCarLook, rivalBuild, rivalCar } from '../game/career/RivalBuildFactory';
 import { BUILD_RESOLVER_VERSION, resolveBuild, type BuildResult } from '../game/career/tuning/BuildResolver';
 import type { BuildTune } from '../game/career/tuning/buildCommon';
 import { failureSpecFor, reconcileTune, tuneReliability } from '../game/career/tuning/TuningCapabilities';
@@ -622,7 +622,7 @@ export class CareerMode implements Mode {
       next: nxt ? { order: nxt.order, total: evs.length, title: nxt.title, rival: rivalOf(nxt).name, nickname: rivalOf(nxt).nickname, distance: RACE_DISTANCES[nxt.distance].label, region: nxt.regionLabel, reward: nxt.rewardCr, word: ch === CHAPTER_1_ID ? 'noite' : 'etapa' } : null,
       chapterDone: evs.filter((e) => s.completedEventIds.includes(e.id)).length,
       chapterTotal: evs.length,
-      others: s.ownedCars.filter((c) => c.id !== car.id).map((c) => ({ id: c.id, nickname: c.nickname, trophy: !!c.prizeEventId, cfg: ownedCarBuild(c).ok ? ownedCarConfig(c) : null })),
+      others: s.ownedCars.filter((c) => c.id !== car.id).map((c) => ({ id: c.id, nickname: c.nickname, trophy: !!c.prizeEventId, cfg: ownedCarLook(c) })),
       flags: { workshopOpen, chapter2: isChapterUnlocked(s, CHAPTER_2_ID), chapterComplete: isChapterComplete(s, ch), canSell: s.ownedCars.length > 1, sellLabel: `Vender este carro (${cr(resaleValue(car))})` },
       makePreview: (c, w, hh, studio) => this.preview(c, w, hh, studio ? 'studio' : 'plain', studio ? 0.8 : 0.86),
       on: {
@@ -714,7 +714,7 @@ export class CareerMode implements Mode {
       credits: s.credits,
       leagueOpen,
       eliteOpen,
-      fleet: s.ownedCars.map((c) => ({ id: c.id, nickname: c.nickname, value: resaleValue(c), paid: c.purchasePrice ?? null, parts: c.installedParts.length, trophy: !!c.prizeEventId, active: c.id === s.activeCarId, cfg: ownedCarBuild(c).ok ? ownedCarConfig(c) : null })),
+      fleet: s.ownedCars.map((c) => ({ id: c.id, nickname: c.nickname, value: resaleValue(c), paid: c.purchasePrice ?? null, parts: c.installedParts.length, trophy: !!c.prizeEventId, active: c.id === s.activeCarId, cfg: ownedCarLook(c) })),
       makePreview: (c, w, hh) => this.preview(c, w, hh, 'plain', 0.86),
       buy: (o) => this.openPurchase(o),
       sell: (id) => void this.sellActive(id, 'market'),

@@ -156,11 +156,11 @@ export function buildGarage(d: GarageDeps): HTMLElement {
         h(
           'div',
           { class: 'gx-fleet' },
-          d.others.map((o, i) =>
+          d.others.map((o) =>
             h(
               'button',
               { class: 'gx-fleet-car', 'data-testid': `garage-pick-${o.id}`, onclick: () => d.on.pick(o.id) },
-              o.cfg && i < 6 ? d.makePreview(o.cfg, 150, 66, false) : icon('car'),
+              o.cfg ? d.makePreview(o.cfg, 150, 66, false) : icon('car'),
               h('span', {}, o.trophy ? `${o.nickname} · troféu` : o.nickname),
             ),
           ),
