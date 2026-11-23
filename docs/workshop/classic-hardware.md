@@ -12,4 +12,10 @@ Coletor, tubulação e abafador avulsos têm reduções independentes. Com um es
 
 Os limites de alimentação são tetos do sistema. O kit turbo, a wastegate e a resistência da montagem também limitam a pressão que se pode usar. As molas ampliam a rotação mecânica segura e preservam o corte definido pela ignição. Os IDs das peças anteriores continuam válidos.
 
-Para repetir a auditoria execute `npx tsx scripts/parts-stage-report.ts --groups=classic-exhaust-header,classic-exhaust-pipe,classic-exhaust-muffler,classic-exhaust-system,classic-fuel,classic-ignition,classic-valve-springs --fail`.
+## Internos
+
+Os três conjuntos mantêm os IDs existentes e passam a oferecer limites estimados de 400, 440 e 520 N·m. As bielas reforçadas agora ampliam a capacidade em todos os sete clássicos. O segundo estágio inclui bielas e pistões forjados, e o terceiro acrescenta o virabrequim. Os três reduzem o atrito em graus diferentes.
+
+A oficina mostra a capacidade antes e depois. A auditoria confirmou aumento de capacidade nas 21 comparações de internos. Uma montagem de referência do Gol a 1,50 bar excedeu 400 N·m e o resolver só a aceitou a partir do segundo estágio.
+
+Para repetir a auditoria execute `npx tsx scripts/parts-stage-report.ts --groups=classic-exhaust-header,classic-exhaust-pipe,classic-exhaust-muffler,classic-exhaust-system,classic-fuel,classic-ignition,classic-valve-springs,classic-rotating-assembly --fail`.

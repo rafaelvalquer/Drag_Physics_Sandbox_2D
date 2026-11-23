@@ -293,7 +293,8 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
     errors.push('pressão superior a 0,95 bar exige bicos ou bomba de maior vazão');
   }
   const stockTorqueLimitNm = Math.max(320, base.transmission.clutch.maxTorqueNm * 1.45);
-  if (turboInstalled && peakTorqueNm > (mod.internalTorqueLimitNm ?? stockTorqueLimitNm)) {
+  const internalTorqueLimitNm = mod.internalTorqueLimitNm ?? stockTorqueLimitNm;
+  if (turboInstalled && peakTorqueNm > internalTorqueLimitNm) {
     errors.push('torque excede o limite mecânico dos internos; instale bielas e pistões reforçados');
   }
   if (turboInstalled && car.transmission.clutch.maxTorqueNm < peakTorqueNm * CLUTCH_TORQUE_MARGIN) {
@@ -309,6 +310,6 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
   const v = validateCar(car);
   if (!v.ok) errors.push(...v.errors);
   if (errors.length) return { ok: false, errors };
-  return { ok: true, car: deepFreeze(v.value!), parts, key, peakTorqueNm, peakPowerCv, steadyBoostBar, knockLoss, version: 1 };
+  return { ok: true, car: deepFreeze(v.value!), parts, key, peakTorqueNm, peakPowerCv, steadyBoostBar, knockLoss, internalTorqueLimitNm, version: 1 };
 }
 

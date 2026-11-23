@@ -84,6 +84,8 @@ export type BuildResult =
       wastegateLimitBar?: number;
       /** Maximum torque permitted by the map and supported mechanical hardware. */
       mappedTorqueLimitNm?: number;
+      /** Torque at which a classic build exceeds the installed bottom end's capacity. */
+      internalTorqueLimitNm?: number;
       knockLoss: number;
       /** Resolver version that produced the build. */
       version: ResolverVersion;

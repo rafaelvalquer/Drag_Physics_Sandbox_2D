@@ -66,3 +66,31 @@ describe('escape, ignição e alimentação dos clássicos', () => {
     }
   });
 });
+
+describe('internos dos clássicos', () => {
+  it.each(CHAPTER1_CARS.map((car) => [car.id, car] as const))('%s amplia o limite de torque em cada estágio', (_, car) => {
+    const ids = [null, 'rods-reinforced', 'pistons-forged', 'forged-kit'];
+    const limits = ids.map((id) => {
+      const build = resolveBuild(car, id ? [id] : [], {}, 1);
+      if (!build.ok) throw new Error(build.errors.join('\n'));
+      return build.internalTorqueLimitNm!;
+    });
+    expect(limits[0]).toBeLessThan(400);
+    expect(limits.slice(1)).toEqual([400, 440, 520]);
+  });
+
+  it('exige o conjunto de pistões e bielas no Gol preparado acima de 400 N·m', () => {
+    const support = [
+      'turbo-strong', 'clutch-ceramic-race', 'fuel-pump', 'ecu-race', 'ignition-race',
+      'compression-low', 'wastegate-race', 'cam-turbo', 'head-race', 'exhaust-classic-race',
+      'turbine-large', 'manifold-classic-race', 'filter-direct',
+    ];
+    const tune = { boostBar: 1.5 };
+    const rods = resolveBuild(gol, [...support, 'rods-reinforced'], tune, 1);
+    expect(rods.ok ? [] : rods.errors).toContainEqual(expect.stringContaining('limite mecânico dos internos'));
+    const pistons = resolveBuild(gol, [...support, 'pistons-forged'], tune, 1);
+    if (!pistons.ok) throw new Error(pistons.errors.join('\n'));
+    expect(pistons.peakTorqueNm).toBeGreaterThan(400);
+    expect(pistons.peakTorqueNm).toBeLessThan(440);
+  });
+});

@@ -59,6 +59,8 @@ export interface PartGain {
   fuelTargetAfterAfr: number | null;
   mappedTorqueLimitBeforeNm: number | null;
   mappedTorqueLimitAfterNm: number | null;
+  internalTorqueLimitBeforeNm: number | null;
+  internalTorqueLimitAfterNm: number | null;
   sustainedTemperature?: { circuit: 'coolant' | 'oil'; beforeC: number; afterC: number };
   fuelCapacityBeforeKgS: number | null;
   fuelCapacityAfterKgS: number | null;
@@ -245,10 +247,13 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     safeRpmAfter: reliabilityLimits(after.car, after.parts.map((p) => p.id)).recommendedSafeRpm,
     launchRpmBefore: base.car.transmission.clutch.launchRpm,
     launchRpmAfter: after.car.transmission.clutch.launchRpm,
+    internalTorqueLimitBeforeNm: base.internalTorqueLimitNm ?? null,
+    internalTorqueLimitAfterNm: after.internalTorqueLimitNm ?? null,
   };
   const effect = physicsSignature(base.car) !== physicsSignature(after.car) ||
     gain.safeRpmBefore !== gain.safeRpmAfter || gain.exhaustRestrictionBeforeKPa !== gain.exhaustRestrictionAfterKPa ||
-    gain.wastegateBeforeBar !== gain.wastegateAfterBar;
+    gain.wastegateBeforeBar !== gain.wastegateAfterBar ||
+    gain.internalTorqueLimitBeforeNm !== gain.internalTorqueLimitAfterNm;
   const fuelGain = 'fuelCapacityScale' in part && gain.fuelCapacityBeforeKgS !== null && gain.fuelCapacityAfterKgS !== null &&
     gain.fuelCapacityAfterKgS - gain.fuelCapacityBeforeKgS >= 0.0001 && gain.etAfter - gain.etBefore <= 0.05;
   const group = progressionOf(part)?.group;
@@ -269,6 +274,9 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     gain.etAfter - gain.etBefore <= 0.08;
   const internalGain = group === 'modern-rotating-assembly' && gain.safeRpmAfter - gain.safeRpmBefore >= 100 &&
     gain.engineInertiaAfterKgM2 < gain.engineInertiaBeforeKgM2 && gain.etAfter - gain.etBefore <= 0.05;
+  const classicInternalGain = group === 'classic-rotating-assembly' && gain.etAfter - gain.etBefore <= 0.05 &&
+    gain.internalTorqueLimitBeforeNm !== null && gain.internalTorqueLimitAfterNm !== null &&
+    gain.internalTorqueLimitAfterNm - gain.internalTorqueLimitBeforeNm >= 20;
   const compressionGain = group === 'modern-na-compression' &&
     gain.cvAfter - gain.cvBefore >= 0.15 && gain.etAfter - gain.etBefore <= NOT_WORSE_S;
   const ignitionGain = (group === 'modern-ignition' || group === 'classic-ignition' || group === 'classic-ecu') &&
@@ -285,7 +293,7 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     gain.chargeTemperatureBeforeK !== null && gain.chargeTemperatureAfterK !== null &&
     gain.chargeTemperatureBeforeK - gain.chargeTemperatureAfterK >= 0.5;
   const improvement = isGain(gain) || breathingGain(part, gain) || drivelineGain(part, gain) ||
-    topEndGain(part, gain) || fuelGain || internalGain || compressionGain || ignitionGain || turboFlowGain || chargeCoolingGain ||
+    topEndGain(part, gain) || fuelGain || internalGain || classicInternalGain || compressionGain || ignitionGain || turboFlowGain || chargeCoolingGain ||
     pressureControlGain(group, gain) || coolingGain || chassisGain(group, gain) || legacyFuelGain;
   return { status: !effect ? 'no-effect' : improvement ? 'gain' : 'no-gain', gain };
 }
