@@ -12,7 +12,9 @@ import {
   type FinalDrivePreset,
   type ThrottlePreset,
   type TuneField,
+  isNitrousField,
 } from './buildCommon';
+import { nitrousKitOf, validateNitrousTune } from './nitrousOverlay';
 import { overrevSpecOf, reliabilityLimits, reliabilityLevel, type ReliabilityLevel, type ReliabilityLimits } from './EngineReliability';
 import type { OverrevSpec } from '../../../physics/engine/EngineOverrevFailure';
 import { findPart, type EcuPart, type PartDef } from './parts';
@@ -81,6 +83,12 @@ export const TUNE_LABEL: Record<TuneField, string> = {
   finalDrive: 'Relação final',
   shiftRpm: 'Ponto de troca',
   tirePressureKpa: 'Pressão dos pneus',
+  nitrousMode: 'Modo do nitro',
+  nitrousShare: 'Divisão do nitro',
+  nitrousFlow1: 'Vazão do estágio 1',
+  nitrousRamp1: 'Rampa do estágio 1',
+  nitrousFlow2: 'Vazão do estágio 2',
+  nitrousRamp2: 'Rampa do estágio 2',
 };
 
 export const THROTTLE_OPTIONS: readonly { value: ThrottlePreset; label: string }[] = [
@@ -297,6 +305,7 @@ export function validateTune(base: CarConfig, partIds: readonly string[], versio
     if (!c.finalDrive.enabled) errs.push(`${TUNE_LABEL.finalDrive}: ${c.finalDrive.reason}`);
     else if (!(tune.finalDrive in FINAL_DRIVE_PRESETS)) errs.push('relação final desconhecida');
   }
+  errs.push(...validateNitrousTune(nitrousKitOf(partIds), tune));
   // the launch speed must stay under the cut that is set
   const cut = tune.revLimitRpm ?? c.revLimit.default;
   if (tune.launchRpm !== undefined && tune.launchRpm > cut - 800) errs.push('a rotação de largada precisa ficar 800 rpm abaixo do corte');
@@ -364,7 +373,7 @@ function extendCurve(car: CarConfig, rpm: number): void {
 
 /** Does this tune / part list need the overlay on top of the resolver result? */
 export function needsOverlay(tune: BuildTune, partIds: readonly string[]): boolean {
-  return TUNE_FIELDS.some((f) => f !== 'boostBar' && tune[f] !== undefined) || partIds.some(isOverlayPart);
+  return TUNE_FIELDS.some((f) => f !== 'boostBar' && !isNitrousField(f) && tune[f] !== undefined) || partIds.some(isOverlayPart);
 }
 
 /**

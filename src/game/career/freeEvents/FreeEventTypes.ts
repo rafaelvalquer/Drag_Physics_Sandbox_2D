@@ -25,6 +25,12 @@ export const buildTuneSchema = z.object({
   finalDrive: z.enum(['short', 'standard', 'long']).optional(),
   shiftRpm: z.number().int().min(1500).max(13000).optional(),
   tirePressureKpa: z.number().int().min(100).max(320).optional(),
+  nitrousMode: z.enum(['single', 'dual']).optional(),
+  nitrousShare: z.number().min(0.2).max(0.8).optional(),
+  nitrousFlow1: z.number().min(0.25).max(1).optional(),
+  nitrousRamp1: z.number().min(0).max(3).optional(),
+  nitrousFlow2: z.number().min(0.25).max(1).optional(),
+  nitrousRamp2: z.number().min(0).max(3).optional(),
 });
 
 const id = z.string().min(1).max(64);
