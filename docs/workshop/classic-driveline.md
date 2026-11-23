@@ -13,3 +13,5 @@ A auditoria confirmou ganho nas 63 comparações adjacentes. As trocas de relaç
 Os 17 carros com câmbio manual ou de dupla embreagem têm três níveis de controle de largada. Os módulos elevam o alvo inicial em até 200, 400 ou 550 rpm. O módulo original preserva o ID e a calibragem como Stage 2. O Stage 3 abre na sexta noite e permite passos de 50 rpm no Dyno Lab. Os automáticos com conversor usam o estol do conversor.
 
 A auditoria mediu 51 comparações na pista de testes. As mudanças de alvo variaram de −0,019 a +0,010 s no quarto de milha com o piloto de referência. A regulagem permite ajustar a saída ao pneu e à aderência da pista.
+
+No 208 GT, a comparação usa os mesmos pneus esportivos nos quatro níveis. Com pneus originais, o alvo padrão do Stage 3 aumentou a patinagem e custou 0,014 s frente à largada original. Com pneus esportivos, o Stage 3 reduziu a patinagem de 1,700 para 1,533 s e completou o quarto de milha 0,007 s antes da configuração original com os mesmos pneus.

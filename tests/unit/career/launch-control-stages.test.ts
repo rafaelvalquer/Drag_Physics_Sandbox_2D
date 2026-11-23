@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { CAREER_CARS } from '../../../src/data/cars/campaign';
+import { TRACKS } from '../../../src/data/tracks/index';
 import { EVENTS } from '../../../src/game/career/CareerEvents';
 import { isPartUnlocked } from '../../../src/game/career/CareerProgression';
 import { resolveBuild } from '../../../src/game/career/tuning/BuildResolver';
 import { familyOf, transmissionKindOf } from '../../../src/game/career/tuning/BuildResolverV2';
+import { auditPartGain } from '../../../src/game/career/tuning/partGain';
 import { findPart } from '../../../src/game/career/tuning/parts';
 import { careerResolverVersion } from '../../../src/game/career/tuning/resolverVersion';
 import { tuningCapabilities } from '../../../src/game/career/tuning/TuningCapabilities';
@@ -44,5 +46,15 @@ describe('controle de largada por estágio', () => {
     expect(isPartUnlocked(afterNight(4), findPart('launch-control')!, family)).toBe(true);
     expect(isPartUnlocked(afterNight(5), findPart('launch-control-pro')!, family)).toBe(false);
     expect(isPartUnlocked(afterNight(6), findPart('launch-control-pro')!, family)).toBe(true);
+  });
+
+  it('mede o controle de competição do 208 GT com o mesmo pneu nos dois builds', () => {
+    const car = CAREER_CARS.find((item) => item.engine.family === 'psa-prince-thp')!;
+    const track = TRACKS.find((item) => item.id === 'test-track')!;
+    const audit = auditPartGain(car, findPart('launch-control-pro')!, track, 2);
+    if (!('gain' in audit)) throw new Error(audit.reasons.join('\n'));
+    expect(audit.status).toBe('gain');
+    expect(audit.gain.context).toEqual(['tires-sport']);
+    expect(audit.gain.etAfter).toBeLessThan(audit.gain.etBefore);
   });
 });

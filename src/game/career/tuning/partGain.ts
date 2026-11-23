@@ -470,6 +470,7 @@ function auditContexts(car: CarConfig, part: PartDef): readonly string[][] {
     ...(car.id === 'gm-celta-2003' ? ['compression-celta-turbo-s3'] : []),
   ]];
   if (group === 'classic-turbo-compression') return [['turbo-basic', 'clutch-ceramic-race']];
+  if (car.engine.family === 'psa-prince-thp' && group === 'launch-control') return [['tires-sport']];
   if (group === 'classic-fuel') return CONTEXTS.filter((context) => context.some((id) => findPart(id)?.category === 'turbo'));
   if (car.engine.family === 'toyota-2gr-fse' && group === 'weight-reduction') return [['tires-sport']];
   if (car.engine.family === 'mercedes-m276' && (group === 'tire-compound' || group === 'tire-width'))
