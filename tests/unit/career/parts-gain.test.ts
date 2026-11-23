@@ -52,6 +52,15 @@ describe('ganho de cada peça da oficina', () => {
       expect(bad).toEqual([]);
     }, 300_000);
   }
+
+  it.each(['differential-short', 'suspension-drag-rwd'])('mede %s no IS 350 com a mesma aderência na referência', (partId) => {
+    const car = CAREER_CARS.find((item) => item.id === 'lexus-is350-2015')!;
+    const audit = auditPartGain(car, findPart(partId)!, track, 2);
+    if (!('gain' in audit)) throw new Error(audit.reasons.join('\n'));
+    expect(audit.status).toBe('gain');
+    expect(audit.gain.context).toEqual(['tires-sport']);
+    expect(audit.gain.etAfter).toBeLessThan(audit.gain.etBefore);
+  });
 });
 
 describe('textos das peças', () => {
@@ -82,6 +91,9 @@ describe('sequências de estágios', () => {
         expect(sequence, label).toHaveLength(3);
         expect(new Set(sequence.map(physicalSlotOf)).size, label).toBe(1);
         expect(new Set(sequence.map((part) => progressionOf(part)!.specialization)).size, label).toBe(1);
+        const prices = [...sequence].sort((a, b) => progressionOf(a)!.tier - progressionOf(b)!.tier).map((part) => part.price);
+        expect(prices[1], label).toBeGreaterThan(prices[0]!);
+        expect(prices[2], label).toBeGreaterThan(prices[1]!);
       }
     }
   });

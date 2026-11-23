@@ -482,7 +482,10 @@ function auditContexts(car: CarConfig, part: PartDef): readonly string[][] {
     if (car.engine.family === 'honda-k20') return [['tires-semislick']];
   }
   if (group === 'classic-fuel') return CONTEXTS.filter((context) => context.some((id) => findPart(id)?.category === 'turbo'));
-  if (car.engine.family === 'toyota-2gr-fse' && group === 'weight-reduction') return [['tires-sport']];
+  if (car.engine.family === 'toyota-2gr-fse' &&
+    (group === 'weight-reduction' || part.id === 'differential-short' || part.id === 'suspension-drag-rwd')) {
+    return [['tires-sport']];
+  }
   if (car.engine.family === 'mercedes-m276' && (group === 'tire-compound' || group === 'tire-width'))
     return [['at-upgrade']];
   if ('conversion' in part && part.conversion) return [conversionSupport(car)];

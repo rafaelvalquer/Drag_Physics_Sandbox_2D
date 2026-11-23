@@ -8,6 +8,8 @@ Os efeitos e custos são estimativas calibradas para o jogo. No Lexus 2GR-FSE e 
 
 Com o pedido de kickdown corrigido, o Lexus usa incrementos de eficiência de 1,6, 1,9 e 2,2 pontos percentuais. A nova calibração foi medida nos três estágios com o câmbio original.
 
+O efeito da relação final genérica e da suspensão traseira legada varia com a aderência. No Lexus com pneus esportivos mantidos nas duas passagens, reduziram os 402,336 m em 0,035 s e 0,044 s, respectivamente. Com pneus originais, as mesmas peças acrescentaram 0,076 s e 0,073 s. Os estágios específicos do Lexus continuam disponíveis na oficina.
+
 Para reproduzir esta rodada da calibração:
 
 ```sh
