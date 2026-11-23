@@ -71,7 +71,7 @@ describe('chapter data', () => {
     expect(EVENTS[0]!.unlocks).toEqual(['workshop-basic', 'part-filter', 'part-exhaust']);
     expect(EVENTS[3]!.unlocks).toEqual(['part-clutch', 'part-differential', 'part-turbo', 'engine-tuners']);
     expect(EVENTS[4]!.unlocks).toEqual(['part-tires-semislick']);
-    expect(EVENTS[5]!.unlocks).toEqual(['final-challenge']);
+    expect(EVENTS[5]!.unlocks).toEqual(['final-challenge', 'part-launch-pro']);
   });
 
   it('rivals are real cars built by the same resolver; Léo drives the existing Gol', () => {
@@ -290,7 +290,7 @@ describe('economy and idempotency', () => {
     await winUpTo(c, 5);
     expect(eventStatus(c.save!, EVENTS[6]!)).toBe('locked');
     const w6 = await c.recordRace(result('e6-o-aspirado', 'win'));
-    expect(w6.ok && w6.value.newUnlocks).toEqual(['final-challenge']);
+    expect(w6.ok && w6.value.newUnlocks).toEqual(['final-challenge', 'part-launch-pro']);
     expect(eventStatus(c.save!, EVENTS[6]!)).toBe('final');
     const fin = await c.recordRace(result('e7-rei-da-madrugada', 'win'));
     expect(fin.ok && fin.value.chapterCompleted).toBe(true);
