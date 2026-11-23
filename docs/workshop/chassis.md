@@ -9,3 +9,5 @@ A suspensão altera a altura efetiva de transferência de carga e a massa. Carro
 Execute `npx tsx scripts/parts-stage-report.ts --groups=tire-compound,tire-width,tire-pressure,weight-reduction,launch-suspension --fail`. A tabela registra a aderência à temperatura de pista, a resistência ao rolamento, a massa e a mudança de transferência de carga, junto com o tempo de pista.
 
 No Lexus IS 350, o primeiro alívio custou 0,681 s no conjunto de fábrica por causa de uma mudança na sequência de trocas. Com pneus esportivos, todos os níveis de alívio encurtaram a passagem. No C43 original, o primeiro nível de composto ou largura aumentou o tempo em 0,091 s ou 0,096 s, apesar do ganho de aderência. Com o upgrade do automático instalado, a perda entre estágios ficou dentro da margem da auditoria. As comparações destas séries usam o mesmo conjunto de apoio do original ao Stage 3.
+
+Após corrigir o kickdown, a suspensão do IS 350 passou a usar incrementos menores de transferência efetiva. Os níveis são +10, +16 e +22 mm, com a redução de massa preservada. As três trocas de estágio foram aprovadas na nova passagem de referência.

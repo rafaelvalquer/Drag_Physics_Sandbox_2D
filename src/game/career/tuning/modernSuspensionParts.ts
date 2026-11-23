@@ -14,7 +14,8 @@ export const MODERN_SUSPENSION_PARTS: readonly SuspensionPart[] = ([2, 3] as con
   const applications = new Map(cars.map((car) => [car.engine.family!, car]));
   return [...applications].flatMap(([family, car]) => ([1, 2, 3] as const).map((tier): SuspensionPart => {
     const profile = profiles[car.drivenAxle];
-    const cgHeightDeltaM = profile.deltas[tier - 1];
+    const deltas = family === 'toyota-2gr-fse' ? [0.010, 0.016, 0.022] as const : profile.deltas;
+    const cgHeightDeltaM = deltas[tier - 1];
     const massRemoveKg = [2, 5, 9][tier - 1]!;
     return {
       id: `launch-suspension-${family}-s${tier}`,

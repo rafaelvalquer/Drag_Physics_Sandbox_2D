@@ -6,6 +6,8 @@ Cada série tem estágios 1, 2 e 3 que ocupam o mesmo slot. A capacidade aumenta
 
 Os efeitos e custos são estimativas calibradas para o jogo. No Lexus 2GR-FSE e no Alfa 690T, o salto inicial de eficiência mudava a trajetória da transmissão na largada. A varredura em incrementos de 0,001 permitiu escolher faixas progressivas com perdas menores em cada família. O comparador da oficina mostra capacidade da caixa, fase de torque, travamento do conversor e acoplamento AWD quando esses parâmetros mudam.
 
+Com o pedido de kickdown corrigido, o Lexus usa incrementos de eficiência de 1,6, 1,9 e 2,2 pontos percentuais. A nova calibração foi medida nos três estágios com o câmbio original.
+
 Para reproduzir esta rodada da calibração:
 
 ```sh

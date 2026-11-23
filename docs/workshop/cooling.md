@@ -12,4 +12,6 @@ A simulação usa circuitos de líquido e óleo com capacidades térmicas estima
 
 Os coeficientes e as temperaturas são parâmetros da simulação. A auditoria aplica 100 s de carga padronizada a 30 °C, com 20 m/s de ar nos testes de radiador e óleo e com o carro parado no teste da ventoinha. Nas 225 trocas medidas, a queda de temperatura por troca foi de 1,15 a 11,03 °C no radiador, 2,97 a 7,35 °C no óleo e 2,34 a 10,51 °C na ventoinha. O maior acréscimo de tempo observado foi de 0,043 s nos 402,336 m.
 
+As três peças legadas também passaram a atuar no circuito térmico, mantendo seus efeitos anteriores sobre atrito e detonação. O radiador acrescenta 30% de área efetiva, o resfriador melhora a capacidade de troca em 32% e a ventoinha aumenta o fluxo assistido em 25%. Os três acrescentam massa.
+
 Para repetir, execute `npx tsx scripts/parts-stage-report.ts --groups=cooling-radiator,cooling-oil,cooling-fan --fail`.

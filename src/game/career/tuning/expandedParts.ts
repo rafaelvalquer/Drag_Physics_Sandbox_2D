@@ -86,9 +86,9 @@ const specs: Spec[] = [
   ['ignition-street', 'electronics-ignition', 'Ignição melhorada', 1, 1050, 'engine-tuners', { knockRetardScale: 0.975, burnDurationScale: 0.985 }, 'Bobina de alta energia, cabos e velas novos.'],
   ['ignition-classic-sport', 'electronics-ignition', 'Ignição esportiva', 2, 1590, 'engine-tuners', { knockRetardScale: 0.93, burnDurationScale: 0.978 }, 'Velas com folga controlada e bobinas de maior energia para centelha sob pressão.'],
   ['ignition-race', 'electronics-ignition', 'Ignição performance', 3, 2400, 'engine-tuners', { knockRetardScale: 0.88, burnDurationScale: 0.97 }, 'Ignição de descarga capacitiva com bobinas individuais.'],
-  ['radiator-large', 'cooling-radiator', 'Radiador maior', 2, 1450, 'part-cam', { coolingFrictionScale: 0.985, coolingKnockScale: 0.98 }, 'Radiador de alumínio de colmeia mais grossa.'],
-  ['oil-cooler', 'cooling-oil', 'Sistema de óleo melhorado', 2, 1700, 'part-cam', { coolingFrictionScale: 0.965 }, 'Radiador de óleo e óleo sintético de baixa viscosidade.'],
-  ['fan-upgrade', 'cooling-fan', 'Ventoinha melhorada', 1, 780, 'part-cam', { coolingFrictionScale: 0.986 }, 'Ventoinha elétrica comandada por termostato, no lugar da mecânica.'],
+  ['radiator-large', 'cooling-radiator', 'Radiador maior', 2, 1450, 'part-cam', { coolingFrictionScale: 0.985, coolingKnockScale: 0.98, radiatorAreaScale: 1.3, coolingMassAddKg: 1 }, 'Radiador de alumínio de colmeia mais grossa.'],
+  ['oil-cooler', 'cooling-oil', 'Sistema de óleo melhorado', 2, 1700, 'part-cam', { coolingFrictionScale: 0.965, oilCoolerAreaScale: 1.32, coolingMassAddKg: 0.8 }, 'Radiador de óleo e óleo sintético de baixa viscosidade.'],
+  ['fan-upgrade', 'cooling-fan', 'Ventoinha melhorada', 1, 780, 'part-cam', { coolingFrictionScale: 0.986, fanFlowScale: 1.25, coolingMassAddKg: 0.2 }, 'Ventoinha elétrica comandada por termostato, no lugar da mecânica.'],
   ['weight-light', 'chassis-weight', 'Alívio de peso leve', 1, 1350, 'workshop-basic', { massRemoveKg: 18 }, 'Retirada de estepe, macaco, tapetes e bancos traseiros.', 'Menos massa para acelerar e menos resistência ao rolamento; o motor não muda.'],
   ['weight-medium', 'chassis-weight', 'Alívio de peso médio', 2, 2800, 'workshop-basic', { massRemoveKg: 48 }, 'Retirada do acabamento interno e banco de fibra.', 'Menos massa para acelerar e menos resistência ao rolamento; o motor não muda.'],
   ['weight-race', 'chassis-weight', 'Alívio de peso forte', 3, 5500, 'workshop-basic', { massRemoveKg: 83 }, 'Preparação de competição: vidros de policarbonato, capô de fibra e interior vazio.', 'Menos massa para acelerar e menos resistência ao rolamento; o motor não muda.'],
@@ -154,6 +154,10 @@ export function describeMods(m: MechanicalMods): string {
   if (m.burnDurationScale) out.push(`combustão ${pct(m.burnDurationScale)} % mais rápida`);
   if (m.coolingFrictionScale) out.push(`atrito interno −${pct(m.coolingFrictionScale)} %`);
   if (m.coolingKnockScale) out.push(`detonação −${pct(m.coolingKnockScale)} % com o motor mais frio`);
+  if (m.radiatorAreaScale) out.push(`área efetiva do radiador +${pct(m.radiatorAreaScale)} %`);
+  if (m.oilCoolerAreaScale) out.push(`capacidade de troca térmica do óleo +${pct(m.oilCoolerAreaScale)} %`);
+  if (m.fanFlowScale) out.push(`vazão de ar assistida +${pct(m.fanFlowScale)} %`);
+  if (m.coolingMassAddKg) out.push(`massa do sistema +${n(m.coolingMassAddKg, 1)} kg`);
   if (m.massRemoveKg) out.push(`massa do carro −${n(m.massRemoveKg)} kg`);
   if (m.launchCgDeltaM) out.push(`transferência de carga para o eixo de tração (CG efetivo ${n(m.launchCgDeltaM * 1000)} mm, no sentido da tração)`);
   const s = out.join('; ');

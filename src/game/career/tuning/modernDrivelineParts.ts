@@ -19,7 +19,7 @@ const rate = (v: number) => Math.round(v * 100);
 const stageValue = (tier: PartTier, values: readonly [number, number, number]): number => values[tier - 1]!;
 // Benchmarks on the factory shift schedules: small loss changes can move a torque-converter shift.
 const finalDriveEfficiency: Readonly<Record<string, readonly [number, number, number]>> = {
-  'toyota-2gr-fse': [0.006, 0.009, 0.013],
+  'toyota-2gr-fse': [0.016, 0.019, 0.022],
   'alfa-690t': [0.006, 0.016, 0.017],
 };
 

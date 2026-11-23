@@ -150,6 +150,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   let wastegateLimitBar: number | undefined;
   let knockFreeBoostBar: number | undefined;
   let mappedTorqueLimitNm: number | undefined;
+  let internalTorqueLimitNm: number | undefined;
   let engineModified = false;
 
   // ---- engine ----
@@ -157,6 +158,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   if (factoryTurbo) {
     const family = ENGINE_FAMILIES[fam];
     if (!family) return { ok: false, errors: [`família de motor sem dados de preparação: ${fam}`] };
+    internalTorqueLimitNm = family.internalsTorqueNm * (pistons?.torqueLimitScale ?? 1);
     const boostControl = get('boost-control');
     const wastegate = get('turbo-wastegate');
     const wg = wastegateMaxBar(stockEngine, boostControl, ecu, wastegate);
@@ -472,7 +474,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   if (errors.length) return { ok: false, errors };
   return {
     ok: true, car: deepFreeze(v.value!), parts, key, peakTorqueNm, peakPowerCv, steadyBoostBar, knockLoss,
-    exhaustRestrictionKPa, chargeTemperatureAtTargetK, wastegateLimitBar, knockFreeBoostBar, mappedTorqueLimitNm, version: 2,
+    exhaustRestrictionKPa, chargeTemperatureAtTargetK, wastegateLimitBar, knockFreeBoostBar, mappedTorqueLimitNm, internalTorqueLimitNm, version: 2,
   };
 }
 

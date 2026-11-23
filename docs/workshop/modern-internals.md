@@ -12,6 +12,8 @@ As 39 comparações das câmaras confirmaram aumento de 0,021 a 0,069 bar de mar
 
 No Lexus 2GR-FSE, a simulação mostrou uma transição na sequência de trocas durante a largada. Reduções maiores de inércia ou aumentos maiores de compressão custaram aproximadamente 0,7 s. A calibração usa mudanças menores de massa alternada, atrito e volume de câmara, com ganhos de capacidade mecânica ou potência que podem ser conferidos junto ao tempo de pista.
 
+A auditoria das peças legadas localizou uma falha no kickdown. Quando o pedal subia em etapas, a memória de demanda podia bloquear o pedido antes de o pedal cruzar o limiar de redução. A lógica agora arma o pedido após demanda baixa, aceita a subida gradual e guarda o pedido enquanto a transmissão termina a troca, desde que o motorista mantenha o pedal. No Lexus, as oito peças legadas afetadas passaram a reduzir o tempo de pista em 0,003 a 0,123 s no comparativo.
+
 Para repetir a auditoria de trocas adjacentes, execute `npx tsx scripts/parts-stage-report.ts --groups=modern-rotating-assembly,modern-na-compression,modern-turbo-compression --fail`. O relatório inclui a reserva de rotação segura, a inércia, a margem antes do atraso por detonação e os tempos dos dois builds.
 
 As molas e pratos de válvulas têm três estágios por família. Cada conjunto aumenta a rotação mecânica segura, mantendo o corte previamente calibrado. Com uma ECU que permite alterar o corte, o ganho abre uma faixa maior de ajuste no Dyno Lab. A série antiga de molas mantém o mesmo ID e o mesmo efeito.

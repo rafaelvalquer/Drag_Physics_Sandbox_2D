@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { CAREER_CARS } from '../../../src/data/cars/campaign';
+import { TRACKS } from '../../../src/data/tracks/index';
 import { resolveBuild } from '../../../src/game/career/tuning/BuildResolver';
 import { incompatibility } from '../../../src/game/career/tuning/BuildResolverV2';
 import { COOLING_PARTS } from '../../../src/game/career/tuning/coolingParts';
+import { auditPartGain } from '../../../src/game/career/tuning/partGain';
+import { findPart } from '../../../src/game/career/tuning/parts';
 import { careerResolverVersion } from '../../../src/game/career/tuning/resolverVersion';
 import { EngineDyno } from '../../../src/physics/engine/EngineDyno';
 import { EngineThermalModel } from '../../../src/physics/engine/EngineThermalModel';
@@ -49,5 +52,14 @@ describe('arrefecimento da oficina', () => {
     bench.engine.reset();
     expect(bench.engine.thermal.coolantC).toBe(88);
     expect(bench.engine.thermal.oilC).toBe(94);
+  });
+
+  it.each(['radiator-large', 'oil-cooler', 'fan-upgrade'])('%s reduz a temperatura sob carga no C43', (partId) => {
+    const car = CAREER_CARS.find((item) => item.engine.family === 'mercedes-m276')!;
+    const track = TRACKS.find((item) => item.id === 'test-track')!;
+    const audit = auditPartGain(car, findPart(partId)!, track, 2);
+    if (!('gain' in audit) || !audit.gain.sustainedTemperature) throw new Error('Medição térmica indisponível');
+    expect(audit.status).toBe('gain');
+    expect(audit.gain.sustainedTemperature.afterC).toBeLessThan(audit.gain.sustainedTemperature.beforeC);
   });
 });

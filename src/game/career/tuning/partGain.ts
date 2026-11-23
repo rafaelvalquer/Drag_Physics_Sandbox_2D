@@ -287,9 +287,9 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
   const fuelGain = 'fuelCapacityScale' in part && gain.fuelCapacityBeforeKgS !== null && gain.fuelCapacityAfterKgS !== null &&
     gain.fuelCapacityAfterKgS - gain.fuelCapacityBeforeKgS >= 0.0001 && gain.etAfter - gain.etBefore <= 0.05;
   const group = progressionOf(part)?.group;
-  if (group === 'cooling-radiator' || group === 'cooling-oil' || group === 'cooling-fan') {
-    const circuit = group === 'cooling-oil' ? 'oil' : 'coolant';
-    const speedMps = group === 'cooling-fan' ? 0 : 20;
+  if (part.category === 'cooling-radiator' || part.category === 'cooling-oil' || part.category === 'cooling-fan') {
+    const circuit = part.category === 'cooling-oil' ? 'oil' : 'coolant';
+    const speedMps = part.category === 'cooling-fan' ? 0 : 20;
     // Sustained-load bench. Hold heat input, ambient and airflow constant for both circuits.
     const powerW = base.car.engine.ratedPowerCv * 735.5 * 1.15;
     const test = (engine: CarConfig['engine']): number => {
@@ -304,7 +304,8 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     gain.etAfter - gain.etBefore <= 0.08;
   const internalGain = group === 'modern-rotating-assembly' && gain.safeRpmAfter - gain.safeRpmBefore >= 100 &&
     gain.engineInertiaAfterKgM2 < gain.engineInertiaBeforeKgM2 && gain.etAfter - gain.etBefore <= 0.05;
-  const classicInternalGain = group === 'classic-rotating-assembly' && gain.etAfter - gain.etBefore <= 0.05 &&
+  const internalCapacityGain = (part.category === 'pistons' || part.category === 'engine-internals') &&
+    gain.etAfter - gain.etBefore <= 0.05 &&
     gain.internalTorqueLimitBeforeNm !== null && gain.internalTorqueLimitAfterNm !== null &&
     gain.internalTorqueLimitAfterNm - gain.internalTorqueLimitBeforeNm >= 20;
   const compressionGain = (group === 'modern-na-compression' || group === 'classic-na-compression') &&
@@ -329,7 +330,7 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
     gain.chargeTemperatureBeforeK !== null && gain.chargeTemperatureAfterK !== null &&
     gain.chargeTemperatureBeforeK - gain.chargeTemperatureAfterK >= 0.5;
   const improvement = isGain(gain) || breathingGain(part, gain) || drivelineGain(part, gain) ||
-    topEndGain(part, gain) || fuelGain || internalGain || classicInternalGain || compressionGain || ignitionGain || turboFlowGain || chargeCoolingGain ||
+    topEndGain(part, gain) || fuelGain || internalGain || internalCapacityGain || compressionGain || ignitionGain || turboFlowGain || chargeCoolingGain ||
     classicTurbineGain || turboCompressionGain || pressureControlGain(group, gain) || coolingGain || chassisGain(group, gain) || legacyFuelGain;
   return { status: !effect ? 'no-effect' : improvement ? 'gain' : 'no-gain', gain };
 }
@@ -397,7 +398,7 @@ function drivelineGain(part: PartDef, gain: PartGain): boolean {
 
 function breathingGain(part: PartDef, gain: PartGain): boolean {
   const group = progressionOf(part)?.group;
-  if (!isModernBreathingPart(part) && group !== 'classic-throttle' && group !== 'modern-intake-filter' &&
+  if (part.category !== 'exhaust' && !isModernBreathingPart(part) && group !== 'classic-throttle' && group !== 'modern-intake-filter' &&
     !group?.startsWith('classic-exhaust-') && !group?.startsWith('modern-exhaust-')) return false;
   // These street parts should not worsen the reference pass enough to outweigh the hardware gain.
   if (gain.etAfter - gain.etBefore > 0.05) return false;

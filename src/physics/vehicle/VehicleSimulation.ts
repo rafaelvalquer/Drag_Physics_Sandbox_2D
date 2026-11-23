@@ -129,7 +129,8 @@ export class VehicleSimulation {
   private converterSr = 1;
   /** Driver demand kept by the gearbox controller (fast attack, slow release). */
   private pedalMemory = 0;
-  private prevPedal = 0;
+  private kickdownArmed = true;
+  private kickdownPending = false;
   private readonly engineInputs: EngineInputs = {
     pedal: 0,
     throttleOverride: null,
@@ -284,7 +285,8 @@ export class VehicleSimulation {
     this.tire.temperatureC = this.track.surfaceTempC;
     if (this.tireFront) this.tireFront.temperatureC = this.track.surfaceTempC;
     this.pedalMemory = 0;
-    this.prevPedal = 0;
+    this.kickdownArmed = true;
+    this.kickdownPending = false;
     this.controls.pedal = 0;
     this.controls.autoBrake = false;
     this.controls.holdBrake = false;
@@ -427,20 +429,26 @@ export class VehicleSimulation {
       }
       const inputOmega = this.turbine ? this.turbine.v : eng.crank.v;
       const pd = ctl.autoBrake ? 0 : ctl.pedal;
-      const memBefore = this.pedalMemory;
       this.pedalMemory = pd > this.pedalMemory ? pd : Math.max(pd, this.pedalMemory - h / 6);
+      const kickdownPedal = c.transmission.autoShift?.kickdownPedal ?? 1;
+      // A progressive pedal application can build demand before crossing the kickdown threshold.
+      // Keep that crossing until the schedule can act, unless the driver lifts.
+      if (this.pedalMemory < 0.5) this.kickdownArmed = true;
+      if (ps.mode !== 'D' || pd < kickdownPedal) this.kickdownPending = false;
+      else if (this.kickdownArmed) {
+        this.kickdownPending = true;
+        this.kickdownArmed = false;
+      }
       if (!ps.active && ps.mode === 'D' && this.gearbox.engaged && this.gearbox.gear >= 1 && eng.runState === 'RUNNING') {
         const inRpm = this.turbine ? radSToRpm(Math.abs(this.turbine.v)) : radSToRpm(Math.abs(this.outputOmega) * this.gearbox.overallRatio(this.gearbox.gear));
         const locked = this.launchClutch ? this.launchClutch.mode === 'LOCKED' : true;
-        const ped = ctl.autoBrake ? 0 : ctl.pedal;
-        const kick = ped >= (c.transmission.autoShift?.kickdownPedal ?? 1) && this.prevPedal < (c.transmission.autoShift?.kickdownPedal ?? 1) && memBefore < 0.5;
-        const d = autoShiftDecision(c.transmission, this.gearbox.gear, this.gearbox.gearCount, inRpm, this.outputOmega, ped, ctl.autoBrake ? 0 : this.pedalMemory, kick, c.engine.idleRpm, c.engine.revLimitRpm, (g) => this.gearbox.overallRatio(g));
+        const d = autoShiftDecision(c.transmission, this.gearbox.gear, this.gearbox.gearCount, inRpm, this.outputOmega, pd, ctl.autoBrake ? 0 : this.pedalMemory, this.kickdownPending, c.engine.idleRpm, c.engine.revLimitRpm, (g) => this.gearbox.overallRatio(g));
+        this.kickdownPending = false;
         // shift inhibit during a traction event (the output speed is not the road speed)
         const spinning = drivenSlip > 0.25 && inRpm < c.engine.revLimitRpm - 150;
         if (d !== 0 && ((locked && !spinning) || d < 0)) ps.requestAuto(d, sctx, this.currentElementCommand());
       }
       shiftDone = ps.update(h, sctx, this.simTime, inputOmega, this.currentElementCommand());
-      this.prevPedal = pd;
       ratio = this.gearbox.activeRatio;
       this.ratio2 = ps.oncomingGear > 0 ? this.gearbox.overallRatio(ps.oncomingGear) : 0;
       engagement2 = ps.oncomingCommand;
