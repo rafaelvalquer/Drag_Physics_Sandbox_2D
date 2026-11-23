@@ -293,6 +293,13 @@ describe('camera', () => {
       expect(s.groundY).toBeLessThan(h);
     }
   });
+
+  it('keeps the vertical framing on wide monitors with the same viewport height', () => {
+    const reference = new CameraController().update(1 / 60, { ...base, viewW: 1280, viewH: 720, mode: 'follow', player: car(0, 0) });
+    const wide = new CameraController().update(1 / 60, { ...base, viewW: 1920, viewH: 720, mode: 'follow', player: car(0, 0) });
+    expect(wide.ppm).toBeCloseTo(reference.ppm, 6);
+    expect(wide.groundY).toBe(reference.groundY);
+  });
 });
 
 describe('lighting', () => {

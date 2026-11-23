@@ -214,7 +214,7 @@ const CH1: readonly Omit<CareerEventDef, 'chapter'>[] = [
     distance: 'eighth',
     rewardCr: 300,
     reputation: 10,
-    unlocks: ['workshop-basic', 'part-filter', 'part-exhaust'],
+    unlocks: ['workshop-basic', 'part-filter', 'part-exhaust', 'c1-dealer-celta'],
   },
   {
     id: 'e2-pequeno-valente',
@@ -238,7 +238,7 @@ const CH1: readonly Omit<CareerEventDef, 'chapter'>[] = [
     distance: 'eighth',
     rewardCr: 600,
     reputation: 20,
-    unlocks: ['part-cam', 'workshop-transmission'],
+    unlocks: ['part-cam', 'workshop-transmission', 'c1-dealer-corsa'],
   },
   {
     id: 'e4-tracao-traseira',
@@ -274,7 +274,7 @@ const CH1: readonly Omit<CareerEventDef, 'chapter'>[] = [
     distance: 'quarter',
     rewardCr: 1300,
     reputation: 40,
-    unlocks: ['final-challenge', 'part-launch-pro'],
+    unlocks: ['final-challenge', 'part-launch-pro', 'c1-dealer-kadett'],
   },
   {
     id: 'e7-rei-da-madrugada',

@@ -1,115 +1,163 @@
 import { describe, expect, it } from 'vitest';
-import { CHAPTER1_CARS } from '../../../src/data/cars/campaign';
-import { CHAPTER2_CARS } from '../../../src/data/cars/chapter2/index';
-import { CHAPTER3_CARS } from '../../../src/data/cars/chapter3/index';
 import { CareerController } from '../../../src/game/career/CareerController';
-import { CareerRepository } from '../../../src/game/career/CareerRepository';
-import { type CareerRaceResult, type RunSummary, parseCareerSave } from '../../../src/game/career/CareerState';
-import { freeChapterOf, FREE_REWARDS, FREE_TIERS, availableFreeOffers, makeFreeEvent } from '../../../src/game/career/FreeEvents';
-import { CHAPTER_1_ID, CHAPTER_2_ID, CHAPTER_3_ID } from '../../../src/game/career/chapters';
-import { rivalBuild } from '../../../src/game/career/RivalBuildFactory';
+import { CAREER_STORE, CareerRepository } from '../../../src/game/career/CareerRepository';
+import { exportCareer, importCareer, newCareerSave, parseCareerSave, type CareerRaceResult, type RunSummary } from '../../../src/game/career/CareerState';
+import { eventsOf } from '../../../src/game/career/CareerEvents';
+import { availableFreeTiers } from '../../../src/game/career/freeEvents/FreeEventCatalog';
+import { freeEventPrize } from '../../../src/game/career/freeEvents/FreeEventRewards';
+import { resolveFreeOpponent } from '../../../src/game/career/freeEvents/FreeEventService';
+import type { FreeOffer, FreeAttempt } from '../../../src/game/career/freeEvents/FreeEventTypes';
 import { MemoryStore } from '../../../src/storage/db';
 
-const sampleRun = (name: string): RunSummary => ({
-  name, rt: 0.2, et: 17, total: 17.2, trapKmh: 130,
-  redLight: false, finished: true, dnf: false,
-});
-function race(offer: ReturnType<typeof makeFreeEvent>, playerId: string, attemptId: string, outcome: CareerRaceResult['outcome'] = 'win') {
-  const resolved = rivalBuild(offer.rival);
+const SECTION = 'chapter-1';
+function run(name: string, et = 17): RunSummary {
+  return { name, rt: 0.2, et, total: et + 0.2, trapKmh: 130, redLight: false, finished: true, dnf: false };
+}
+
+function record(offer: FreeOffer, attempt: FreeAttempt, outcome: CareerRaceResult['outcome'] = 'win') {
+  const rival = resolveFreeOpponent(offer);
+  if (!rival?.ok) throw new Error('invalid test offer');
+  const clean = run('Você', outcome === 'loss' ? 19 : 16);
+  const playerResult = outcome === 'dnf'
+    ? { ...clean, et: null, total: null, trapKmh: null, dnf: true, finished: false, dnfReason: 'engine-blown' as const }
+    : outcome === 'red-light' ? { ...clean, rt: -0.1, total: 15.9, redLight: true } : clean;
   return {
-    attemptId, eventId: offer.event.id, playerCarId: playerId,
-    opponentCarId: resolved.car.id,
-    playerResult: sampleRun('Você'),
-    opponentResult: sampleRun(offer.rival.name + ' "' + offer.rival.nickname + '"'),
-    outcome, completedAt: new Date().toISOString(),
-    buildVersion: 1 as const, playerBuildKey: 'player-build', opponentBuildKey: resolved.key,
+    attemptId: attempt.id, eventId: offer.id, playerCarId: attempt.carId,
+    opponentCarId: rival.car.id, playerResult, opponentResult: run(offer.opponent.driverName),
+    outcome, completedAt: new Date(0).toISOString(), buildVersion: attempt.buildVersion,
+    playerBuildKey: attempt.buildKey, opponentBuildKey: rival.key,
   };
 }
 
-const pools = [[CHAPTER_1_ID, CHAPTER1_CARS], [CHAPTER_2_ID, CHAPTER2_CARS], [CHAPTER_3_ID, CHAPTER3_CARS]] as const;
-const rotations = pools.flatMap(([chapter, pool]) =>
-  [1, 2, 3, 4].map((rotation) => [chapter, rotation, pool.map((car) => car.id)] as const));
+function value<T>(op: { ok: true; value: T } | { ok: false; error: string }): T {
+  if (!op.ok) throw new Error(op.error);
+  return op.value;
+}
 
-describe('procedural free races', () => {
-  it.each(rotations)('%s rotation %i uses chapter cars and valid hardware', (chapter, rotation, carIds) => {
-    const offers = availableFreeOffers(chapter, rotation);
-    expect(offers.map((o) => o.tier)).toEqual([...FREE_TIERS]);
-    for (const o of offers) {
-      expect(carIds).toContain(o.rival.baseCarId);
-      expect(o.event.chapter).toBe(chapter);
-      expect(o.event.rewardCr).toBe(FREE_REWARDS[chapter][o.tier]);
-      expect(o.rival.paint.color).toMatch(/^#[0-9a-f]{6}$/);
-      expect(o.rival.paint.accent).toMatch(/^#[0-9a-f]{6}$/);
-      expect(rivalBuild(o.rival).peakPowerCv).toBeGreaterThan(0);
-      expect(o.powerCv).toBeGreaterThan(0);
-      expect(o.rival.parts.length).toBeLessThanOrEqual(14);
-      expect(makeFreeEvent(chapter, rotation, o.tier)).toEqual(o);
-      expect(freeChapterOf(o.event.id)).toBe(chapter);
+async function career(store = new MemoryStore()) {
+  const controller = new CareerController(new CareerRepository(store, 'slot-1'));
+  value(await controller.newCareer('gm-chevette-sl-1988'));
+  await store.update(CAREER_STORE, 'slot-1', () => ({
+    ...controller.save!, freeEvents: { ...controller.save!.freeEvents, seed: 24 },
+  }));
+  await controller.load();
+  return controller;
+}
+
+describe('free event progression and prizes', () => {
+  it('unlocks classes with the chapter milestones and rounds the posted distance prize', () => {
+    const progress = { completedEventIds: [] as string[] };
+    expect(availableFreeTiers(progress, SECTION)).toEqual(['iniciante']);
+    expect(availableFreeTiers(progress, 'chapter-2')).toEqual([]);
+    for (const [chapter, orders] of [['chapter-1', [2, 4, 6]], ['chapter-2', [2, 4, 8]], ['chapter-3', [2, 4, 5]]] as const) {
+      expect(availableFreeTiers(progress, chapter)).toHaveLength(1);
+      for (const [i, order] of orders.entries()) {
+        const progressAt = (count: number) => ({ completedEventIds: [...progress.completedEventIds, ...eventsOf(chapter).slice(0, count).map((e) => e.id)] });
+        expect(availableFreeTiers(progressAt(order - 1), chapter)).toHaveLength(i + 1);
+        expect(availableFreeTiers(progressAt(order), chapter)).toHaveLength(i + 2);
+      }
+      progress.completedEventIds.push(...eventsOf(chapter).map((e) => e.id));
     }
+    expect(freeEventPrize(SECTION, 'preparado', 'eighth')).toBe(520);
+    expect(freeEventPrize(SECTION, 'preparado', 'quarter')).toBe(650);
+    expect(freeEventPrize('chapter-3', 'competicao', 'km')).toBe(31250);
+  });
+});
+
+describe('persistent free offers and results', () => {
+  it('retains an attempted offer, pays once, and replaces only the winning slot', async () => {
+    const c = await career();
+    const initial = c.save!;
+    const board = value(await c.freeBoard(null));
+    const [offer, second, third] = board;
+    const first = value(await c.beginFreeRace(offer!.id));
+    expect(first.attempt.buildKey).toBeTruthy();
+    expect(first.attempt.installedParts).toEqual([]);
+    const lost = record(first.offer, first.attempt, 'loss');
+    expect(value(await c.recordFreeRace(lost)).reward.credits).toBe(0);
+    expect(value(await c.recordFreeRace(lost)).applied).toBe(false);
+    expect(value(await c.freeBoard(null))[0]!.opponent).toEqual(offer!.opponent);
+    const rematch = value(await c.beginFreeRace(offer!.id));
+    expect(rematch.attempt.id).not.toEqual(first.attempt.id);
+    expect(rematch.offer.opponent).toEqual(first.offer.opponent);
+    const win = record(rematch.offer, rematch.attempt);
+    expect((await c.recordFreeRace({ ...win, playerBuildKey: 'different' })).ok).toBe(false);
+    expect((await c.recordFreeRace({ ...win, outcome: 'loss' })).ok).toBe(false);
+    expect(value(await c.recordFreeRace(win)).reward.credits).toBe(offer!.rewardCr);
+    expect(value(await c.recordFreeRace(win)).applied).toBe(false);
+    expect((await c.recordFreeRace({ ...win, attemptId: win.attemptId + 'x' })).ok).toBe(false);
+    const next = value(await c.freeBoard(null));
+    expect(next[0]!.id).not.toBe(offer!.id);
+    expect(next.slice(1)).toEqual([second, third]);
+    expect(c.save!.credits).toBe(initial.credits + offer!.rewardCr);
+    expect(c.save!.completedEventIds).toEqual(initial.completedEventIds);
+    expect(c.save!.unlockedChapters).toEqual(initial.unlockedChapters);
+    expect(c.save!.claimedRewardIds).toEqual(initial.claimedRewardIds);
+    expect(c.save!.reputation).toBe(initial.reputation);
+    expect(c.save!.results).toEqual(initial.results);
+    expect(c.save!.freeEvents.results[1]!.details?.paint).toEqual(offer!.paint);
+    expect(c.save!.freeEvents.stats[SECTION]).toMatchObject({ races: 2, wins: 1, creditsEarned: offer!.rewardCr, bestEt: { quarter: 16 } });
   });
 
-  it('refreshing changes the offer ID, without changing any campaign event', () => {
-    const a = availableFreeOffers(CHAPTER_1_ID, 29);
-    const b = availableFreeOffers(CHAPTER_1_ID, 30);
-    expect(a.map((o) => o.event.id)).not.toEqual(b.map((o) => o.event.id));
-    expect(a.map((o) => o.signature)).not.toEqual(b.map((o) => o.signature));
-    expect(freeChapterOf('e1-primeira-noite')).toBeNull();
+  it('never pays on a foul or DNF, retains the rival on refresh, and shares the same export', async () => {
+    const c = await career();
+    const [offer] = value(await c.freeBoard(null));
+    for (const outcome of ['red-light', 'dnf'] as const) {
+      const { attempt } = value(await c.beginFreeRace(offer!.id));
+      expect(value(await c.recordFreeRace(record(offer!, attempt, outcome))).reward.credits).toBe(0);
+    }
+    const before = structuredClone(c.save!);
+    const refreshed = value(await c.freeBoard(null, true));
+    expect(refreshed[0]!.id).toBe(offer!.id);
+    expect(refreshed[1]!.id).not.toBe(before.freeEvents.offersByChapter[SECTION][1]!.id);
+    expect(c.save!.freeEvents.results).toEqual(before.freeEvents.results);
+    expect(c.save!.credits).toBe(before.credits);
+    const restored = importCareer(exportCareer(c.save!));
+    expect(restored).toEqual({ ok: true, save: c.save });
+    const explicit = value(await c.freeBoard(null, false, offer!.id));
+    expect(explicit[0]!.id).not.toBe(offer!.id);
   });
 
-  it('pays once, rotates offers, keeps chapter progression unchanged and rejects stale attempts', async () => {
+  it('rejects simultaneous writes and keeps the win available after a failed write', async () => {
     const store = new MemoryStore();
-    const c = new CareerController(new CareerRepository(store, 'slot-1'));
-    const started = await c.newCareer('gm-chevette-sl-1988');
-    expect(started.ok).toBe(true);
-    const save = c.save!;
-    const first = makeFreeEvent(CHAPTER_1_ID, save.freeEventRotation, 'elite');
-    const result = race(first, c.activeCar!.id, 'attempt-free-event-0001');
-    const paid = await c.recordFreeRace(result, first);
-    expect(paid.ok).toBe(true);
-    if (!paid.ok) return;
-    expect(paid.value.applied).toBe(true);
-    expect(paid.value.reward.credits).toBe(750);
-    expect(c.save!.credits).toBe(save.credits + 750);
-    expect(c.save!.completedEventIds).toEqual([]);
-    expect(c.save!.claimedRewardIds).toEqual([]);
-    expect(c.save!.reputation).toBe(0);
-    expect(c.save!.freeEventRotation).toBe(save.freeEventRotation + 1);
-    const repeat = await c.recordFreeRace(result, first);
-    expect(repeat.ok).toBe(true);
-    if (repeat.ok) expect(repeat.value.applied).toBe(false);
-    expect(c.save!.credits).toBe(save.credits + 750);
-    const forgedAttempt = await c.recordFreeRace(race(first, c.activeCar!.id, 'attempt-free-event-0002'), first);
-    expect(forgedAttempt.ok).toBe(false);
-    const loaded = new CareerController(new CareerRepository(store, 'slot-1'));
-    await loaded.load();
-    expect(loaded.save!.freeEventRotation).toBe(c.save!.freeEventRotation);
-    expect(loaded.save!.credits).toBe(c.save!.credits);
-    expect(parseCareerSave({ ...loaded.save, freeEventRotation: undefined }).ok).toBe(true);
+    const c = await career(store);
+    const [offer] = value(await c.freeBoard(null));
+    const { attempt } = value(await c.beginFreeRace(offer!.id));
+    const before = structuredClone(c.save!);
+    const win = record(offer!, attempt);
+    const update = store.update.bind(store);
+    store.update = async () => { throw new Error('storage offline'); };
+    expect((await c.recordFreeRace(win)).ok).toBe(false);
+    expect(c.save).toEqual(before);
+    expect(await c.repo.load()).toEqual(before);
+    store.update = update;
+    const other = new CareerController(new CareerRepository(store, 'slot-1'));
+    await other.load();
+    const both = await Promise.all([c.recordFreeRace(win), other.recordFreeRace(win)]);
+    expect(both.filter((result) => result.ok)).toHaveLength(1);
+    await c.load();
+    expect(c.save!.credits).toBe(before.credits + offer!.rewardCr);
+    expect(c.save!.freeEvents.results).toHaveLength(1);
   });
 
-  it('offers a repeatable no-fee way to earn enough for a turbo and clutch', async () => {
-    const c = new CareerController(new CareerRepository(new MemoryStore(), 'slot-1'));
-    const started = await c.newCareer('gm-chevette-sl-1988');
-    expect(started.ok).toBe(true);
-    const initial = c.save!.credits;
-    for (let i = 0; i < 7; i++) {
-      const offer = makeFreeEvent(CHAPTER_1_ID, c.save!.freeEventRotation, 'elite');
-      const recorded = await c.recordFreeRace(race(offer, c.activeCar!.id, 'attempt-farm-' + i + '-xxxx'), offer);
-      expect(recorded.ok).toBe(true);
-    }
-    expect(c.save!.credits - initial).toBe(5250);
-    expect(c.save!.completedEventIds).toHaveLength(0);
-  });
-
-  it('never grants credits for defeats, red lights or DNFs', async () => {
-    const c = new CareerController(new CareerRepository(new MemoryStore(), 'slot-1'));
-    await c.newCareer('fiat-uno-mille-1995');
-    const initial = c.save!.credits;
-    for (const outcome of ['loss', 'red-light', 'dnf'] as const) {
-      const offer = makeFreeEvent(CHAPTER_1_ID, c.save!.freeEventRotation, 'bairro');
-      const result = await c.recordFreeRace(race(offer, c.activeCar!.id, 'attempt-free-' + outcome + '-xxx', outcome), offer);
-      expect(result.ok).toBe(true);
-      expect(c.save!.credits).toBe(initial);
-    }
+  it('migrates v3 credits, garage, tune and both histories without reissuing a prize', async () => {
+    const c = await career();
+    const initial = c.save!;
+    const [offer] = value(await c.freeBoard(null));
+    const { attempt } = value(await c.beginFreeRace(offer!.id));
+    const result = { ...record(offer!, attempt), creditsAwarded: 250, reputationAwarded: 0 };
+    const old = {
+      ...initial, version: 3, freeEvents: undefined, freeEventRotation: 91, credits: 2710, reputation: 13,
+      results: [{ ...result, eventId: 'free-1-91-bairro' }, { ...result, eventId: 'story-race', attemptId: 'story-attempt' }],
+      ownedCars: [{ ...initial.ownedCars[0], tune: { tirePressureKpa: 210 } }],
+    };
+    const m = parseCareerSave(old);
+    expect(m.ok).toBe(true);
+    if (!m.ok) return;
+    expect(m.save).toMatchObject({ version: 4, credits: 2710, reputation: 13, ownedCars: old.ownedCars });
+    expect(m.save.results[0]!.eventId).toBe('story-race');
+    expect(m.save.freeEvents.results[0]!.eventId).toBe('free-1-91-bairro');
+    expect(m.save.freeEvents.stats[SECTION]).toMatchObject({ races: 1, wins: 1, creditsEarned: 250 });
+    expect(m.save.freeEvents.offersByChapter).toEqual(newCareerSave().freeEvents.offersByChapter);
   });
 });

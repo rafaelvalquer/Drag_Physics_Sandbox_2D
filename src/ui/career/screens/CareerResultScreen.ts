@@ -31,6 +31,9 @@ export interface ResultDeps {
   next: string;
   chapterEvents: string;
   won: boolean;
+  free?: boolean;
+  rivalCar?: HTMLElement;
+  rivalCarLabel?: string;
   onRetry(): void;
   onGarage(): void;
   onEvents(): void;
@@ -79,13 +82,14 @@ export function buildResult(d: ResultDeps): HTMLElement {
   const rewards = panel(
     'rs-rewards',
     sectionHeader('Recompensas'),
-    h('div', { class: 'rs-award', 'data-testid': 'result-award' }, `+${nf(d.credits)} CR · +${d.reputation} de reputação${d.applied ? '' : ' (já registrado)'}`),
+    h('div', { class: 'rs-award', 'data-testid': 'result-award' }, `+${nf(d.credits)} CR${d.free ? '' : ` · +${d.reputation} de reputação`}${d.applied ? '' : ' (já registrado)'}`),
     d.prize ? h('div', { class: `rs-unlocks rs-prize${d.prize.waiting ? ' waiting' : ''}`, 'data-testid': 'result-prize' }, icon('trophy'), d.prize.text) : null,
     d.unlocks.length ? h('div', { class: 'rs-unlocks', 'data-testid': 'result-unlocks' }, icon('lock'), `Liberado: ${d.unlocks.join(', ')}`) : null,
     h('p', { class: 'hint' }, d.next),
   );
   const voices = panel(
     'rs-voices',
+    d.rivalCar ? h('figure', { class: 'fe-result-car', 'data-testid': 'free-result-car' }, d.rivalCar, h('figcaption', {}, d.rivalCarLabel ?? '')) : null,
     d.rivalQuote ? h('div', { class: 'quote' }, h('div', { class: 'ev-portrait' }, d.rivalPortrait), h('blockquote', {}, `“${d.rivalQuote}”`)) : null,
     h(
       'div',
@@ -102,7 +106,7 @@ export function buildResult(d: ResultDeps): HTMLElement {
     secondaryButton(d.chapterEvents, 'result-events', d.onEvents, { ico: 'events' }),
   );
   // the retry button is part of the flow on a win as well (kept for the existing tests/flows)
-  if (d.won) actions.append(secondaryButton('Revanche', 'result-retry', d.onRetry, { ico: 'flag' }));
+  if (d.won && !d.free) actions.append(secondaryButton('Revanche', 'result-retry', d.onRetry, { ico: 'flag' }));
   return h('div', { class: `rsx ${d.outcome}` }, banner, h('div', { class: 'rs-grid' }, h('div', { class: 'rs-col', 'data-reveal': '' }, cmp, rewards), h('div', { class: 'rs-col', 'data-reveal': '' }, voices)), actions);
 }
 

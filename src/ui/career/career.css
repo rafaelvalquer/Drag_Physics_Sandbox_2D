@@ -671,7 +671,8 @@ th.win {
 }
 .ws-preview canvas {
   display: block;
-  max-width: 100%;
+  width: 100% !important;
+  height: auto !important;
 }
 .ws-sidebar-title {
   padding: 0 8px 8px;

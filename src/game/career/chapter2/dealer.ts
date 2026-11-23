@@ -1,12 +1,12 @@
 import type { CareerSave } from '../CareerState';
 import { STARTER_CARS } from '../CareerState';
-import { isChapterUnlocked, unlocksOf } from '../CareerProgression';
+import { eventLabel, eventUnlocking, isChapterUnlocked, unlocksOf } from '../CareerProgression';
 import { CHAPTER_2_ID, CHAPTER_3_ID } from '../chapters';
 import { ELITE_CARS } from '../chapter3/dealer';
 import type { UnlockId } from '../tuning/parts';
 
 /**
- * Chapter 2 dealer: one offer per model at the chapter's balance prices (fictional, not real
+ * Career classifieds/dealers: one offer per model at the chapter's balance prices (fictional, not real
  * market prices). The Evo and the 335i ask for reputation; the 335i is sold only after the final
  * challenge (it stays as a progression reward for free use).
  */
@@ -16,9 +16,16 @@ export interface DealerOffer {
   /** Total career reputation needed. */
   minReputation: number;
   requires?: UnlockId;
-  /** Chapter whose dealer sells it (absent = 2, the league). */
-  chapter?: 2 | 3;
+  /** Chapter whose classifieds sell it (absent = 2, the league). */
+  chapter?: 1 | 2 | 3;
 }
+
+/** Chapter 1 classic cars opened by winning their main-story events. */
+export const CLASSIC_CARS: readonly DealerOffer[] = [
+  { baseCarId: 'gm-celta-2003', price: 1300, minReputation: 0, requires: 'c1-dealer-celta', chapter: 1 },
+  { baseCarId: 'gm-corsa-gl-1996', price: 1000, minReputation: 0, requires: 'c1-dealer-corsa', chapter: 1 },
+  { baseCarId: 'gm-kadett-sl-1992', price: 2200, minReputation: 0, requires: 'c1-dealer-kadett', chapter: 1 },
+];
 
 /** The league dealer of chapter 2. */
 export const LEAGUE_CARS: readonly DealerOffer[] = [
@@ -35,7 +42,7 @@ export const LEAGUE_CARS: readonly DealerOffer[] = [
 ];
 
 /** Every dealer offer: the league (chapter 2) and the elite (chapter 3). */
-export const DEALER_CARS: readonly DealerOffer[] = [...LEAGUE_CARS, ...ELITE_CARS];
+export const DEALER_CARS: readonly DealerOffer[] = [...CLASSIC_CARS, ...LEAGUE_CARS, ...ELITE_CARS];
 
 /** Share of the price paid that a sale returns. */
 export const RESALE_SHARE = 0.6;
@@ -44,9 +51,16 @@ export type OfferState = { ok: true } | { ok: false; reason: string };
 
 /** Can this save buy the offer now (credits are checked by the purchase)? */
 export function offerAvailability(save: Pick<CareerSave, 'completedEventIds' | 'reputation'>, o: DealerOffer): OfferState {
-  const elite = o.chapter === 3;
-  if (!isChapterUnlocked(save, elite ? CHAPTER_3_ID : CHAPTER_2_ID)) return { ok: false, reason: elite ? 'Conclua a Liga da Madrugada para entrar na Elite.' : 'Conclua o Capítulo 1 para entrar na Liga.' };
-  if (o.requires && !unlocksOf(save).has(o.requires)) return { ok: false, reason: elite ? 'Disponível depois do penúltimo duelo da Elite.' : 'Disponível depois do desafio final da Liga.' };
+  const chapter = o.chapter ?? 2;
+  const elite = chapter === 3;
+  if (chapter > 1 && !isChapterUnlocked(save, chapter === 3 ? CHAPTER_3_ID : CHAPTER_2_ID)) return { ok: false, reason: elite ? 'Conclua a Liga da Madrugada para entrar na Elite.' : 'Conclua o Capítulo 1 para entrar na Liga.' };
+  if (o.requires && !unlocksOf(save).has(o.requires)) {
+    if (chapter === 1) {
+      const event = eventUnlocking(o.requires);
+      return { ok: false, reason: event ? `Vença ${eventLabel(event)} (${event.title}) para liberar.` : 'Disponível após vencer um evento principal.' };
+    }
+    return { ok: false, reason: elite ? 'Disponível depois do penúltimo duelo da Elite.' : 'Disponível depois do desafio final da Liga.' };
+  }
   if (save.reputation < o.minReputation) return { ok: false, reason: `Exige ${o.minReputation} de reputação (você tem ${save.reputation}).` };
   return { ok: true };
 }

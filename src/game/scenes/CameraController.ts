@@ -64,6 +64,9 @@ const TELEPORT_M = 30;
 const PAIR_RANGE_M = 16;
 const MIN_PPM = 6;
 const MAX_PPM = 150;
+/** Reference viewport: keep the same vertical world coverage while horizontal FOV adapts. */
+const REFERENCE_VIEW_W = 1280;
+const REFERENCE_VIEW_H = 720;
 
 function smoothstep(e0: number, e1: number, x: number): number {
   const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)));
@@ -142,9 +145,9 @@ export class CameraController {
         }
       }
     }
-    let targetPpm = Math.min(MAX_PPM, Math.max(MIN_PPM, W / span));
-    // tall narrow views: do not let the road band fill the whole height
-    targetPpm = Math.min(targetPpm, i.viewH / 6.2);
+    // Keep the vertical framing on wider screens and fit the full target span on narrow ones.
+    const framingWidth = Math.min(W, i.viewH * REFERENCE_VIEW_W / REFERENCE_VIEW_H);
+    const targetPpm = Math.min(MAX_PPM, Math.max(MIN_PPM, framingWidth / span));
     targetX = this.clampToTrack(targetX, targetPpm, W, i);
 
     if (!this.initialised || Math.abs(targetX - this.x) > 120) {

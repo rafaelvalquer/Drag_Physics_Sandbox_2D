@@ -20,6 +20,7 @@ export interface RivalDeps {
   makePreview(car: CarConfig, w: number, h: number): HTMLCanvasElement;
   onStart(): void;
   onBack(): void;
+  startBlocked?: string | null;
 }
 
 function side(c: Contender, d: RivalDeps, kind: 'left' | 'right', head: HTMLElement): HTMLElement {
@@ -67,7 +68,8 @@ export function buildRival(d: RivalDeps): HTMLElement {
       'div',
       { class: 'rv-actions', 'data-reveal': '' },
       d.event.finale ? badge('Desafio final', 'bad', 'trophy') : null,
-      primaryButton('Iniciar corrida', 'rival-start', d.onStart, { ico: 'play' }),
+      d.startBlocked ? h('p', { class: 'hint', 'data-testid': 'rival-ineligible' }, d.startBlocked) : null,
+      primaryButton('Iniciar corrida', 'rival-start', d.onStart, { ico: 'play', disabled: !!d.startBlocked }),
       secondaryButton('Voltar', 'rival-back', d.onBack, { ico: 'back' }),
     ),
   );

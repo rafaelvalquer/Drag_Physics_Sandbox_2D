@@ -1,5 +1,10 @@
 import { z } from 'zod';
 import { CHAPTER_1_ID, CHAPTER_2_ID, CHAPTER_IDS, type ChapterId } from './chapters';
+import {
+  buildTuneSchema, freeEventDetailsSchema, freeOfferSchema, freeStatsSchema, MAX_FREE_OFFERS,
+  MAX_FREE_RESULTS, paintSchema, RECENT_FREE_OPPONENTS,
+} from './freeEvents/FreeEventTypes';
+import { addFreeStats, freeChapterOf, newFreeStats } from './freeEvents/FreeEventHistory';
 
 /**
  * Career save (one document per slot, so every operation is a single atomic write).
@@ -12,8 +17,9 @@ import { CHAPTER_1_ID, CHAPTER_2_ID, CHAPTER_IDS, type ChapterId } from './chapt
  *  - v3: Dyno Lab settings per car (cut, launch speed, throttle map, final drive preset, shift
  *    speed, tyre pressure next to the boost). A v2 save is migrated as it is: its boost setting
  *    (the only v2 setting) is kept and the new settings are absent (= hardware default).
+ *  - v4: persistent free race boards, dedicated results and cumulative statistics.
  */
-export const CAREER_SAVE_VERSION = 3;
+export const CAREER_SAVE_VERSION = 4;
 export const DEFAULT_SLOT = 'slot-1';
 /** Budget the player has to buy the first car. */
 export const START_CREDITS = 4500;
@@ -29,27 +35,16 @@ export const STARTER_CARS = [
 /** Most cars a garage holds. */
 export const MAX_GARAGE = 16;
 
-const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 const iso = z.string().min(10).max(40);
 
 export const OwnedCarSchema = z.object({
   id: z.string().min(1).max(64),
   baseCarId: z.string().min(1).max(64),
   nickname: z.string().min(1).max(32),
-  paint: z.object({ color: hex, accent: hex }),
+  paint: paintSchema,
   installedParts: z.array(z.string().min(1).max(64)).max(40),
   /** Dyno settings of the engine tuners (absent = kit / ECU defaults). */
-  tune: z
-    .object({
-      boostBar: z.number().min(0.3).max(2.2).optional(),
-      revLimitRpm: z.number().int().min(2000).max(13000).optional(),
-      launchRpm: z.number().int().min(800).max(12000).optional(),
-      throttleResponse: z.enum(['soft', 'standard', 'sharp']).optional(),
-      finalDrive: z.enum(['short', 'standard', 'long']).optional(),
-      shiftRpm: z.number().int().min(1500).max(13000).optional(),
-      tirePressureKpa: z.number().int().min(100).max(320).optional(),
-    })
-    .optional(),
+  tune: buildTuneSchema.optional(),
   /**
    * Build resolver version of this car (1: chapter 1 resolver). A car stays at 1 until a part of
    * version 2 is installed; then it moves to 2 for good (on a chapter 1 build both give the same car).
@@ -114,6 +109,51 @@ export const CareerRaceResultSchema = z.object({
 });
 export type CareerRaceResult = z.infer<typeof CareerRaceResultSchema>;
 
+export const FreeRaceResultSchema = CareerRaceResultSchema.extend({
+  chapter: ChapterIdSchema,
+  /** Earlier free races did not store their track, paint or installed parts. */
+  details: freeEventDetailsSchema.optional(),
+});
+export type FreeRaceResult = z.infer<typeof FreeRaceResultSchema>;
+
+const FreeEventsStateSchema = z.object({
+  seed: z.number().int().min(0).max(0xffffffff),
+  nextSequence: z.number().int().positive(),
+  offersByChapter: z.record(ChapterIdSchema, z.array(freeOfferSchema).max(MAX_FREE_OFFERS)),
+  recentFingerprints: z.array(z.object({
+    fingerprint: z.string().regex(/^[0-9a-f]{16}$/),
+    baseCarId: z.string().min(1).max(64),
+    color: paintSchema.shape.color,
+  })).max(RECENT_FREE_OPPONENTS),
+  results: z.array(FreeRaceResultSchema).max(MAX_FREE_RESULTS),
+  stats: z.record(ChapterIdSchema, freeStatsSchema),
+}).superRefine((state, ctx) => {
+  const offers = CHAPTER_IDS.flatMap((chapter) => {
+    const board = state.offersByChapter[chapter];
+    if (board.some((offer) => offer.chapter !== chapter || freeChapterOf(offer.id) !== chapter ||
+        Number(offer.id.split('-').at(-1)) >= state.nextSequence) ||
+        new Set(board.map((offer) => `${offer.tier}/${offer.slot}`)).size !== board.length)
+      ctx.addIssue({ code: 'custom', message: 'quadro de eventos livres inválido' });
+    return board;
+  });
+  if (new Set(offers.map((offer) => offer.id)).size !== offers.length ||
+      new Set(offers.map((offer) => offer.opponent.fingerprint)).size !== offers.length)
+    ctx.addIssue({ code: 'custom', message: 'ofertas livres repetidas' });
+  if (state.results.some((result) => result.chapter !== freeChapterOf(result.eventId) || result.reputationAwarded !== 0) ||
+      CHAPTER_IDS.some((chapter) => state.stats[chapter].wins > state.stats[chapter].races))
+    ctx.addIssue({ code: 'custom', message: 'resultado livre inválido' });
+});
+export type FreeEventsState = z.infer<typeof FreeEventsStateSchema>;
+
+function newFreeEvents(seed: number): FreeEventsState {
+  return {
+    seed, nextSequence: 1,
+    offersByChapter: { 'chapter-1': [], 'chapter-2': [], 'chapter-3': [] },
+    recentFingerprints: [], results: [],
+    stats: { 'chapter-1': newFreeStats(), 'chapter-2': newFreeStats(), 'chapter-3': newFreeStats() },
+  };
+}
+
 export const CareerSaveSchema = z
   .object({
     version: z.literal(CAREER_SAVE_VERSION),
@@ -126,8 +166,7 @@ export const CareerSaveSchema = z
     /** Optimistic-concurrency counter: every write increments it. */
     revision: z.number().int().min(0),
     credits: z.number().int().min(0),
-    /** Advances procedural rival offers. Optional/defaulted for older saves. */
-    freeEventRotation: z.number().int().min(0).max(2147483640).default(0),
+    freeEvents: FreeEventsStateSchema,
     reputation: z.number().int().min(0),
     ownedCars: z.array(OwnedCarSchema).max(MAX_GARAGE),
     activeCarId: z.string().nullable(),
@@ -148,7 +187,7 @@ export const CareerSaveSchema = z
       ctx.addIssue({ code: 'custom', message: 'carro ativo não está na garagem' });
     const ids = s.ownedCars.map((c) => c.id);
     if (new Set(ids).size !== ids.length) ctx.addIssue({ code: 'custom', message: 'carros com o mesmo id' });
-    const att = s.results.map((r) => r.attemptId);
+    const att = [...s.results, ...s.freeEvents.results].map((r) => r.attemptId);
     if (new Set(att).size !== att.length) ctx.addIssue({ code: 'custom', message: 'tentativas repetidas' });
     if (!s.unlockedChapters.includes(s.chapterId)) ctx.addIssue({ code: 'custom', message: 'capítulo ativo não está liberado' });
     for (const k of Object.keys(s.chapterCompletions))
@@ -166,7 +205,7 @@ export function newCareerSave(slotId = DEFAULT_SLOT, now = new Date()): CareerSa
     chapterCompletions: {},
     revision: 0,
     credits: START_CREDITS,
-    freeEventRotation: Math.floor(Math.random() * 100000000),
+    freeEvents: newFreeEvents(Math.floor(Math.random() * 0x100000000)),
     reputation: 0,
     ownedCars: [],
     activeCarId: null,
@@ -201,6 +240,7 @@ export function migrateCareerSave(input: unknown): unknown {
   let doc = input as Record<string, unknown>;
   if (doc.version === 1) doc = migrateV1toV2(doc);
   if (doc.version === 2) doc = migrateV2toV3(doc);
+  if (doc.version === 3) doc = migrateV3toV4(doc);
   return doc;
 }
 
@@ -227,6 +267,22 @@ function migrateV1toV2(v1: Record<string, unknown>): Record<string, unknown> {
 /** v2 → v3: the settings format only grew (every new field is optional): nothing else changes. */
 function migrateV2toV3(v2: Record<string, unknown>): Record<string, unknown> {
   return { ...v2, version: 3 };
+}
+
+export function migrateV3toV4(v3: Record<string, unknown>): Record<string, unknown> {
+  const seed = typeof v3.freeEventRotation === 'number' ? v3.freeEventRotation >>> 0 : 0;
+  const freeEvents = newFreeEvents(seed);
+  const results = Array.isArray(v3.results) ? v3.results.filter((value: unknown) => {
+    const parsed = CareerRaceResultSchema.safeParse(value);
+    if (!parsed.success) return true; // the final schema still reports invalid legacy data
+    const r = parsed.data;
+    const chapter = freeChapterOf(r.eventId);
+    if (!chapter) return true;
+    freeEvents.results.push({ ...r, chapter });
+    addFreeStats(freeEvents.stats[chapter], r);
+    return false;
+  }) : v3.results;
+  return { ...v3, version: 4, results, freeEvents };
 }
 
 /** Export file: the save wrapped with a format tag. */

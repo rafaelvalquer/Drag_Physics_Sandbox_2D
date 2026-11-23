@@ -92,9 +92,32 @@ export class GarageVehiclePreview {
     }
     const set = this.set;
     if (!set) return;
-    const k = (w * this.fill) / (set.meta.lengthM * set.meta.pxPerM);
+    // Fit the actual atlas bounds, not just the configured vehicle length. Body art,
+    // wheels and the soft shadow can extend beyond that nominal measurement.
+    const m = set.meta;
+    const ppm = m.pxPerM;
+    const halfWheel = set.frames.wheel.w / (2 * ppm);
+    const shadow = set.frames.shadow;
+    const shadowMid = (m.rearX + m.noseX) / 2;
+    const visualLeft = Math.min(
+      -m.bodyOriginPx.x / ppm,
+      m.wheelCentres.rear.x - halfWheel,
+      m.wheelCentres.front.x - halfWheel,
+      shadowMid - shadow.w / (2 * ppm),
+    );
+    const visualRight = Math.max(
+      (set.frames.body.w - m.bodyOriginPx.x) / ppm,
+      m.wheelCentres.rear.x + halfWheel,
+      m.wheelCentres.front.x + halfWheel,
+      shadowMid + shadow.w / (2 * ppm),
+    );
+    const visualWidthM = Math.max(0.1, visualRight - visualLeft);
+    // Fit the car in both dimensions; one uniform scale preserves its proportions.
+    const widthScale = (w * this.fill) / (visualWidthM * ppm);
+    const heightScale = (h * 0.58) / (set.meta.heightM * set.meta.pxPerM);
+    const k = Math.min(widthScale, heightScale);
     const px = set.meta.pxPerM * k;
-    const frontX = w / 2 - ((set.meta.rearX + set.meta.noseX) / 2) * px;
+    const frontX = w / 2 - ((visualLeft + visualRight) / 2) * px;
     const o: ComposeOptions = { lights: this.lights, ...opts };
     if (this.backdrop === 'studio') {
       // polished floor: mirrored car, fading with distance from the contact line

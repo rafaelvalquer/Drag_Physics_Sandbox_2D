@@ -6,7 +6,9 @@ import { CAREER_TRACKS, findCareerTrack } from '../data/tracks/career';
 import { AI_PROFILES, DragAI } from '../game/ai/DragAI';
 import { CareerController, buildVersionFor, parseInventoryEntry } from '../game/career/CareerController';
 import { REGIONS, eventsOf, findEvent, rivalOf, type CareerEventDef, type RivalDef } from '../game/career/CareerEvents';
-import { availableFreeOffers, freeChapterOf, type FreeEventOffer } from '../game/career/FreeEvents';
+import { availableFreeTiers, FREE_CLASS_GATES } from '../game/career/freeEvents/FreeEventCatalog';
+import { freeEligibility, toFreeRaceOffer } from '../game/career/freeEvents/FreeEventService';
+import { FREE_DISTANCE_LABEL, FREE_TIERS, FREE_TIER_LABEL, type FreeAttempt, type FreeRaceOffer, type FreeTier } from '../game/career/freeEvents/FreeEventTypes';
 import { prizeEvents, prizeState } from '../game/career/PrizeCars';
 import {
   eventLabel,
@@ -22,11 +24,11 @@ import {
   unlocksOf,
 } from '../game/career/CareerProgression';
 import { CHAPTER_1_ID, CHAPTER_2_ID, CHAPTER_3_ID, CHAPTERS, chapterOf, nextChapterOf, type ChapterId } from '../game/career/chapters';
-import { DEALER_CARS, offerAvailability, resaleValue } from '../game/career/chapter2/dealer';
+import { CLASSIC_CARS, DEALER_CARS, offerAvailability, resaleValue } from '../game/career/chapter2/dealer';
 import { familyOf, incompatibility } from '../game/career/tuning/BuildResolverV2';
 import { CareerRepository, CareerTabLock } from '../game/career/CareerRepository';
 import { evaluateRace, type Comment } from '../game/career/CareerResultEvaluator';
-import { DEFAULT_SLOT, STARTER_CARS, type CareerRaceResult, type OutcomeSchema, type OwnedCar, type RunSummary } from '../game/career/CareerState';
+import { DEFAULT_SLOT, STARTER_CARS, type CareerRaceResult, type FreeRaceResult, type OutcomeSchema, type OwnedCar, type RunSummary } from '../game/career/CareerState';
 import { SPEAKER_NAME, pendingScenes, type StoryScene, type StoryTrigger } from '../game/career/CareerStory';
 import type { RaceRecord } from '../game/career/CareerController';
 import { TelemetryProbe, runHeadlessRace } from '../game/career/headlessRace';
@@ -83,7 +85,7 @@ import { buildShell, type NavItem } from '../ui/career/screens/CareerShell';
 import { CareerTransitionManager } from '../ui/career/motion/CareerTransitionManager';
 import { menuViewModel } from '../ui/career/menu/CareerMenuProgress';
 
-type Screen = 'menu' | 'choose' | 'garage' | 'workshop' | 'dyno' | 'events' | 'free-events' | 'rival' | 'race' | 'result' | 'ending' | 'history' | 'market' | 'chapters';
+type Screen = 'menu' | 'choose' | 'garage' | 'workshop' | 'dyno' | 'events' | 'free-events' | 'free-rival' | 'free-result' | 'free-history' | 'rival' | 'race' | 'result' | 'ending' | 'history' | 'market' | 'chapters';
 type Outcome = (typeof OutcomeSchema)['options'][number];
 
 const CAMERAS: CameraMode[] = ['follow', 'wide', 'start'];
@@ -159,7 +161,7 @@ export class CareerMode implements Mode {
   private readonly estimates = new Map<string, Estimate>();
   private seed = 1;
   /** Race in progress. */
-  private current: {
+  private current: ({
     event: CareerEventDef;
     rival: RivalDef;
     attemptId: string;
@@ -168,11 +170,14 @@ export class CareerMode implements Mode {
     probes: [TelemetryProbe, TelemetryProbe];
     recorded: boolean;
     playerBuild: BuildResult;
-    freeOffer?: FreeEventOffer;
-  } | null = null;
+    playerCarId: string;
+  } & ({ kind: 'campaign' } | { kind: 'free'; freeOffer: FreeRaceOffer })) | null = null;
   lastRecord: RaceRecord | null = null;
-  private freeSelected: FreeEventOffer | null = null;
-  private lastFreeOffer: FreeEventOffer | null = null;
+  private freeSelected: FreeRaceOffer | null = null;
+  private lastFreeOffer: FreeRaceOffer | null = null;
+  private freeResultError: { message: string; retry(): Promise<void> } | null = null;
+  private freeFilter: FreeTier | null = null;
+  private startingFreeRace = false;
   private lastComments: Comment[] = [];
   /** Test hook: the player's lane is driven by the advanced AI profile. */
   autopilot = false;
@@ -296,14 +301,18 @@ export class CareerMode implements Mode {
         return this.eventsScreen();
       case 'free-events':
         return this.freeEventsScreen();
+      case 'free-rival':
       case 'rival':
-        return this.rivalScreen();
+        return this.rivalScreen(screen === 'free-rival');
+      case 'free-result':
+        return this.freeResultError ? this.freeResultErrorScreen() : this.resultScreen();
       case 'result':
         return this.resultScreen();
       case 'ending':
         return this.endingScreen();
+      case 'free-history':
       case 'history':
-        return this.historyScreen();
+        return this.historyScreen(screen === 'free-history');
       case 'market':
         return this.marketScreen();
       case 'chapters':
@@ -705,8 +714,12 @@ export class CareerMode implements Mode {
     };
     const offers: Offer[] = [
       ...STARTER_CARS.map((o) => mk(o.baseCarId, o.price, 'street', true, null, s.ownedCars.some((c) => c.baseCarId === o.baseCarId))),
+      ...CLASSIC_CARS.map((o) => {
+        const a = offerAvailability(s, o);
+        return mk(o.baseCarId, o.price, 'street', a.ok, a.ok ? null : a.reason, s.ownedCars.some((c) => c.baseCarId === o.baseCarId));
+      }),
       ...(leagueOpen
-        ? DEALER_CARS.filter((o) => o.chapter !== 3 || eliteOpen).map((o) => {
+        ? DEALER_CARS.filter((o) => (o.chapter ?? 2) >= 2 && (o.chapter !== 3 || eliteOpen)).map((o) => {
             const a = offerAvailability(s, o);
             return mk(o.baseCarId, o.price, o.chapter === 3 ? 'elite' : 'league', a.ok, a.ok ? null : a.reason, s.ownedCars.some((c) => c.baseCarId === o.baseCarId));
           })
@@ -788,7 +801,7 @@ export class CareerMode implements Mode {
     );
     const rail = h(
       'aside', { class: 'ws-left' },
-      h('div', { class: 'ws-preview' }, this.preview(ownedCarConfig(car), 320, 168)),
+      h('div', { class: 'ws-preview' }, this.preview(ownedCarConfig(car), 320, 168, 'studio', 0.88)),
       h('span', { class: 'ws-sidebar-title' }, 'SISTEMAS DO VEÍCULO'),
       h(
         'nav', { class: 'ws-tabs', 'aria-label': 'Sistemas da oficina' },
@@ -1223,7 +1236,7 @@ export class CareerMode implements Mode {
     const track = TRACKS.find((t) => t.id === 'test-track') ?? this.trackCfg;
     const view = buildDynoLab({
       carName: car.nickname,
-      cfg: b.ok ? b.car : null,
+      cfg: b.ok ? ownedCarConfig(car) : null,
       makePreview: (c, w, hh) => this.preview(c, w, hh, 'plain', 0.86),
       caps,
       saved: car.tune ?? {},
@@ -1285,27 +1298,58 @@ export class CareerMode implements Mode {
   }
 
   private freeEventsScreen(): HTMLElement {
-    const save = this.controller.save!;
-    const offers = availableFreeOffers(this.chapter, save.freeEventRotation);
-    const body = buildFreeEvents({
-      chapterTitle: chapterOf(this.chapter).title,
-      offers,
-      makePreview: (offer, width, height) => this.preview(rivalCar(offer.rival), width, height, 'plain', 0.86),
-      onPick: (offer) => {
-        this.freeSelected = offer;
-        this.selectedEvent = null;
-        this.show('rival');
-      },
-      onRefresh: async () => {
-        if (!this.guard()) return;
-        const rotated = await this.controller.rotateFreeEvents();
-        if (!rotated.ok) { toast(rotated.error, 'error'); return; }
-        this.freeSelected = null;
-        this.show('free-events');
-      },
-      onBack: () => this.show('garage'),
-    });
-    return this.frame('Eventos livres', 'career-free-events', body);
+    const chapter = this.chapter;
+    const initial = this.controller.save!;
+    const unlocked = availableFreeTiers(initial, chapter);
+    const filter = this.freeFilter && unlocked.includes(this.freeFilter) ? this.freeFilter : null;
+    const host = h('div', { 'aria-busy': 'true' }, h('p', { class: 'hint', role: 'status' }, 'Carregando ofertas…'));
+    let busy = false;
+    const load = async (refresh = false, replaceId?: string): Promise<void> => {
+      if (busy) return;
+      busy = true;
+      host.setAttribute('aria-busy', 'true');
+      host.inert = true;
+      const result = await this.controller.freeBoard(filter, refresh, replaceId, this.readOnly);
+      busy = false;
+      if (!host.isConnected) return;
+      host.inert = false;
+      host.setAttribute('aria-busy', 'false');
+      if (!result.ok) {
+        host.replaceChildren(h('p', { class: 'error', role: 'alert' }, result.error),
+          h('button', { class: 'cs-btn', onclick: () => void load() }, 'Tentar novamente'));
+        return;
+      }
+      this.disposePreviews();
+      const car = this.controller.activeCar;
+      const build = car && ownedCarBuild(car);
+      const gateLabels = Object.fromEntries(FREE_TIERS.map((tier) => [
+        tier, `Após ${chapterOf(chapter).theLabel} ${FREE_CLASS_GATES[chapter][tier]}`,
+      ])) as Record<FreeTier, string>;
+      host.replaceChildren(buildFreeEvents({
+        chapterTitle: chapterOf(chapter).title,
+        offers: result.value.map((offer) => ({
+          offer,
+          powerCv: rivalBuild(toFreeRaceOffer(offer).rival).peakPowerCv,
+          eligibility: car && build ? freeEligibility(offer, car, build) : 'Escolha um carro na garagem.',
+        })),
+        unlocked, gateLabels, filter,
+        makePreview: (offer, width, height) => this.preview(rivalCar(toFreeRaceOffer(offer).rival), width, height, 'plain', 0.86),
+        onPick: (offer) => {
+          this.freeSelected = toFreeRaceOffer(offer);
+          this.show('free-rival');
+        },
+        onFilter: (tier) => {
+          this.freeFilter = tier;
+          this.show('free-events');
+        },
+        onRefresh: () => { if (this.guard()) void load(true); },
+        onReplace: (id) => { if (this.guard()) void load(false, id); },
+        onHistory: () => this.show('free-history'),
+        onBack: () => this.show('garage'),
+      }));
+    };
+    queueMicrotask(() => { if (host.isConnected) void load(); });
+    return this.frame('Eventos Livres — A Madrugada Não Para', 'career-free-events', host);
   }
 
   selectedEvent: string | null = null;
@@ -1317,8 +1361,8 @@ export class CareerMode implements Mode {
     return this.controller.save?.chapterId ?? CHAPTER_1_ID;
   }
 
-  private rivalScreen(): HTMLElement {
-    const offer = this.freeSelected;
+  private rivalScreen(free = false): HTMLElement {
+    const offer = free ? this.freeSelected : null;
     const ev = offer?.event ?? findEvent(this.selectedEvent ?? '') ?? nextEvent(this.controller.save!, this.chapter) ?? eventsOf(this.chapter)[0]!;
     const rv = offer?.rival ?? rivalOf(ev);
     const rb = rivalBuild(rv);
@@ -1329,6 +1373,7 @@ export class CareerMode implements Mode {
     const mine = this.controller.activeCar!;
     const mb = ownedCarBuild(mine);
     const body = buildRival({
+      startBlocked: offer ? freeEligibility(offer.offer, mine, mb) : null,
       player: { name: mine.nickname, car: findCampaignCar(mine.baseCarId)!.name, cfg: ownedCarConfig(mine), cv: mb.ok ? mb.peakPowerCv : 0, nm: mb.ok ? mb.peakTorqueNm : 0, massKg: mb.ok ? mb.car.massKg : 0, drive: mb.ok ? driveLabel(mb.car) : '—' },
       rival: {
         name: rv.name,
@@ -1341,13 +1386,13 @@ export class CareerMode implements Mode {
         nm: rb.peakTorqueNm,
         massKg: rb.car.massKg,
         drive: driveLabel(rb.car),
-        note: rivalNote(rv.parts, rb.car, findCampaignCar(rv.baseCarId)!),
+        note: offer ? [offer.offer.paintName, offer.offer.preparation, rivalNote(rv.parts, rb.car, findCampaignCar(rv.baseCarId)!)].filter(Boolean).join(" · ") : rivalNote(rv.parts, rb.car, findCampaignCar(rv.baseCarId)!),
         parts: rv.parts.length ? rv.parts.map((id) => findPart(id)!.name).join(', ') : '',
         skill: rv.skillLabel,
       },
       event: { title: ev.title, distance: RACE_DISTANCES[ev.distance].label, region: ev.regionLabel, prize: offer ? `${cr(ev.rewardCr)} por vitória · sem taxa de inscrição` : firstWin ? `${cr(ev.rewardCr)} + ${ev.reputation} de reputação${rv.prize && prizeState(s, ev) !== 'delivered' ? ` + ${rv.prize.nickname} (quem perde entrega o carro)` : ''}` : `revanche: ${cr(Math.round((ev.rewardCr * 0.35) / 10) * 10)}`, finale: !!ev.finale },
       makePreview: (c, w, hh) => this.preview(c, w, hh, 'plain', 0.86),
-      onStart: () => offer ? this.startRace(ev, offer) : ev.finale ? this.playScenes('final-challenge', undefined, () => this.startRace(ev)) : this.startRace(ev),
+      onStart: () => offer ? void this.startFreeRace(offer) : ev.finale ? this.playScenes('final-challenge', undefined, () => this.startRace(ev)) : this.startRace(ev),
       onBack: () => this.show(offer ? 'free-events' : 'events'),
     });
     return this.frame(offer ? 'Rival da madrugada' : ev.finale ? 'Desafio final' : eventLabel(ev), 'career-rival', body);
@@ -1366,7 +1411,22 @@ export class CareerMode implements Mode {
     this.renderList = [];
   }
 
-  startRace(ev: CareerEventDef, offer?: FreeEventOffer): void {
+  private async startFreeRace(selection: FreeRaceOffer): Promise<void> {
+    if (!this.guard() || this.startingFreeRace) return;
+    this.startingFreeRace = true;
+    try {
+      const result = await this.controller.beginFreeRace(selection.offer.id);
+      if (!this.root.isConnected || this.screen !== 'free-rival' || this.freeSelected !== selection) return;
+      if (!result.ok) { toast(result.error, 'error'); return; }
+      const { offer, attempt } = result.value;
+      const raceOffer = toFreeRaceOffer(offer);
+      this.startRace(raceOffer.event, { offer: raceOffer, attempt });
+    } finally {
+      this.startingFreeRace = false;
+    }
+  }
+
+  startRace(ev: CareerEventDef, free?: { offer: FreeRaceOffer; attempt: FreeAttempt }): void {
     if (!this.guard()) return;
     const owned = this.controller.activeCar;
     if (!owned) return;
@@ -1375,11 +1435,13 @@ export class CareerMode implements Mode {
       toast(`Build inválido: ${pb.errors.join('; ')}`, 'error');
       return;
     }
-    this.clearRace();
-    if (offer && (offer.rotation !== this.controller.save?.freeEventRotation || offer.event.chapter !== this.chapter)) {
-      toast('Esta oferta já mudou. Gere um novo rival.', 'error'); return;
+    if (free && (free.attempt.carId !== owned.id || free.attempt.buildKey !== pb.key)) {
+      toast('A preparação mudou. Confirme a inscrição novamente.', 'error');
+      return;
     }
-    const rv = offer?.rival ?? rivalOf(ev);
+    this.clearRace();
+    this.freeResultError = null;
+    const rv = free?.offer.rival ?? rivalOf(ev);
     const playerCar = ownedCarConfig(owned);
     const rivalCarCfg = rivalCar(rv);
     this.trackCfg = findCareerTrack(ev.trackId);
@@ -1396,11 +1458,12 @@ export class CareerMode implements Mode {
     const o = this.runner.add(rivalCarCfg, { id: 'opponent', lane: 1, isPlayer: false });
     this.views.names.set('opponent', `${rv.name} "${rv.nickname}"`);
     this.seed++;
+    const opponentSeed = free ? (free.offer.offer.opponent.seed + free.offer.offer.attemptsStarted) >>> 0 : 500 + this.seed;
     const lanes: RaceLane[] = [
       this.autopilot
         ? { sim: p.sim, ai: new DragAI(p.sim.car, 'advanced', 77 + this.seed, AI_PROFILES.advanced), name: 'Você' }
         : { sim: p.sim, ai: null, pedal: () => this.ctx.input.updatePedal(PHYSICS_DT), name: 'Você' },
-      { sim: o.sim, ai: new DragAI(o.sim.car, 'advanced', 500 + this.seed, rv.skill), name: `${rv.name} "${rv.nickname}"` },
+      { sim: o.sim, ai: new DragAI(o.sim.car, 'advanced', opponentSeed, rv.skill), name: `${rv.name} "${rv.nickname}"` },
     ];
     const race = new RaceController(lanes, ev.distance, 'pro', this.seed);
     this.race = race;
@@ -1408,13 +1471,14 @@ export class CareerMode implements Mode {
     this.current = {
       event: ev,
       rival: rv,
-      attemptId: `${ev.id}-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`,
+      attemptId: free?.attempt.id ?? `${ev.id}-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`,
       playerCar,
       rivalCarCfg,
       probes,
       recorded: false,
       playerBuild: pb,
-      freeOffer: offer,
+      playerCarId: owned.id,
+      ...(free ? { kind: 'free' as const, freeOffer: free.offer } : { kind: 'campaign' as const }),
     };
     p.control = (hh) => race.beforeStep(hh);
     this.runner.afterStep.push((hh) => {
@@ -1476,16 +1540,15 @@ export class CareerMode implements Mode {
     const outcome = this.outcomeOf(race);
     const playerRes = this.summarize(race.results[0]!, cur.probes[0], 'Você');
     const oppRes = this.summarize(race.results[1]!, cur.probes[1], `${cur.rival.name} "${cur.rival.nickname}"`);
-    await this.record(cur.event, cur.rival, cur.attemptId, outcome, playerRes, oppRes, cur.playerBuild, cur.freeOffer);
+    await this.record(cur.event, cur.rival, cur.attemptId, outcome, playerRes, oppRes, cur.playerBuild, cur.kind === 'free' ? cur.freeOffer : undefined, cur.playerCarId);
   }
 
-  private async record(ev: CareerEventDef, rv: RivalDef, attemptId: string, outcome: Outcome, player: RunSummary, opponent: RunSummary, pb: BuildResult, freeOffer?: FreeEventOffer): Promise<void> {
-    const owned = this.controller.activeCar!;
+  private async record(ev: CareerEventDef, rv: RivalDef, attemptId: string, outcome: Outcome, player: RunSummary, opponent: RunSummary, pb: BuildResult, freeOffer?: FreeRaceOffer, playerCarId = this.controller.activeCar!.id): Promise<void> {
     const rb = rivalBuild(rv);
     const res: Omit<CareerRaceResult, 'creditsAwarded' | 'reputationAwarded'> = {
       attemptId,
       eventId: ev.id,
-      playerCarId: owned.id,
+      playerCarId,
       opponentCarId: rb.car.id,
       playerResult: player,
       opponentResult: opponent,
@@ -1495,24 +1558,31 @@ export class CareerMode implements Mode {
       playerBuildKey: pb.ok ? pb.key : '',
       opponentBuildKey: rb.key,
     };
-    const r = freeOffer ? await this.controller.recordFreeRace(res, freeOffer) : await this.controller.recordRace(res);
+    const r = freeOffer ? await this.controller.recordFreeRace(res) : await this.controller.recordRace(res);
     if (!r.ok) {
-      toast(`O resultado não foi salvo: ${r.error}`, 'error');
+      if (freeOffer && this.root.isConnected) {
+        this.freeResultError = {
+          message: r.error,
+          retry: () => this.record(ev, rv, attemptId, outcome, player, opponent, pb, freeOffer, playerCarId),
+        };
+        this.show('free-result');
+      } else toast(`O resultado não foi salvo: ${r.error}`, 'error');
       return;
     }
     this.lastRecord = r.value;
+    this.freeResultError = null;
     this.lastFreeOffer = freeOffer ?? null;
     this.lastComments = evaluateRace({
       outcome,
       player,
       opponent,
-      playerCar: pb.ok ? pb.car : findCampaignCar(owned.baseCarId)!,
+      playerCar: pb.ok ? pb.car : ownedCarConfig(this.controller.activeCar!),
       playerPowerCv: pb.ok ? pb.peakPowerCv : 0,
       opponentPowerCv: rb.peakPowerCv,
     });
     if (freeOffer) {
       this.freeSelected = null;
-      this.show('result');
+      this.show('free-result');
       return;
     }
     const trigger: StoryTrigger = outcome === 'win' ? 'victory' : 'defeat';
@@ -1570,6 +1640,16 @@ export class CareerMode implements Mode {
 
   // ------------------------------------------------------------------ result / ending / history
 
+  private freeResultErrorScreen(): HTMLElement {
+    const pending = this.freeResultError!;
+    const retry = h('button', { class: 'cs-btn', type: 'button', onclick: () => {
+      retry.disabled = true;
+      void pending.retry();
+    } }, 'Salvar resultado novamente');
+    return this.frame('Resultado pendente', 'career-result-pending',
+      h('p', { class: 'error', role: 'alert' }, pending.message), retry);
+  }
+
   private resultScreen(): HTMLElement {
     const rec = this.lastRecord;
     if (!rec) return this.frame('Resultado', 'career-result', h('div', { class: 'hint' }, 'Nenhuma corrida.'));
@@ -1620,10 +1700,18 @@ export class CareerMode implements Mode {
       rivalPortrait: portraitEl(rv.portrait),
       ninaPortrait: portraitEl('nina'),
       ninaComments: this.lastComments.map((c) => ({ id: c.id, text: c.text })),
-      next: freeOffer ? 'Novo adversário disponível nos eventos livres.' : nxt ? `Próximo desafio: ${nxt.order}. ${nxt.title} (${rivalOf(nxt).nickname})` : 'Capítulo concluído.',
+      next: freeOffer ? (won ? 'Novo adversário disponível nos Eventos Livres.' : 'Este adversário está disponível para revanche.') : nxt ? `Próximo desafio: ${nxt.order}. ${nxt.title} (${rivalOf(nxt).nickname})` : 'Capítulo concluído.',
       chapterEvents: freeOffer ? 'Eventos livres' : chapterOf(ev.chapter).eventsTab,
       won,
-      onRetry: () => freeOffer ? this.show('free-events') : this.startRace(ev),
+      free: !!freeOffer,
+      rivalCar: freeOffer ? this.preview(rivalCar(rv), 420, 160, 'plain', 0.86) : undefined,
+      rivalCarLabel: freeOffer ? `${freeOffer.offer.carName} · ${freeOffer.offer.paintName}` : undefined,
+      onRetry: () => {
+        if (!freeOffer) return this.startRace(ev);
+        if (won) return this.show('free-events');
+        this.freeSelected = freeOffer;
+        this.show('free-rival');
+      },
       blown: p.dnfReason === 'engine-blown' ? { rpm: p.blownAtRpm ?? 0, onDyno: () => this.show('dyno') } : null,
       onGarage: () => this.show('garage'),
       onEvents: () => this.show(freeOffer ? 'free-events' : 'events'),
@@ -1672,15 +1760,18 @@ export class CareerMode implements Mode {
     return host;
   }
 
-  private historyScreen(): HTMLElement {
+  private historyScreen(free = false): HTMLElement {
     const s = this.controller.save!;
-    const rows: HistoryRow[] = [...s.results].reverse().slice(0, 40).map((r) => {
+    const recent: (CareerRaceResult | FreeRaceResult)[] = free ? s.freeEvents.results : s.results;
+    const rows: HistoryRow[] = [...recent].reverse().map((r) => {
       const ev = findEvent(r.eventId);
+      const details = 'details' in r ? r.details : undefined;
+      const chapter = 'chapter' in r ? r.chapter : ev?.chapter ?? CHAPTER_1_ID;
       return {
         id: r.attemptId,
-        date: r.completedAt.slice(0, 16).replace('T', ' '),
-        chapter: ev?.chapter ?? freeChapterOf(r.eventId) ?? CHAPTER_1_ID,
-        event: ev?.title ?? (freeChapterOf(r.eventId) ? 'Evento livre' : r.eventId),
+        date: new Date(r.completedAt).toLocaleString('pt-BR'),
+        chapter,
+        event: details ? `Evento livre · ${FREE_TIER_LABEL[details.tier]}` : ev?.title ?? 'Evento livre',
         rival: ev ? `${rivalOf(ev).name} "${rivalOf(ev).nickname}"` : r.opponentResult.name,
         outcome: r.outcome,
         rt: r.playerResult.rt,
@@ -1692,10 +1783,25 @@ export class CareerMode implements Mode {
         reputation: r.reputationAwarded,
         launchRpm: r.playerResult.launchRpm ?? null,
         maxSlip: r.playerResult.maxSlipRatio ?? null,
+        freeDetails: details && {
+          car: details.carName, paint: details.paintName, preparation: details.preparation,
+          track: findCareerTrack(details.trackId).name, distance: FREE_DISTANCE_LABEL[details.distance],
+          chapterTitle: chapterOf(chapter).title,
+        },
       };
     });
-    const body = buildHistory({ rows, chapters: CHAPTERS.map((c) => ({ id: c.id, label: `Cap. ${c.number} · ${c.title}` })), onEvents: () => this.show('events'), onBack: () => this.show(this.controller.save ? 'garage' : 'menu') });
-    return this.frame('Histórico', 'career-history-screen', body);
+    const body = buildHistory({
+      rows, chapters: CHAPTERS.map((c) => ({ id: c.id, label: `Cap. ${c.number} · ${c.title}` })),
+      freeStats: free ? s.freeEvents.stats : undefined,
+      activeChapter: this.chapter,
+      onEvents: () => this.show(free ? 'free-events' : 'events'),
+      onBack: () => this.show('garage'),
+    });
+    const tabs = h('div', { class: 'mk-filters', 'aria-label': 'Tipos de histórico' },
+      h('button', { class: `mk-filter ${free ? '' : 'on'}`, 'aria-pressed': String(!free), onclick: () => this.show('history') }, 'Campanha'),
+      h('button', { class: `mk-filter ${free ? 'on' : ''}`, 'aria-pressed': String(free), 'data-testid': 'history-free-tab', onclick: () => this.show('free-history') }, 'Eventos Livres'),
+    );
+    return this.frame(free ? 'Histórico dos Eventos Livres' : 'Histórico', 'career-history-screen', tabs, body);
   }
 
   // ------------------------------------------------------------------ per frame

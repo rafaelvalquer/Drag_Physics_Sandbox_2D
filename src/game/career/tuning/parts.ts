@@ -587,6 +587,10 @@ export type UnlockId =
   | 'engine-tuners'
   | 'part-turbo'
   | 'final-challenge'
+  // Chapter 1 — classifieds unlocked by main-event wins
+  | 'c1-dealer-celta'
+  | 'c1-dealer-corsa'
+  | 'c1-dealer-kadett'
   // Chapter 2 — Liga da Madrugada
   | 'c2-ecu'
   | 'c2-intercooler'
@@ -630,6 +634,9 @@ export const UNLOCK_LABEL: Record<UnlockId, string> = {
   'engine-tuners': 'Preparadores de motor (dinamômetro da oficina)',
   'part-turbo': 'Kit turbo básico',
   'final-challenge': 'Desafio final',
+  'c1-dealer-celta': 'Celta à venda nos classificados',
+  'c1-dealer-corsa': 'Corsa à venda nos classificados',
+  'c1-dealer-kadett': 'Kadett à venda nos classificados',
   'c2-ecu': 'Remap Stage 1 (Caio)',
   'c2-intercooler': 'Intercooler de maior capacidade',
   'c2-engine-family': 'Peças por família de motor (cabeçote, comandos, pistões, volante)',

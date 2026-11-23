@@ -1,58 +1,47 @@
-# Eventos livres procedurais — Campanha
+# Eventos Livres
 
-Eventos independentes da história, disponíveis desde a primeira compra de carro. Acesse pela
-tela principal, pelo menu da carreira ou pela aba **Eventos livres**.
+Abra **Eventos Livres** na Campanha para disputar corridas gratuitas e ganhar créditos. O quadro mostra três desafios. Use os filtros para escolher a classe e encontrar provas de 201 m e 402 m. No Capítulo 3, há também provas de 1.000 m no Hangar Executivo e no Pier Elite.
 
-## Geração e jogabilidade
+## Classes e premiação
 
-- Três níveis por capítulo: **Racha de bairro** (201 m), **Preparado** (402 m) e
-  **Elite** (402 m; 1.000 m no Capítulo 3).
-- Os veículos são escolhidos **exclusivamente do catálogo do capítulo ativo**, com
-  pintura, piloto e peças gerados por semente (não por bônus de potência).
-- O adversário é resolvido pelo mesmo \`resolveBuild\` usado na Oficina. Instalação incompatível
-  é rejeitada durante a geração; a potência exibida é a calculada.
-- Pintura, carro e peças permanecem os mesmos entre prévia, largada e resultado.
-  As ofertas mudam depois de uma disputa ou ao clicar em **Gerar novos adversários**.
-- A habilidade da IA acompanha o nível, sem multiplicadores ocultos de aceleração.
-- Capítulos e desbloqueios permanecem ligados **somente** aos eventos de campanha.
+Iniciante fica disponível assim que o capítulo abre. As demais classes seguem a campanha.
 
-## Economia (CR por vitória)
-
-| Capítulo | Bairro | Preparado | Elite |
+| Capítulo | Rua | Preparado | Competição |
 | --- | ---: | ---: | ---: |
-| 1 — Madrugada Zero | 250 | 500 | 750 |
-| 2 — Liga da Madrugada | 1.100 | 2.100 | 3.400 |
-| 3 — Elite da Madrugada | 3.800 | 6.900 | 11.000 |
+| 1 · Madrugada Zero | Noite 2 | Noite 4 | Noite 6 |
+| 2 · Liga da Madrugada | Etapa 2 | Etapa 4 | Etapa 8 |
+| 3 · Elite da Madrugada | Duelo 2 | Duelo 4 | Duelo 5 |
 
-Não há inscrição. Derrotas, queimadas de largada e DNFs não pagam.
-Vitórias são repetíveis, mas cada tentativa só é registrada e paga uma vez.
-Sete vitórias na Elite do Capítulo 1 geram 5.250 CR, suficientes para o kit turbo
-de 4.000 CR e a embreagem de 900 CR, sem fazer a campanha avançar.
+| Prêmio em 402 m | Capítulo 1 | Capítulo 2 | Capítulo 3 |
+| --- | ---: | ---: | ---: |
+| Iniciante | 250 CR | 1.200 CR | 5.000 CR |
+| Rua | 400 CR | 2.200 CR | 9.000 CR |
+| Preparado | 650 CR | 3.800 CR | 15.000 CR |
+| Competição | 850 CR | 5.500 CR | 25.000 CR |
 
-## Salvamento e segurança
+A prova de 201 m paga 80% do valor-base. A de 1.000 m paga 125%. O prêmio é arredondado à dezena na geração da oferta. Só a vitória paga. A história continua sendo a fonte de reputação, desbloqueios e carros recebidos como prêmio.
 
-\`CareerSave.freeEventRotation\` guarda a posição da rotação (valor padrão zero para
-saves antigos); a oferta é reproduzível após recarregar. Concluir ou atualizar um
-evento avança essa posição. O resultado fica em \`CareerSave.results\`, com ID começando
-por \`free-<capítulo>-...\`, visível no Histórico.
+## Quadro e revanche
 
-\`CareerController.recordFreeRace\` recalcula a oferta pelo estado salvo,
-valida o ID, a assinatura e o build do adversário, registra a recompensa em uma
-transação atômica e avança a rotação. Uma tentativa repetida retorna o resultado
-anterior, sem pagamento adicional. Os resultados livres não acionam histórias,
-recompensas de chefes, progresso de capítulos ou reputação.
+As ofertas ficam no save junto com semente, carro, configuração de oficina, pintura, pista, perfil do piloto e prêmio. Uma vitória libera o espaço para um novo rival. Derrota, queima ou DNF mantêm a oferta disponível para revanche. **Renovar ofertas abertas** troca os desafios ainda sem tentativa. **Trocar oferta** permite substituir um rival já enfrentado.
 
-## Validação
+O jogador pode usar carros do capítulo ativo ou anteriores. As classes abaixo de Competição avaliam o tempo estimado da preparação atual para restringir carros muito acima da faixa. A inscrição registra a preparação válida e os identificadores do carro e da tentativa.
 
-\`\`\`bash
-npm ci
-npm run typecheck
+## Geração e save
+
+A geração roda em um Web Worker no navegador. Usa os catálogos reais, os desbloqueios de oficina, o resolvedor de builds e os limites do Dyno Lab. Os candidatos são selecionados por estimativa física de tempo para a distância e a classe, com influência da pista, transmissão, aderência, potência, massa e perfil do piloto. Quando os candidatos disponíveis ficam fora da faixa, o gerador usa a configuração válida mais próxima entre as avaliadas. A corrida usa a física, IA e áudio da Campanha.
+
+A versão 4 do save migra os saves anteriores. Os resultados livres da versão anterior conservam os dados originais, como piloto, tempos e créditos. Detalhes que a versão antiga não guardava, como pintura e pista, ficam disponíveis a partir dos novos registros. A migração começa com um quadro vazio.
+
+O save guarda as últimas 30 assinaturas geradas, até 120 resultados livres e estatísticas acumuladas por capítulo. O histórico livre fica em **Histórico → Eventos Livres**. Recompensa, baixa da inscrição e histórico são gravados na mesma transação. Uma tentativa ou oferta já paga não pode ser reutilizada para outro pagamento.
+
+## Verificação
+
+```bash
 npm test
-npx playwright test tests/e2e/free-events.spec.ts
 npm run build
-\`\`\`
+npx playwright test tests/e2e/free-events.spec.ts
+npx tsx scripts/balance-free-events.ts
+```
 
-A matriz unitária cobre os três capítulos, geração determinística, builds físicos
-válidos, alterações de oferta, persistência, vitórias repetidas, derrota e bloqueio
-de tentativas duplicadas. O teste E2E percorre menu, ofertas, atualização, rival,
-corrida, resultados e histórico.
+O relatório de balanceamento usa sementes fixas e simula os três capítulos com o controlador de corrida. A opção `--farm-only` isola o cenário do Chevette com as peças disponíveis após a Noite 4. O número de sementes pode ser informado como primeiro argumento. Na amostra de 16 provas de 402 m da classe Preparado, o Chevette aspirado venceu 13. O kit e a embreagem custam oito vitórias de 650 CR.

@@ -68,10 +68,10 @@ describe('chapter data', () => {
       ['O Aspirado', 1300, 'quarter', 'avenida-norte'],
       ['Rei da Madrugada', 2500, 'quarter', 'avenida-norte'],
     ]);
-    expect(EVENTS[0]!.unlocks).toEqual(['workshop-basic', 'part-filter', 'part-exhaust']);
+    expect(EVENTS[0]!.unlocks).toEqual(['workshop-basic', 'part-filter', 'part-exhaust', 'c1-dealer-celta']);
     expect(EVENTS[3]!.unlocks).toEqual(['part-clutch', 'part-differential', 'part-turbo', 'engine-tuners']);
     expect(EVENTS[4]!.unlocks).toEqual(['part-tires-semislick']);
-    expect(EVENTS[5]!.unlocks).toEqual(['final-challenge', 'part-launch-pro']);
+    expect(EVENTS[5]!.unlocks).toEqual(['final-challenge', 'part-launch-pro', 'c1-dealer-kadett']);
   });
 
   it('rivals are real cars built by the same resolver; Léo drives the existing Gol', () => {
@@ -262,7 +262,7 @@ describe('economy and idempotency', () => {
 
   it('the same attempt id is applied once (double click, reload)', async () => {
     const c = await career();
-    const start = c.save!.credits;
+    const startingCredits = c.save!.credits;
     const r = result('e1-primeira-noite', 'win', 'attempt-dup-0001');
     const a = await c.recordRace(r);
     const b = await c.recordRace(r);
@@ -272,7 +272,7 @@ describe('economy and idempotency', () => {
     await reloaded.load();
     const again = await reloaded.recordRace(r);
     expect(again.ok && again.value.applied).toBe(false);
-    expect(reloaded.save!.credits).toBe(start + 300);
+    expect(reloaded.save!.credits).toBe(startingCredits + 300);
     expect(reloaded.save!.results).toHaveLength(1);
   });
 
@@ -290,7 +290,7 @@ describe('economy and idempotency', () => {
     await winUpTo(c, 5);
     expect(eventStatus(c.save!, EVENTS[6]!)).toBe('locked');
     const w6 = await c.recordRace(result('e6-o-aspirado', 'win'));
-    expect(w6.ok && w6.value.newUnlocks).toEqual(['final-challenge', 'part-launch-pro']);
+    expect(w6.ok && w6.value.newUnlocks).toEqual(['final-challenge', 'part-launch-pro', 'c1-dealer-kadett']);
     expect(eventStatus(c.save!, EVENTS[6]!)).toBe('final');
     const fin = await c.recordRace(result('e7-rei-da-madrugada', 'win'));
     expect(fin.ok && fin.value.chapterCompleted).toBe(true);

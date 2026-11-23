@@ -12,7 +12,7 @@ import { CareerRepository } from '../../../src/game/career/CareerRepository';
 import { CAREER_SAVE_VERSION, parseCareerSave, type CareerRaceResult, type RunSummary } from '../../../src/game/career/CareerState';
 import { STORY_SCENES, pendingScenes } from '../../../src/game/career/CareerStory';
 import { CHAPTER_1_ID, CHAPTER_2_ID, chapterOf } from '../../../src/game/career/chapters';
-import { LEAGUE_CARS, RESALE_SHARE } from '../../../src/game/career/chapter2/dealer';
+import { CLASSIC_CARS, LEAGUE_CARS, RESALE_SHARE, offerAvailability } from '../../../src/game/career/chapter2/dealer';
 import { ownedCarBuild, rivalBuild } from '../../../src/game/career/RivalBuildFactory';
 import { clearBuildCache, resolveBuild } from '../../../src/game/career/tuning/BuildResolver';
 import { incompatibility } from '../../../src/game/career/tuning/BuildResolverV2';
@@ -178,6 +178,39 @@ describe('chapter 2 data', () => {
       ['mitsubishi-evo-x-2012', 45000],
       ['bmw-335i-f30-2013', 55000],
     ]);
+  });
+
+  it('classic classifieds unlock from main-event wins, use the planned prices, and reject duplicates', async () => {
+    const c = await career();
+    expect(CLASSIC_CARS.map((o) => [o.baseCarId, o.price, o.requires])).toEqual([
+      ['gm-celta-2003', 1300, 'c1-dealer-celta'],
+      ['gm-corsa-gl-1996', 1000, 'c1-dealer-corsa'],
+      ['gm-kadett-sl-1992', 2200, 'c1-dealer-kadett'],
+    ]);
+    expect(offerAvailability(c.save!, CLASSIC_CARS[0]!).ok).toBe(false);
+    expect((await c.buyCar('gm-celta-2003')).ok).toBe(false);
+
+    expect((await c.recordRace({ ...win(EVENTS[0]!.id), outcome: 'loss' })).ok).toBe(true);
+    expect(offerAvailability(c.save!, CLASSIC_CARS[0]!).ok).toBe(false);
+    expect((await c.recordRace(win(EVENTS[0]!.id))).ok).toBe(true);
+    expect(offerAvailability(c.save!, CLASSIC_CARS[0]!).ok).toBe(true);
+    const credits = c.save!.credits;
+    const paint = { color: '#1f5fbf', accent: '#f2c230' };
+    expect(await c.buyCar('gm-celta-2003', { ...paint, accent: 'invalid' }))
+      .toEqual({ ok: false, error: 'Pintura inválida.' });
+    expect(c.save!.credits).toBe(credits);
+    expect((await c.buyCar('gm-celta-2003', paint)).ok).toBe(true);
+    expect(c.save!.ownedCars.find((car) => car.baseCarId === 'gm-celta-2003')?.paint).toEqual(paint);
+    expect(c.save!.credits).toBe(credits - 1300);
+    expect((await c.buyCar('gm-celta-2003')).ok).toBe(false);
+
+    expect(offerAvailability(c.save!, CLASSIC_CARS[1]!).ok).toBe(false);
+    for (const e of EVENTS.slice(1, 3)) expect((await c.recordRace(win(e.id))).ok).toBe(true);
+    expect(offerAvailability(c.save!, CLASSIC_CARS[1]!).ok).toBe(true);
+    expect(offerAvailability(c.save!, CLASSIC_CARS[2]!).ok).toBe(false);
+    for (const e of EVENTS.slice(3, 6)) expect((await c.recordRace(win(e.id))).ok).toBe(true);
+    expect(offerAvailability(c.save!, CLASSIC_CARS[2]!).ok).toBe(true);
+    expect(CLASSIC_CARS.some((o) => o.baseCarId === 'vw-saveiro-gl-1994')).toBe(false);
   });
 
   it('chapter 2 story: Caio is introduced, scenes belong to their chapter', () => {

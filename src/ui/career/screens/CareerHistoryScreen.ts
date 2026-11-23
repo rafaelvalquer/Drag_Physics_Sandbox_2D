@@ -1,5 +1,7 @@
 import { h } from '../../dom';
 import { badge, emptyState, icon, nf, panel, secondaryButton, stat, type Tone } from '../design/CareerComponents';
+import { FREE_DISTANCES, FREE_DISTANCE_LABEL, FREE_TIERS, FREE_TIER_LABEL, type FreeStats } from '../../../game/career/freeEvents/FreeEventTypes';
+import type { ChapterId } from '../../../game/career/chapters';
 
 export type OutcomeId = 'win' | 'loss' | 'red-light' | 'dnf';
 
@@ -19,11 +21,14 @@ export interface HistoryRow {
   reputation: number;
   launchRpm: number | null;
   maxSlip: number | null;
+  freeDetails?: { car: string; paint: string; preparation: string; track: string; distance: string; chapterTitle: string };
 }
 
 export interface HistoryDeps {
   rows: HistoryRow[];
   chapters: { id: string; label: string }[];
+  freeStats?: Record<ChapterId, FreeStats>;
+  activeChapter?: ChapterId;
   onEvents(): void;
   onBack(): void;
 }
@@ -52,7 +57,7 @@ export function summarize(rows: HistoryRow[]): { total: number; wins: number; lo
 }
 
 export function buildHistory(d: HistoryDeps): HTMLElement {
-  if (!d.rows.length) {
+  if (!d.rows.length && !d.freeStats) {
     return h(
       'div',
       { class: 'hx' },
@@ -60,7 +65,7 @@ export function buildHistory(d: HistoryDeps): HTMLElement {
       h('div', { class: 'evx-foot' }, secondaryButton('Voltar', 'history-back', d.onBack, { ico: 'back' })),
     );
   }
-  let chapter = 'all';
+  let chapter = d.freeStats ? (d.activeChapter ?? 'chapter-1') : 'all';
   let outcome: 'all' | OutcomeId = 'all';
   let open: string | null = null;
   const sumEl = h('div', { class: 'hx-summary' });
@@ -71,15 +76,27 @@ export function buildHistory(d: HistoryDeps): HTMLElement {
   const render = (): void => {
     const rows = filtered();
     const s = summarize(rows);
-    sumEl.replaceChildren(
+    const free = d.freeStats?.[chapter as ChapterId];
+    const leadTier = free && [...FREE_TIERS].sort((a, b) => (free.tierRaces[b] ?? 0) - (free.tierRaces[a] ?? 0))[0];
+    sumEl.replaceChildren(...(free ? [
+      panel('hx-sum', stat('Corridas', nf(free.races), { size: 'lg', testid: 'history-total' })),
+      panel('hx-sum', stat('Vitórias', nf(free.wins), { size: 'lg', testid: 'history-wins' })),
+      panel('hx-sum', stat('Derrotas', nf(free.races - free.wins), { size: 'lg' })),
+      panel('hx-sum', stat('Taxa de vitória', free.races ? `${Math.round(100 * free.wins / free.races)}%` : '—', { size: 'lg' })),
+      panel('hx-sum', stat('Créditos', nf(free.creditsEarned), { size: 'lg', unit: 'CR' })),
+      panel('hx-sum', stat('Classe mais disputada', leadTier && free.tierRaces[leadTier] ? FREE_TIER_LABEL[leadTier] : '—', { size: 'sm' })),
+      ...FREE_DISTANCES.filter((distance) => distance !== 'km' || chapter === 'chapter-3').map((distance) =>
+        panel('hx-sum', stat(`Melhor ET · ${FREE_DISTANCE_LABEL[distance]}`, n3(free.bestEt[distance] ?? null), { size: 'lg', unit: free.bestEt[distance] ? 's' : undefined }))),
+    ] : [
       panel('hx-sum', stat('Corridas', String(s.total), { size: 'lg', testid: 'history-total' })),
       panel('hx-sum', stat('Vitórias', String(s.wins), { size: 'lg', testid: 'history-wins' })),
       panel('hx-sum', stat('Derrotas', String(s.losses), { size: 'lg' })),
       panel('hx-sum', stat('Melhor ET', s.bestEt === null ? '—' : n3(s.bestEt), { size: 'lg', unit: s.bestEt === null ? undefined : 's' })),
       panel('hx-sum', stat('Créditos', nf(s.credits), { size: 'lg', unit: 'CR' })),
       panel('hx-sum', stat('Reputação', `+${nf(s.reputation)}`, { size: 'lg' })),
-    );
-    const chOpts: [string, string][] = [['all', 'Todos os capítulos'], ...d.chapters.map((c) => [c.id, c.label] as [string, string])];
+    ]));
+    const chOpts: [string, string][] = d.chapters.map((c) => [c.id, c.label]);
+    if (!d.freeStats) chOpts.unshift(['all', 'Todos os capítulos']);
     const oOpts: ['all' | OutcomeId, string][] = [
       ['all', 'Todos'],
       ['win', 'Vitória'],
@@ -119,7 +136,15 @@ export function buildHistory(d: HistoryDeps): HTMLElement {
                     stat('ET do rival', `${n3(r.rivalEt)} s`, { size: 'sm' }),
                     stat('Rotação na largada', r.launchRpm === null ? '—' : `${nf(Math.round(r.launchRpm))} rpm`, { size: 'sm' }),
                     stat('Patinagem máxima', r.maxSlip === null ? '—' : `${Math.round(r.maxSlip * 100)} %`, { size: 'sm' }),
-                    stat('Reputação', `+${r.reputation}`, { size: 'sm' }),
+                    !d.freeStats ? stat('Reputação', `+${r.reputation}`, { size: 'sm' }) : null,
+                    r.freeDetails ? [
+                      stat('Capítulo', r.freeDetails.chapterTitle, { size: 'sm' }),
+                      stat('Veículo do rival', r.freeDetails.car, { size: 'sm' }),
+                      stat('Pintura', r.freeDetails.paint, { size: 'sm' }),
+                      stat('Preparação', r.freeDetails.preparation, { size: 'sm' }),
+                      stat('Pista', r.freeDetails.track, { size: 'sm' }),
+                      stat('Distância', r.freeDetails.distance, { size: 'sm' }),
+                    ] : null,
                   )
                 : null,
             );
@@ -131,7 +156,9 @@ export function buildHistory(d: HistoryDeps): HTMLElement {
   return h(
     'div',
     { class: 'hx' },
-    h('p', { class: 'hint hx-note' }, `Mostrando as ${d.rows.length} corridas mais recentes guardadas no save; os totais abaixo valem para esta lista.`),
+    h('p', { class: 'hint hx-note' }, d.freeStats
+      ? 'Os totais incluem todas as corridas do capítulo. A lista mostra os resultados recentes.'
+      : `Mostrando as ${d.rows.length} corridas mais recentes guardadas no save. Os totais valem para esta lista.`),
     sumEl,
     filters,
     list,

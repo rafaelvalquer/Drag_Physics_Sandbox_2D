@@ -1,5 +1,13 @@
 import { findCampaignCar } from '../../data/cars/campaign';
-import { makeFreeEvent, type FreeEventOffer } from './FreeEvents';
+import { requestFreeBoard } from './freeEvents/FreeEventBoardClient';
+import { availableFreeTiers } from './freeEvents/FreeEventCatalog';
+import { addFreeStats } from './freeEvents/FreeEventHistory';
+import { computeFreeEventReward } from './freeEvents/FreeEventRewards';
+import {
+  findFreeOffer, planFreeBoard, freeEligibility, freeRaceOutcome,
+  resolveFreeOpponent, validFreeOffer,
+} from './freeEvents/FreeEventService';
+import { MAX_FREE_RESULTS, type FreeAttempt, type FreeOffer, type FreeTier } from './freeEvents/FreeEventTypes';
 import { EVENTS, findEvent, type CareerEventDef } from './CareerEvents';
 import { isChapterComplete, isChapterUnlocked, isPartUnlocked, canTuneBoost, unlocksOf, unlockedChaptersOf } from './CareerProgression';
 import { CHAPTER_1_ID, CHAPTER_2_ID, findChapter, type ChapterId } from './chapters';
@@ -8,6 +16,7 @@ import { CareerRepository } from './CareerRepository';
 import { grantPrizeCar, prizeEvents, prizeState } from './PrizeCars';
 import { computeReward, type Reward } from './CareerRewards';
 import {
+  FreeRaceResultSchema,
   MAX_GARAGE,
   MAX_RESULTS,
   OwnedCarSchema,
@@ -17,6 +26,7 @@ import {
   newCareerSave,
   type CareerRaceResult,
   type CareerSave,
+  type FreeRaceResult,
   type OwnedCar,
 } from './CareerState';
 import { resolveBuild, type ResolverVersion } from './tuning/BuildResolver';
@@ -428,8 +438,8 @@ export class CareerController {
   }
 
   /**
-   * Buys a car: the chapter 1 classifieds (starter models) or the chapter 2 dealer (one per model,
-   * with its reputation / progress requirements). Credits are debited in the same transaction
+   * Buys a car: chapter 1 classifieds and the chapter 2/3 dealers (one per model,
+   * with their reputation / progress requirements). Credits are debited in the same transaction
    * that delivers the car; a failed write changes nothing.
    */
   async buyCar(baseCarId: string, paint?: OwnedCar['paint']): Promise<OpResult> {
@@ -612,57 +622,92 @@ export class CareerController {
   }
 
 
-  /** New, repeatable opponents become available without progressing the story. */
-  async rotateFreeEvents(): Promise<OpResult> {
-    const s = this.save;
-    if (!s) return fail('nenhuma campanha carregada');
+  async freeBoard(filter: FreeTier | null, refresh = false, replaceId?: string, readOnly = false): Promise<OpResult<FreeOffer[]>> {
+    const save = this.save;
+    if (!save) return fail('Nenhuma campanha carregada.');
+    const request = { save, filter, refresh, replaceId };
     try {
-      await this.commit((n) => { n.freeEventRotation = (n.freeEventRotation + 1) % 2147483640; });
-      return { ok: true, value: this.save! };
+      const plan = planFreeBoard(request);
+      if (readOnly) return { ok: true, value: plan.flatMap((entry) => entry.current && !entry.generate ? [entry.current] : []) };
+      if (plan.every((entry) => !entry.generate)) return { ok: true, value: plan.map((entry) => entry.current!) };
+      const draft = await requestFreeBoard(request);
+      if (this.save !== save) return fail('O quadro mudou. Abra Eventos Livres novamente.');
+      if (draft.offers.length && draft.freeEvents.nextSequence !== save.freeEvents.nextSequence)
+        await this.commit((next) => { next.freeEvents = draft.freeEvents; });
+      return { ok: true, value: draft.offers };
     } catch (e) { return fail((e as Error).message); }
   }
 
-  /**
-   * Pays exactly once for a generated opponent, without story progress, prizes or unlocks.
-   * Rebuilds the offer from the persisted seed instead of trusting a caller-provided reward.
-   * A won/lost race consumes the current rotation so it cannot be paid twice with a new attempt.
-   */
-  async recordFreeRace(r: Omit<CareerRaceResult, 'creditsAwarded' | 'reputationAwarded'>, offer: FreeEventOffer): Promise<OpResult<RaceRecord>> {
-    const s = this.save;
-    if (!s) return fail('nenhuma campanha carregada');
-    const prior = s.results.find((x) => x.attemptId === r.attemptId);
-    if (prior) return {
-      ok: true, value: {
-        save: s, result: prior, applied: false,
-        reward: { credits: prior.creditsAwarded, reputation: prior.reputationAwarded, claimId: null, kind: 'none' },
-        newUnlocks: [], chapterCompleted: false,
-      },
+  /** Capture the current garage build again on every start, including rematches. */
+  async beginFreeRace(offerId: string): Promise<OpResult<{ offer: FreeOffer; attempt: FreeAttempt }>> {
+    const save = this.save;
+    const car = this.activeCar;
+    if (!save || !car) return fail('Escolha um carro na garagem.');
+    const offer = findFreeOffer(save, offerId);
+    if (!offer || !availableFreeTiers(save, save.chapterId).includes(offer.tier) || !validFreeOffer(offer))
+      return fail('Esta oferta não está disponível.');
+    const base = findCampaignCar(car.baseCarId);
+    if (!base) return fail('Carro do jogador desconhecido.');
+    const buildVersion = buildVersionFor(car, car.installedParts);
+    const tune = car.tune ?? {};
+    const build = resolveBuild(base, car.installedParts, tune, buildVersion);
+    if (!build.ok) return fail(build.errors.join(' · '));
+    const ineligible = freeEligibility(offer, car, build);
+    if (ineligible) return fail(ineligible);
+    const attempt: FreeAttempt = {
+      id: `${offer.id}-a${offer.attemptsStarted + 1}`,
+      carId: car.id, baseCarId: car.baseCarId, buildVersion, buildKey: build.key,
+      installedParts: [...car.installedParts], tune: { ...tune },
     };
-    if (offer.event.chapter !== s.chapterId || !isChapterUnlocked(s, offer.event.chapter))
-      return fail('este capítulo não está disponível');
-    if (offer.rotation !== s.freeEventRotation) return fail('este adversário já foi substituído');
-    const expected = makeFreeEvent(s.chapterId, s.freeEventRotation, offer.tier);
-    const base = findCampaignCar(expected.rival.baseCarId)!;
-    const rb = resolveBuild(base, expected.rival.parts, {}, expected.rival.buildVersion ?? 1);
-    if (!rb.ok) return fail('build procedural inválido');
-    if (expected.event.id !== r.eventId || expected.signature !== offer.signature ||
-        r.opponentCarId !== rb.car.id || r.opponentBuildKey !== rb.key)
-      return fail('o resultado não corresponde ao adversário gerado');
-    if (!s.ownedCars.some((c) => c.id === r.playerCarId))
-      return fail('carro do jogador desconhecido');
-    let reward: Reward = { credits: 0, reputation: 0, claimId: null, kind: 'none' };
-    let stored: CareerRaceResult | null = null;
     try {
-      await this.commit((n) => {
-        const credits = r.outcome === 'win' ? expected.event.rewardCr : 0;
-        reward = { credits, reputation: 0, claimId: null, kind: credits ? 'repeat-win' : 'none' };
-        n.credits += credits;
-        stored = { ...r, creditsAwarded: credits, reputationAwarded: 0 };
-        n.results.push(stored);
-        if (n.results.length > MAX_RESULTS) n.results.splice(0, n.results.length - MAX_RESULTS);
-        n.freeEventRotation = (n.freeEventRotation + 1) % 2147483640;
+      await this.commit((next) => {
+        const current = findFreeOffer(next, offerId)!;
+        current.attemptsStarted++;
+        current.pendingAttempt = attempt;
       });
-      return { ok: true, value: { save: this.save!, result: stored!, reward, applied: true, newUnlocks: [], chapterCompleted: false } };
+      return { ok: true, value: { offer: findFreeOffer(this.save!, offerId)!, attempt } };
+    } catch (e) { return fail((e as Error).message); }
+  }
+
+  async recordFreeRace(r: Omit<CareerRaceResult, 'creditsAwarded' | 'reputationAwarded'>): Promise<OpResult<RaceRecord>> {
+    const save = this.save;
+    if (!save) return fail('Nenhuma campanha carregada.');
+    const asRecord = (result: FreeRaceResult, applied: boolean): OpResult<RaceRecord> => ({
+      ok: true, value: {
+        save: this.save!, result, applied, newUnlocks: [], chapterCompleted: false,
+        reward: { credits: result.creditsAwarded, reputation: 0, claimId: null, kind: result.creditsAwarded ? 'repeat-win' : 'none' },
+      },
+    });
+    const prior = save.freeEvents.results.find((result) => result.attemptId === r.attemptId);
+    if (prior) return prior.eventId === r.eventId ? asRecord(prior, false) : fail('Tentativa associada a outro evento.');
+    const offer = findFreeOffer(save, r.eventId);
+    const attempt = offer?.pendingAttempt;
+    if (!offer || !attempt || attempt.id !== r.attemptId || !availableFreeTiers(save, save.chapterId).includes(offer.tier))
+      return fail('Esta tentativa de evento livre não está disponível.');
+    const opponent = resolveFreeOpponent(offer);
+    if (!opponent?.ok || r.opponentCarId !== opponent.car.id || r.opponentBuildKey !== opponent.key ||
+        r.playerCarId !== attempt.carId || r.playerBuildKey !== attempt.buildKey || r.buildVersion !== attempt.buildVersion)
+      return fail('O resultado não corresponde aos carros inscritos.');
+    if (freeRaceOutcome(r.playerResult, r.opponentResult) !== r.outcome)
+      return fail('O resultado está incompleto ou diverge dos tempos registrados.');
+    const parsed = FreeRaceResultSchema.safeParse({
+      ...r, chapter: offer.chapter, details: offer, reputationAwarded: 0,
+      creditsAwarded: computeFreeEventReward(offer.rewardCr, r.outcome),
+    });
+    if (!parsed.success) return fail('Resultado livre inválido.');
+    const stored = parsed.data;
+    try {
+      await this.commit((next) => {
+        const free = next.freeEvents;
+        const board = free.offersByChapter[offer.chapter];
+        if (stored.outcome === 'win') board.splice(board.findIndex((o) => o.id === offer.id), 1);
+        else delete findFreeOffer(next, offer.id)!.pendingAttempt;
+        next.credits += stored.creditsAwarded;
+        free.results.push(stored);
+        if (free.results.length > MAX_FREE_RESULTS) free.results.shift();
+        addFreeStats(free.stats[offer.chapter], stored, offer);
+      });
+      return asRecord(stored, true);
     } catch (e) { return fail((e as Error).message); }
   }
 

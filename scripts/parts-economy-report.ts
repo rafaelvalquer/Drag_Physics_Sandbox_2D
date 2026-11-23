@@ -3,13 +3,14 @@ import { join } from 'node:path';
 import { findCareerTrack } from '../src/data/tracks/career';
 import { AI_PROFILES } from '../src/game/ai/DragAI';
 import { CareerController, inventoryEntry, type OpResult } from '../src/game/career/CareerController';
-import { CareerRepository } from '../src/game/career/CareerRepository';
+import { CAREER_STORE, CareerRepository } from '../src/game/career/CareerRepository';
 import { rivalOf, type CareerEventDef } from '../src/game/career/CareerEvents';
 import { isChapterComplete, nextEvent } from '../src/game/career/CareerProgression';
 import type { CareerRaceResult, RunSummary } from '../src/game/career/CareerState';
 import { CHAPTERS, CHAPTER_2_ID, CHAPTER_3_ID, type ChapterId } from '../src/game/career/chapters';
 import { DEALER_CARS, offerAvailability } from '../src/game/career/chapter2/dealer';
-import { makeFreeEvent, type FreeEventOffer } from '../src/game/career/FreeEvents';
+import { freeRaceOutcome, resolveFreeOpponent, toFreeRaceOffer } from '../src/game/career/freeEvents/FreeEventService';
+import { FREE_TIERS, type FreeAttempt, type FreeOffer } from '../src/game/career/freeEvents/FreeEventTypes';
 import { runHeadlessRace } from '../src/game/career/headlessRace';
 import { ownedCarBuild, rivalBuild } from '../src/game/career/RivalBuildFactory';
 import { familyOf, transmissionKindOf } from '../src/game/career/tuning/BuildResolverV2';
@@ -51,7 +52,7 @@ function summarize(lane: LaneResult, name: string): RunSummary {
   return {
     name, rt: lane.rt, et: lane.et, total: lane.total ?? null,
     trapKmh: lane.trapMs === null ? null : lane.trapMs * 3.6,
-    redLight: lane.redLight, finished: lane.finished, dnf: lane.dnf,
+    redLight: lane.redLight, finished: lane.finished, dnf: lane.dnf, dnfReason: lane.dnfReason,
   };
 }
 
@@ -107,30 +108,52 @@ async function shop(controller: CareerController, ledger: ChapterEconomy, losses
   ledger.lowestCr = Math.min(ledger.lowestCr, controller.save!.credits);
 }
 
-async function race(controller: CareerController, event: CareerEventDef, serial: number, free?: FreeEventOffer) {
+async function race(controller: CareerController, event: CareerEventDef, serial: number, free?: { offer: FreeOffer; attempt: FreeAttempt }) {
   const car = controller.activeCar!;
   const player = ownedCarBuild(car);
   if (!player.ok) throw new Error(player.errors.join('\n'));
-  const opponent = free?.rival ?? rivalOf(event);
-  const opposingBuild = rivalBuild(opponent);
+  const opponent = free ? toFreeRaceOffer(free.offer).rival : rivalOf(event);
+  const opposingBuild = free ? resolveFreeOpponent(free.offer) : rivalBuild(opponent);
+  if (!opposingBuild?.ok) throw new Error('Preparação do rival inválida.');
   const raced = runHeadlessRace(
     { car: player.car, name: 'Jogador', profile: AI_PROFILES.advanced, seed: seed + serial * 3 },
     { car: opposingBuild.car, name: opponent.nickname, profile: opponent.skill, seed: seed + serial * 3 + 1 },
     findCareerTrack(event.trackId), event.distance, seed + serial * 3 + 2,
   );
   const [left, right] = raced.lanes;
-  const outcome = left.redLight ? 'red-light' : left.dnf ? 'dnf' : raced.winner === 0 ? 'win' : 'loss';
+  const playerResult = summarize(left, 'Jogador');
+  const opponentResult = summarize(right, opponent.nickname);
+  const outcome = free ? freeRaceOutcome(playerResult, opponentResult)
+    : left.redLight ? 'red-light' : left.dnf ? 'dnf' : raced.winner === 0 ? 'win' : 'loss';
+  if (!outcome) throw new Error('Resultado incompleto da corrida livre.');
   const entry: Omit<CareerRaceResult, 'creditsAwarded' | 'reputationAwarded'> = {
-    attemptId: `economy-${serial}`, eventId: event.id, playerCarId: car.id, opponentCarId: opposingBuild.car.id,
-    playerResult: summarize(left, 'Jogador'), opponentResult: summarize(right, opponent.nickname), outcome,
+    attemptId: free?.attempt.id ?? `economy-${serial}`, eventId: event.id, playerCarId: car.id, opponentCarId: opposingBuild.car.id,
+    playerResult, opponentResult, outcome,
     completedAt: '2026-01-01T12:00:00.000Z', buildVersion: player.version,
     playerBuildKey: player.key, opponentBuildKey: opposingBuild.key,
   };
-  return assertResult(free ? await controller.recordFreeRace(entry, free) : await controller.recordRace(entry));
+  return assertResult(free ? await controller.recordFreeRace(entry) : await controller.recordRace(entry));
 }
 
-const controller = new CareerController(new CareerRepository(new MemoryStore(), 'workshop-economy'));
+async function enterFreeRace(controller: CareerController) {
+  for (const tier of FREE_TIERS) {
+    const offers = assertResult(await controller.freeBoard(tier));
+    for (const offer of offers) {
+      const entered = await controller.beginFreeRace(offer.id);
+      if (entered.ok) return entered.value;
+    }
+  }
+  return null;
+}
+
+const store = new MemoryStore();
+const slot = 'workshop-economy';
+const controller = new CareerController(new CareerRepository(store, slot));
 assertResult(await controller.newCareer(starter));
+await store.update(CAREER_STORE, slot, () => ({
+  ...controller.save!, freeEvents: { ...controller.save!.freeEvents, seed },
+}));
+await controller.load();
 const rows: ChapterEconomy[] = [];
 let serial = 0;
 let prizeId: string | undefined;
@@ -148,9 +171,9 @@ for (const chapter of CHAPTERS) {
   let event = nextEvent(controller.save!, chapter.id);
   for (let attempt = 0; event && attempt < maxAttemptsPerChapter; attempt++) {
     await shop(controller, ledger, losses);
-    if (freeRemaining > 0) {
-      const offer = makeFreeEvent(chapter.id, controller.save!.freeEventRotation, 'bairro');
-      const result = await race(controller, offer.event, ++serial, offer);
+    const free = freeRemaining > 0 ? await enterFreeRace(controller) : null;
+    if (free) {
+      const result = await race(controller, toFreeRaceOffer(free.offer).event, ++serial, free);
       ledger.freeAttempts++;
       if (result.result.outcome === 'win') ledger.freeWins++;
       ledger.freeIncomeCr += result.reward.credits;
@@ -183,7 +206,7 @@ const markdown = [
   '',
   'Uma rota de referência com piloto avançado, Gol GTS inicial e os carros das finais disponíveis na garagem. As corridas foram simuladas com a física do jogo. O controlador da campanha gravou compras, vitórias, perdas e recompensas num save em memória.',
   '',
-  'A rota tenta o próximo evento principal ainda inédito. Após uma derrota, corre eventos livres de bairro para financiar peças. Na Liga, considera Golf, 320i e Evo. Na Elite, considera GT-R, Giulia e C43. As compras de carro reservam 6.000 CR para a oficina. A execução limita cada capítulo a 150 tentativas.',
+  'A rota tenta o próximo evento principal ainda inédito. Após uma derrota, corre na classe livre mais acessível ao carro atual para financiar peças. Na Liga, considera Golf, 320i e Evo. Na Elite, considera GT-R, Giulia e C43. As compras de carro reservam 6.000 CR para a oficina. A execução limita cada capítulo a 150 tentativas.',
   '',
   '| Capítulo | Início CR | Final CR | Menor saldo CR | Peças CR | Carros CR | Vitórias da história | Derrotas da história | Livres ganhos / corridos | Prêmios dos livres CR | Carros usados | Concluído |',
   '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|',
