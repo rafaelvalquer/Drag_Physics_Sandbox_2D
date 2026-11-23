@@ -108,6 +108,10 @@ export function reliabilityLimits(hw: CarConfig, partIds: readonly string[]): Re
   for (const id of partIds) {
     const p = findPart(id);
     if (p && 'safeRpmAdd' in p) add += p.safeRpmAdd;
+    if (p?.category === 'pistons') {
+      add += p.safeRpmReserve ?? 0;
+      endurance *= p.enduranceScale ?? 1;
+    }
     const h = HARDWARE[id];
     if (h) {
       add += h.safeRpmAdd;

@@ -96,6 +96,12 @@ export function eventLabel(ev: CareerEventDef): string {
   return `${chapterOf(ev.chapter).eventWord} ${ev.order}`;
 }
 
+export function partChapter(part: PartDef): number {
+  if (part.chapter) return part.chapter;
+  const event = eventUnlocking(part.unlock);
+  return event ? chapterOf(event.chapter).number : 1;
+}
+
 /**
  * Shop state of a part for one owned car, derived only from the save (installed build, inventory,
  * credits, completed events) — never from a UI flag.
@@ -113,7 +119,7 @@ export function partStatus(
     const chapter = p.chapter ?? 1;
     if (chapter > availableChapterNumber(save)) return {
       state: 'locked', label: `Capítulo ${chapter}`,
-      detail: `Disponível no capítulo ${chapter}, ainda não implementado na campanha.`,
+      detail: `Avance até o capítulo ${chapter} para liberar esta preparação.`,
     };
     const have = unlocksOf(save);
     const missing = partRequirements(p, family).find((r) => !have.has(r))!;

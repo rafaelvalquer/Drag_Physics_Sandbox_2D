@@ -12,8 +12,7 @@ test('eventos livres: ofertas, pinturas, rematch e recompensas independentes da 
   await expect(page.getByTestId('career-menu')).toBeVisible();
   await page.getByTestId('career-new').click();
   await page.getByTestId('choose-vw-gol-gts-1988').click();
-  for (let i = 0; i < 20 && await page.getByTestId('dialogue-next').count(); i++)
-    await page.getByTestId('dialogue-next').click();
+  await page.getByTestId('dialogue-skip').click();
   await expect(page.getByTestId('career-garage-screen')).toBeVisible();
   await page.getByTestId('nav-free-events').click();
   await expect(page.getByTestId('career-free-events')).toBeVisible();

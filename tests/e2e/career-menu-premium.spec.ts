@@ -185,7 +185,7 @@ test('animations: clicks are never blocked, fast navigation and remounts stay cl
   await startCampaign(page);
   // click right after mount, while the entrance is still running
   await mode(page, `m.show('menu')`);
-  await page.getByTestId('career-garage').click({ timeout: 2000 });
+  await page.getByTestId('career-garage').click({ timeout: 2000, noWaitAfter: true });
   await expect(page.getByTestId('career-garage-screen')).toBeVisible();
   // rapid screen switching never leaves an empty root
   await mode(page, `(() => { for (const s of ['menu','garage','menu','history','menu','garage','menu']) m.show(s); })()`);

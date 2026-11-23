@@ -15,8 +15,7 @@ import {
 } from './buildCommon';
 import { overrevSpecOf, reliabilityLimits, reliabilityLevel, type ReliabilityLevel, type ReliabilityLimits } from './EngineReliability';
 import type { OverrevSpec } from '../../../physics/engine/EngineOverrevFailure';
-import { findPart, type BoostControlPart, type EcuPart, type PartDef } from './parts';
-import { wastegateMaxBar } from './factoryTurboModel';
+import { findPart, type EcuPart, type PartDef } from './parts';
 
 /**
  * Dyno Lab capabilities: which settings a build can take, from the parts really installed.
@@ -98,9 +97,8 @@ export const FINAL_DRIVE_OPTIONS: readonly { value: FinalDrivePreset; label: str
 /** ECUs that move the ignition cut (programmable, or the NA remap). */
 const REV_ECUS = new Set(['ecu-programmable', 'ecu-stage1-na', 'ecu-street', 'ecu-race']);
 const CLASSIC_THROTTLES = new Set(['throttle-rework', 'throttle-large']);
-const GEARBOX_TCU = new Set(['dct-upgrade', 'at-upgrade']);
-/** Parts whose effect is applied by the overlay (no resolver knows them). */
-export const OVERLAY_PARTS = new Set(['valve-springs', 'launch-control']);
+const isValveSpring = (id: string): boolean => findPart(id)?.category === 'engine-valvetrain';
+const isOverlayPart = (id: string): boolean => findPart(id)?.category === 'electronics-launch' || isValveSpring(id);
 
 const off = (reason: string, def = 0): RangeControl => ({ enabled: false, reason, min: def, max: def, step: 1, default: def });
 const round = (v: number, step: number): number => Math.round(v / step) * step;
@@ -164,6 +162,7 @@ export function tuningCapabilities(base: CarConfig, partIds: readonly string[], 
   let boost: RangeControl;
   const programmable = parts.find((p) => p.id === 'ecu-programmable') as EcuPart | undefined;
   const factoryBoost = base.engine.induction === 'turbo' ? base.engine.turbo?.maxBoostBar : undefined;
+  const conversion = parts.find((p) => p.category === 'turbo' && 'conversion' in p && p.conversion);
   const classicRange = boostRangeForParts(partIds.filter((id) => (findPart(id)?.since ?? 1) === 1));
   if (factoryBoost !== undefined && modern) {
     if (!programmable) boost = off('Exige ECU programável.', factoryBoost);
@@ -171,10 +170,14 @@ export function tuningCapabilities(base: CarConfig, partIds: readonly string[], 
       const [lo, hi] = programmable.boostRangeAddBar ?? [0.1, 0.8];
       const def = hwR.steadyBoostBar.length ? Math.max(...hwR.steadyBoostBar.map((x) => x.bar), factoryBoost) : factoryBoost;
       // the wastegate (factory actuator, or the boost-control kit) caps what the ECU can ask for
-      const wg = wastegateMaxBar(base.engine, parts.find((p) => p.category === 'boost-control') as BoostControlPart | undefined, programmable);
+      const wg = hwR.wastegateLimitBar ?? factoryBoost;
       const max = Math.floor(Math.min(factoryBoost + hi, wg) * 100 + 1e-6) / 100;
-      boost = { enabled: true, reason: null, min: round(factoryBoost + lo, 0.01), max, step: 0.05, default: Math.min(max, round(def, 0.01)) };
+      const step = has((p) => 'actuatorHeadroomBar' in p) ? 0.01 : 0.05;
+      boost = { enabled: true, reason: null, min: round(factoryBoost + lo, 0.01), max, step, default: Math.min(max, round(def, 0.01)) };
     }
+  } else if (conversion && 'boostRangeBar' in conversion) {
+    const [min, max] = conversion.boostRangeBar;
+    boost = { enabled: true, reason: null, min, max, step: 0.01, default: max };
   } else if (classicRange) {
     const def = e.turbo?.maxBoostBar ?? 0.6;
     boost =
@@ -194,17 +197,20 @@ export function tuningCapabilities(base: CarConfig, partIds: readonly string[], 
 
   // ---- launch ----
   const launchDef = hw.transmission.clutch.launchRpm;
+  const launchPart = parts.find((part) => part.category === 'electronics-launch');
+  const launchStep = launchPart?.adjustmentStepRpm ?? 100;
+  const launchLimit = Math.min(e.redlineRpm - 800, launchDef + 2500);
   const launchOk =
     kind === 'manual'
-      ? has((p) => p.category === 'clutch' || p.id === 'launch-control')
+      ? !!launchPart || has((p) => p.category === 'clutch')
       : kind === 'dual-clutch'
-        ? has((p) => p.id === 'launch-control' || p.id === 'dct-upgrade')
+        ? !!launchPart || has((p) => p.category === 'gearbox')
         : false;
   const launch: RangeControl =
     kind === 'torque-converter-auto'
       ? off('No automático com conversor de torque, a largada é o estol do conversor.', launchDef)
       : launchOk
-        ? { enabled: true, reason: null, min: round(e.idleRpm + 800, 100), max: round(Math.min(e.redlineRpm - 800, launchDef + 2500), 100), step: 100, default: launchDef }
+        ? { enabled: true, reason: null, min: round(e.idleRpm + 800, launchStep), max: round(launchLimit, launchStep), step: launchStep, default: launchDef }
         : off(kind === 'manual' ? 'Exige controle de largada ou embreagem reforçada.' : 'Exige controle de largada ou upgrade do câmbio.', launchDef);
 
   // ---- throttle ----
@@ -231,7 +237,7 @@ export function tuningCapabilities(base: CarConfig, partIds: readonly string[], 
   const shift: RangeControl =
     kind === 'manual' || !auto
       ? off('Câmbio manual: o ponto de troca é do piloto.', shiftDef)
-      : has((p) => GEARBOX_TCU.has(p.id))
+      : has((p) => p.category === 'gearbox')
         ? { enabled: true, reason: null, min: round(e.revLimitRpm * 0.75, 50), max: Math.max(...[revLimit.max, e.revLimitRpm]) - 50, step: 50, default: shiftDef }
         : off('Exige upgrade do câmbio (TCU reprogramada).', shiftDef);
 
@@ -305,13 +311,13 @@ export function droppedNotice(dropped: readonly TuneField[]): string | null {
 
 /** Hardware of the Dyno Lab parts that no resolver knows (valve springs, launch control). */
 function withOverlayParts(hw: CarConfig, partIds: readonly string[]): CarConfig {
-  if (!partIds.some((id) => OVERLAY_PARTS.has(id))) return hw;
+  if (!partIds.some(isOverlayPart)) return hw;
   const car = structuredClone(hw);
   const limits = reliabilityLimits(hw, partIds);
-  if (partIds.includes('valve-springs')) car.engine.maxSafeRpm = Math.max(car.engine.maxSafeRpm, limits.maxSafeRpm);
-  const lc = findPart('launch-control');
-  if (partIds.includes('launch-control') && lc && 'launchRpmAdd' in lc)
-    car.transmission.clutch.launchRpm = Math.min(car.transmission.clutch.launchRpm + (lc.launchRpmAdd ?? 0), car.engine.redlineRpm - 800);
+  if (partIds.some(isValveSpring)) car.engine.maxSafeRpm = Math.max(car.engine.maxSafeRpm, limits.maxSafeRpm);
+  const lc = partIds.map(findPart).find((part) => part?.category === 'electronics-launch');
+  if (lc?.category === 'electronics-launch')
+    car.transmission.clutch.launchRpm = Math.min(car.transmission.clutch.launchRpm + lc.launchRpmAdd, car.engine.redlineRpm - 800);
   return car;
 }
 
@@ -334,7 +340,7 @@ function extendCurve(car: CarConfig, rpm: number): void {
 
 /** Does this tune / part list need the overlay on top of the resolver result? */
 export function needsOverlay(tune: BuildTune, partIds: readonly string[]): boolean {
-  return TUNE_FIELDS.some((f) => f !== 'boostBar' && tune[f] !== undefined) || partIds.some((id) => OVERLAY_PARTS.has(id));
+  return TUNE_FIELDS.some((f) => f !== 'boostBar' && tune[f] !== undefined) || partIds.some(isOverlayPart);
 }
 
 /**

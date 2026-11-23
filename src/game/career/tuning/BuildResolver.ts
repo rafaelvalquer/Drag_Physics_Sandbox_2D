@@ -3,8 +3,9 @@ import { exhaustPreset } from '../../../data/exhaustPresets';
 import { applyEngineParts, curvePeakCv, engineFuel, powerPeakRpm, TURBO_MAX_COMPRESSION, withStockBreathing, type EngineParts } from './breathingModel';
 import { CATEGORY_LABEL, CATEGORY_ORDER_V1, findPart, findPartForVersion, type PartCategory, type PartDef, type TirePart, type FilterPart, type ManifoldPart, type CamPart, type ExhaustPart, type TurboPart, type MechanicalMods } from './parts';
 import { applyTuneOverlay, needsOverlay } from './TuningCapabilities';
-import { tuneKey, resolverTune, sameTune, applyTyre, CLUTCH_TORQUE_MARGIN, deepFreeze, workshopFinalDrive, workshopGearRatios, fmtBar, MAX_KNOCK_LOSS, type BuildResult, type BuildTune, type ResolverVersion } from './buildCommon';
+import { tuneKey, resolverTune, sameTune, applyTyre, applyCoolingHardware, CLUTCH_TORQUE_MARGIN, deepFreeze, workshopFinalDrive, workshopGearRatios, fmtBar, MAX_KNOCK_LOSS, type BuildResult, type BuildTune, type ResolverVersion } from './buildCommon';
 import { resolveV2 } from './BuildResolverV2';
+import { exhaustPressureAfterSections } from './modernBreathing';
 
 export { CLUTCH_TORQUE_MARGIN, MAX_KNOCK_LOSS, type BuildResult, type BuildTune, type ResolverVersion };
 
@@ -101,6 +102,10 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
       errors.push(`peça desconhecida: ${id}`);
       continue;
     }
+    if (p.compat?.cars && !p.compat.cars.includes(base.id)) {
+      errors.push(`${p.name} não é feita para este carro`);
+      continue;
+    }
     const prev = bySlot.get(p.category);
     if (prev) errors.push(`só cabe uma peça em ${CATEGORY_LABEL[p.category]}: ${prev.name} e ${p.name}`);
     else bySlot.set(p.category, p);
@@ -109,7 +114,7 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
   const parts = CATEGORY_ORDER_V1.map((c) => bySlot.get(c)).filter((p): p is PartDef => !!p);
   const mod: MechanicalMods = {};
   const compound = new Set(['knockRetardScale', 'coolingKnockScale', 'coolingFrictionScale', 'burnDurationScale', 'turboSpoolScale', 'tireRollingScale']);
-  const additive = new Set(['backPressureReductionKPa', 'filterDropReductionKPa', 'intercoolerEffectivenessAdd', 'intercoolerMassAddKg', 'wastegateHoldAddBar', 'drivelineEfficiencyAdd', 'massRemoveKg']);
+  const additive = new Set(['backPressureReductionKPa', 'filterDropReductionKPa', 'intercoolerEffectivenessAdd', 'intercoolerMassAddKg', 'wastegateHoldAddBar', 'drivelineEfficiencyAdd', 'massRemoveKg', 'coolingMassAddKg']);
   for (const p of parts) if ('mod' in p) {
     for (const [k, v] of Object.entries(p.mod)) {
       if (v === undefined) continue;
@@ -178,18 +183,35 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
   }
   const ratedRpm = powerPeakRpm(base.engine.torqueCurve, base.engine.revLimitRpm);
   const stockEngine = withStockBreathing(base.engine, ratedRpm);
+  const exhaust = engineParts.exhaust;
   let steadyBoostBar: { rpm: number; bar: number }[] = [];
   let knockLoss = 0;
+  let chargeTemperatureAtTargetK: number | undefined;
   // Non-engine upgrades (clutch, tyres, mass, suspension, internals) must not resample
   // the engine curve: restoring them keeps factory motor physics byte-for-byte.
-  const nonEnginePrefix = /^(clutch|finalDrive|gearSpread|driveline|tire|massRemove|cgHeight|launchCg|internalTorqueLimit|fuelBoostLimit)/;
+  const nonEnginePrefix = /^(clutch|finalDrive|gearSpread|driveline|tire|massRemove|cgHeight|launchCg|internalTorqueLimit|fuelBoostLimit|radiatorArea|oilCoolerArea|fanFlow|coolingMass)/;
+  const engineMods = Object.entries(mod).filter(([key]) => !nonEnginePrefix.test(key));
   const changesEngine = !!(engineParts.filter || engineParts.manifold || engineParts.cam || engineParts.exhaust || engineParts.turbo)
-    || Object.keys(mod).some((k) => !nonEnginePrefix.test(k));
+    || engineMods.length > 0;
   if (changesEngine) {
-    const r = applyEngineParts(stockEngine, engineParts);
+    const engineMod: MechanicalMods = Object.fromEntries(engineMods);
+    if (exhaust) {
+      const sectionReduction = parts.reduce((sum, part) => {
+        const section = part.category === 'exhaust-header' || part.category === 'exhaust-pipe' || part.category === 'exhaust-muffler';
+        return sum + (section && 'mod' in part ? part.mod.backPressureReductionKPa ?? 0 : 0);
+      }, 0);
+      engineMod.backPressureKPa = exhaustPressureAfterSections(
+        stockEngine.breathing!.exhaustBackPressureKPa, exhaust.backPressureKPa, false,
+        { backPressureReductionKPa: sectionReduction },
+      );
+      // A turbine's relief is independent of the overlapping work on the exhaust line.
+      engineMod.backPressureReductionKPa = Math.max(0, (mod.backPressureReductionKPa ?? 0) - sectionReduction);
+    }
+    const r = applyEngineParts(stockEngine, { ...engineParts, mod: engineMod });
     car.engine = r.engine;
     steadyBoostBar = r.steadyBoostBar;
     knockLoss = r.knockLoss;
+    chargeTemperatureAtTargetK = r.chargeTemperatureAtTargetK;
   } else {
     car.engine = structuredClone(stockEngine);
   }
@@ -202,19 +224,18 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
     car.massKg += turboInstalled.massAddKg + (mod.intercoolerMassAddKg ?? 0); // charging hardware
     car.acoustic = { ...car.acoustic, turboGain: Math.max(car.acoustic.turboGain, 0.7) };
   }
-  const exhaust = engineParts.exhaust;
   if (exhaust || mod.headerDiameterScale || mod.exhaustDiameterScale || mod.exhaustAbsorptionScale) {
     // new geometry: wider primaries, the acoustic preset of a free-flowing system
-    const acousticBase = exhaust ? exhaustPreset(exhaust.acousticPreset, {
+    const acousticBase = exhaust?.acousticPreset ? exhaustPreset(exhaust.acousticPreset, {
       layout: base.exhaust.layout,
       headerPrimaryLengthM: base.exhaust.headerPrimaryLengthM,
       headerDiameterMm: Math.min(base.exhaust.headerDiameterMm * exhaust.headerDiameterScale, 70),
     }) : structuredClone(base.exhaust);
     car.exhaust = {
       ...acousticBase,
-      headerDiameterMm: Math.min(70, acousticBase.headerDiameterMm * (mod.headerDiameterScale ?? 1)),
-      tailpipeDiameterMm: Math.min(120, acousticBase.tailpipeDiameterMm * (mod.exhaustDiameterScale ?? 1)),
-      mufflerAbsorption: Math.max(0, acousticBase.mufflerAbsorption * (mod.exhaustAbsorptionScale ?? 1)),
+      headerDiameterMm: Math.min(70, Math.max(acousticBase.headerDiameterMm, base.exhaust.headerDiameterMm * (mod.headerDiameterScale ?? 1))),
+      tailpipeDiameterMm: Math.min(120, Math.max(acousticBase.tailpipeDiameterMm * (exhaust?.tailpipeDiameterScale ?? 1), base.exhaust.tailpipeDiameterMm * (mod.exhaustDiameterScale ?? 1))),
+      mufflerAbsorption: Math.max(0, Math.min(acousticBase.mufflerAbsorption * (exhaust?.mufflerAbsorptionScale ?? 1), base.exhaust.mufflerAbsorption * (mod.exhaustAbsorptionScale ?? 1))),
       outputGain: base.exhaust.outputGain,
     };
   }
@@ -243,6 +264,7 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
   if (mod.tireTempSensitivityScale) car.tires.tempSensitivityPerC *= mod.tireTempSensitivityScale;
   if (mod.tireRollingScale) car.tires.rollingResistance = Math.max(0.005, car.tires.rollingResistance * mod.tireRollingScale);
   if (mod.massRemoveKg) car.massKg = Math.max(500, car.massKg - mod.massRemoveKg);
+  applyCoolingHardware(car, mod);
   if (mod.cgHeightDeltaM) car.cgHeightM = Math.max(0.25, car.cgHeightM + mod.cgHeightDeltaM);
   // drag suspension: load transfer towards the driven axle (front drive: less, rear drive: more)
   if (mod.launchCgDeltaM) car.cgHeightM = Math.max(0.25, car.cgHeightM + (base.drivenAxle === 'front' ? -1 : 1) * mod.launchCgDeltaM);
@@ -273,7 +295,8 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
     errors.push('pressão superior a 0,95 bar exige bicos ou bomba de maior vazão');
   }
   const stockTorqueLimitNm = Math.max(320, base.transmission.clutch.maxTorqueNm * 1.45);
-  if (turboInstalled && peakTorqueNm > (mod.internalTorqueLimitNm ?? stockTorqueLimitNm)) {
+  const internalTorqueLimitNm = mod.internalTorqueLimitNm ?? stockTorqueLimitNm;
+  if (turboInstalled && peakTorqueNm > internalTorqueLimitNm) {
     errors.push('torque excede o limite mecânico dos internos; instale bielas e pistões reforçados');
   }
   if (turboInstalled && car.transmission.clutch.maxTorqueNm < peakTorqueNm * CLUTCH_TORQUE_MARGIN) {
@@ -289,6 +312,9 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
   const v = validateCar(car);
   if (!v.ok) errors.push(...v.errors);
   if (errors.length) return { ok: false, errors };
-  return { ok: true, car: deepFreeze(v.value!), parts, key, peakTorqueNm, peakPowerCv, steadyBoostBar, knockLoss, version: 1 };
+  return {
+    ok: true, car: deepFreeze(v.value!), parts, key, peakTorqueNm, peakPowerCv, steadyBoostBar, knockLoss,
+    internalTorqueLimitNm, chargeTemperatureAtTargetK, version: 1,
+  };
 }
 

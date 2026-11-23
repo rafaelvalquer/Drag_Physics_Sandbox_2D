@@ -1,0 +1,608 @@
+{
+  "seed": 12340,
+  "starter": "vw-gol-gts-1988",
+  "maxAttemptsPerChapter": 150,
+  "completed": true,
+  "chapters": [
+    {
+      "chapter": "chapter-1",
+      "startCr": 2300,
+      "endCr": 4020,
+      "lowestCr": 20,
+      "partSpendCr": 10680,
+      "carSpendCr": 0,
+      "storyWins": 7,
+      "storyLosses": 5,
+      "freeAttempts": 20,
+      "freeWins": 20,
+      "freeIncomeCr": 5000,
+      "complete": true,
+      "nextStory": null,
+      "purchases": [
+        {
+          "partId": "exhaust-sport",
+          "model": "vw-gol-gts-1988",
+          "price": 450
+        },
+        {
+          "partId": "filter-sport",
+          "model": "vw-gol-gts-1988",
+          "price": 250
+        },
+        {
+          "partId": "tires-sport",
+          "model": "vw-gol-gts-1988",
+          "price": 1000
+        },
+        {
+          "partId": "cam-sport",
+          "model": "vw-gol-gts-1988",
+          "price": 900
+        },
+        {
+          "partId": "clutch-reinforced",
+          "model": "vw-gol-gts-1988",
+          "price": 900
+        },
+        {
+          "partId": "fuel-classic-regulation",
+          "model": "vw-gol-gts-1988",
+          "price": 730
+        },
+        {
+          "partId": "ecu-remap",
+          "model": "vw-gol-gts-1988",
+          "price": 850
+        },
+        {
+          "partId": "tires-semislick",
+          "model": "vw-gol-gts-1988",
+          "price": 1600
+        },
+        {
+          "partId": "turbo-basic",
+          "model": "vw-gol-gts-1988",
+          "price": 4000
+        }
+      ],
+      "cars": [
+        "vw-gol-gts-1988"
+      ]
+    },
+    {
+      "chapter": "chapter-2",
+      "startCr": 4020,
+      "endCr": 20290,
+      "lowestCr": 40,
+      "partSpendCr": 80830,
+      "carSpendCr": 89000,
+      "storyWins": 10,
+      "storyLosses": 23,
+      "freeAttempts": 101,
+      "freeWins": 93,
+      "freeIncomeCr": 102300,
+      "complete": true,
+      "nextStory": null,
+      "purchases": [
+        {
+          "partId": "filter-sport",
+          "model": "vw-saveiro-gl-1994",
+          "price": 250
+        },
+        {
+          "partId": "cam-sport",
+          "model": "vw-saveiro-gl-1994",
+          "price": 900
+        },
+        {
+          "partId": "tires-semislick",
+          "model": "vw-saveiro-gl-1994",
+          "price": 1600
+        },
+        {
+          "partId": "fuel-classic-regulation",
+          "model": "vw-saveiro-gl-1994",
+          "price": 730
+        },
+        {
+          "partId": "ecu-remap",
+          "model": "vw-saveiro-gl-1994",
+          "price": 850
+        },
+        {
+          "partId": "tires-sport",
+          "model": "vw-golf-gti-mk4-2003",
+          "price": 1000
+        },
+        {
+          "partId": "clutch-reinforced",
+          "model": "vw-golf-gti-mk4-2003",
+          "price": 900
+        },
+        {
+          "partId": "ecu-stage1",
+          "model": "vw-golf-gti-mk4-2003",
+          "price": 2500
+        },
+        {
+          "partId": "intake-filter-vw-ea113-s1",
+          "model": "vw-golf-gti-mk4-2003",
+          "price": 400
+        },
+        {
+          "partId": "exhaust-downpipe-vw-ea113-s1",
+          "model": "vw-golf-gti-mk4-2003",
+          "price": 1100
+        },
+        {
+          "partId": "exhaust-vw-ea113-s1",
+          "model": "vw-golf-gti-mk4-2003",
+          "price": 1750
+        },
+        {
+          "partId": "tires-semislick",
+          "model": "vw-golf-gti-mk4-2003",
+          "price": 1600
+        },
+        {
+          "partId": "boost-control",
+          "model": "vw-golf-gti-mk4-2003",
+          "price": 1500
+        },
+        {
+          "partId": "intercooler-race",
+          "model": "vw-golf-gti-mk4-2003",
+          "price": 2200
+        },
+        {
+          "partId": "tires-sport",
+          "model": "bmw-320i-f30-2014",
+          "price": 1000
+        },
+        {
+          "partId": "at-upgrade",
+          "model": "bmw-320i-f30-2014",
+          "price": 3800
+        },
+        {
+          "partId": "intake-filter-bmw-n20-s1",
+          "model": "bmw-320i-f30-2014",
+          "price": 450
+        },
+        {
+          "partId": "exhaust-downpipe-bmw-n20-s1",
+          "model": "bmw-320i-f30-2014",
+          "price": 1100
+        },
+        {
+          "partId": "exhaust-bmw-n20-s1",
+          "model": "bmw-320i-f30-2014",
+          "price": 1750
+        },
+        {
+          "partId": "tires-semislick",
+          "model": "bmw-320i-f30-2014",
+          "price": 1600
+        },
+        {
+          "partId": "boost-control",
+          "model": "bmw-320i-f30-2014",
+          "price": 1500
+        },
+        {
+          "partId": "ecu-stage1",
+          "model": "bmw-320i-f30-2014",
+          "price": 2500
+        },
+        {
+          "partId": "intercooler-race",
+          "model": "bmw-320i-f30-2014",
+          "price": 2200
+        },
+        {
+          "partId": "ecu-programmable",
+          "model": "bmw-320i-f30-2014",
+          "price": 6000
+        },
+        {
+          "partId": "pistons-forged-modern",
+          "model": "bmw-320i-f30-2014",
+          "price": 7500
+        },
+        {
+          "partId": "downpipe-catless",
+          "model": "bmw-320i-f30-2014",
+          "price": 2400
+        },
+        {
+          "partId": "turbo-hybrid",
+          "model": "bmw-320i-f30-2014",
+          "price": 9000
+        },
+        {
+          "partId": "exhaust-pipe-bmw-n20-s2",
+          "model": "bmw-320i-f30-2014",
+          "price": 1250
+        },
+        {
+          "partId": "tires-slick",
+          "model": "bmw-320i-f30-2014",
+          "price": 3500
+        },
+        {
+          "partId": "tires-sport",
+          "model": "mitsubishi-evo-x-2012",
+          "price": 1000
+        },
+        {
+          "partId": "dct-upgrade",
+          "model": "mitsubishi-evo-x-2012",
+          "price": 5000
+        },
+        {
+          "partId": "intake-filter-mitsubishi-4b11-s1",
+          "model": "mitsubishi-evo-x-2012",
+          "price": 550
+        },
+        {
+          "partId": "exhaust-downpipe-mitsubishi-4b11-s1",
+          "model": "mitsubishi-evo-x-2012",
+          "price": 1400
+        },
+        {
+          "partId": "ecu-stage1",
+          "model": "mitsubishi-evo-x-2012",
+          "price": 2500
+        },
+        {
+          "partId": "exhaust-mitsubishi-4b11-s1",
+          "model": "mitsubishi-evo-x-2012",
+          "price": 2250
+        },
+        {
+          "partId": "tires-semislick",
+          "model": "mitsubishi-evo-x-2012",
+          "price": 1600
+        },
+        {
+          "partId": "boost-control",
+          "model": "mitsubishi-evo-x-2012",
+          "price": 1500
+        },
+        {
+          "partId": "intercooler-race",
+          "model": "mitsubishi-evo-x-2012",
+          "price": 2200
+        }
+      ],
+      "cars": [
+        "vw-saveiro-gl-1994",
+        "vw-golf-gti-mk4-2003",
+        "bmw-320i-f30-2014",
+        "mitsubishi-evo-x-2012"
+      ]
+    },
+    {
+      "chapter": "chapter-3",
+      "startCr": 20290,
+      "endCr": 180590,
+      "lowestCr": 40,
+      "partSpendCr": 281600,
+      "carSpendCr": 295000,
+      "storyWins": 10,
+      "storyLosses": 11,
+      "freeAttempts": 46,
+      "freeWins": 46,
+      "freeIncomeCr": 174800,
+      "complete": true,
+      "nextStory": null,
+      "purchases": [
+        {
+          "partId": "intake-filter-bmw-n55-s1",
+          "model": "bmw-335i-f30-2013",
+          "price": 550
+        },
+        {
+          "partId": "exhaust-downpipe-bmw-n55-s1",
+          "model": "bmw-335i-f30-2013",
+          "price": 1400
+        },
+        {
+          "partId": "exhaust-bmw-n55-s1",
+          "model": "bmw-335i-f30-2013",
+          "price": 2300
+        },
+        {
+          "partId": "intercooler-race",
+          "model": "bmw-335i-f30-2013",
+          "price": 2200
+        },
+        {
+          "partId": "pistons-forged-modern",
+          "model": "bmw-335i-f30-2013",
+          "price": 7500
+        },
+        {
+          "partId": "downpipe-catless",
+          "model": "bmw-335i-f30-2013",
+          "price": 2400
+        },
+        {
+          "partId": "boost-control",
+          "model": "bmw-335i-f30-2013",
+          "price": 1500
+        },
+        {
+          "partId": "exhaust-pipe-bmw-n55-s2",
+          "model": "bmw-335i-f30-2013",
+          "price": 1600
+        },
+        {
+          "partId": "ecu-stage2",
+          "model": "bmw-335i-f30-2013",
+          "price": 5500
+        },
+        {
+          "partId": "ecu-programmable",
+          "model": "bmw-335i-f30-2013",
+          "price": 6000
+        },
+        {
+          "partId": "tires-slick",
+          "model": "bmw-335i-f30-2013",
+          "price": 3500
+        },
+        {
+          "partId": "turbo-hybrid",
+          "model": "bmw-335i-f30-2013",
+          "price": 9000
+        },
+        {
+          "partId": "weight-race",
+          "model": "bmw-335i-f30-2013",
+          "price": 5500
+        },
+        {
+          "partId": "fuel-bmw-n55-s3",
+          "model": "bmw-335i-f30-2013",
+          "price": 3500
+        },
+        {
+          "partId": "ecu-stage3",
+          "model": "bmw-335i-f30-2013",
+          "price": 9000
+        },
+        {
+          "partId": "rotating-assembly-bmw-n55-s3",
+          "model": "bmw-335i-f30-2013",
+          "price": 9800
+        },
+        {
+          "partId": "charge-cooler-bmw-n55-s3",
+          "model": "bmw-335i-f30-2013",
+          "price": 4000
+        },
+        {
+          "partId": "ecu-map-bmw-n55-s3",
+          "model": "bmw-335i-f30-2013",
+          "price": 6800
+        },
+        {
+          "partId": "factory-turbo-bmw-n55-s3",
+          "model": "bmw-335i-f30-2013",
+          "price": 11150
+        },
+        {
+          "partId": "tires-sport",
+          "model": "mercedes-amg-c43-2017",
+          "price": 1000
+        },
+        {
+          "partId": "at-upgrade",
+          "model": "mercedes-amg-c43-2017",
+          "price": 3800
+        },
+        {
+          "partId": "ecu-stage1",
+          "model": "mercedes-amg-c43-2017",
+          "price": 2500
+        },
+        {
+          "partId": "intake-filter-mercedes-m276-s1",
+          "model": "mercedes-amg-c43-2017",
+          "price": 600
+        },
+        {
+          "partId": "exhaust-downpipe-mercedes-m276-s1",
+          "model": "mercedes-amg-c43-2017",
+          "price": 2300
+        },
+        {
+          "partId": "tires-semislick",
+          "model": "mercedes-amg-c43-2017",
+          "price": 1600
+        },
+        {
+          "partId": "exhaust-mercedes-m276-s1",
+          "model": "mercedes-amg-c43-2017",
+          "price": 3250
+        },
+        {
+          "partId": "intercooler-race",
+          "model": "mercedes-amg-c43-2017",
+          "price": 2200
+        },
+        {
+          "partId": "downpipe-catless",
+          "model": "mercedes-amg-c43-2017",
+          "price": 2400
+        },
+        {
+          "partId": "boost-control",
+          "model": "mercedes-amg-c43-2017",
+          "price": 1500
+        },
+        {
+          "partId": "exhaust-pipe-mercedes-m276-s2",
+          "model": "mercedes-amg-c43-2017",
+          "price": 1750
+        },
+        {
+          "partId": "tires-slick",
+          "model": "mercedes-amg-c43-2017",
+          "price": 3500
+        },
+        {
+          "partId": "pistons-forged-modern",
+          "model": "mercedes-amg-c43-2017",
+          "price": 7500
+        },
+        {
+          "partId": "ecu-stage2",
+          "model": "mercedes-amg-c43-2017",
+          "price": 5500
+        },
+        {
+          "partId": "ecu-programmable",
+          "model": "mercedes-amg-c43-2017",
+          "price": 6000
+        },
+        {
+          "partId": "turbo-hybrid",
+          "model": "mercedes-amg-c43-2017",
+          "price": 9000
+        },
+        {
+          "partId": "ecu-stage3",
+          "model": "mercedes-amg-c43-2017",
+          "price": 9000
+        },
+        {
+          "partId": "weight-race",
+          "model": "mercedes-amg-c43-2017",
+          "price": 5500
+        },
+        {
+          "partId": "tires-sport",
+          "model": "alfa-giulia-qv-2017",
+          "price": 1000
+        },
+        {
+          "partId": "at-upgrade",
+          "model": "alfa-giulia-qv-2017",
+          "price": 3800
+        },
+        {
+          "partId": "ecu-stage1",
+          "model": "alfa-giulia-qv-2017",
+          "price": 2500
+        },
+        {
+          "partId": "intake-filter-alfa-690t-s1",
+          "model": "alfa-giulia-qv-2017",
+          "price": 700
+        },
+        {
+          "partId": "exhaust-downpipe-alfa-690t-s1",
+          "model": "alfa-giulia-qv-2017",
+          "price": 2750
+        },
+        {
+          "partId": "tires-semislick",
+          "model": "alfa-giulia-qv-2017",
+          "price": 1600
+        },
+        {
+          "partId": "exhaust-alfa-690t-s1",
+          "model": "alfa-giulia-qv-2017",
+          "price": 3800
+        },
+        {
+          "partId": "intercooler-race",
+          "model": "alfa-giulia-qv-2017",
+          "price": 2200
+        },
+        {
+          "partId": "downpipe-catless",
+          "model": "alfa-giulia-qv-2017",
+          "price": 2400
+        },
+        {
+          "partId": "boost-control",
+          "model": "alfa-giulia-qv-2017",
+          "price": 1500
+        },
+        {
+          "partId": "exhaust-pipe-alfa-690t-s2",
+          "model": "alfa-giulia-qv-2017",
+          "price": 2100
+        },
+        {
+          "partId": "tires-slick",
+          "model": "alfa-giulia-qv-2017",
+          "price": 3500
+        },
+        {
+          "partId": "pistons-forged-modern",
+          "model": "alfa-giulia-qv-2017",
+          "price": 7500
+        },
+        {
+          "partId": "ecu-stage2",
+          "model": "alfa-giulia-qv-2017",
+          "price": 5500
+        },
+        {
+          "partId": "ecu-programmable",
+          "model": "alfa-giulia-qv-2017",
+          "price": 6000
+        },
+        {
+          "partId": "weight-race",
+          "model": "alfa-giulia-qv-2017",
+          "price": 5500
+        },
+        {
+          "partId": "fuel-alfa-690t-s3",
+          "model": "alfa-giulia-qv-2017",
+          "price": 4500
+        },
+        {
+          "partId": "turbo-hybrid",
+          "model": "alfa-giulia-qv-2017",
+          "price": 9000
+        },
+        {
+          "partId": "ecu-stage3",
+          "model": "alfa-giulia-qv-2017",
+          "price": 9000
+        },
+        {
+          "partId": "rotating-assembly-alfa-690t-s3",
+          "model": "alfa-giulia-qv-2017",
+          "price": 12650
+        },
+        {
+          "partId": "charge-cooler-alfa-690t-s3",
+          "model": "alfa-giulia-qv-2017",
+          "price": 6200
+        },
+        {
+          "partId": "ecu-map-alfa-690t-s3",
+          "model": "alfa-giulia-qv-2017",
+          "price": 8800
+        },
+        {
+          "partId": "factory-turbo-alfa-690t-s3",
+          "model": "alfa-giulia-qv-2017",
+          "price": 17000
+        }
+      ],
+      "cars": [
+        "bmw-335i-f30-2013",
+        "mercedes-amg-c43-2017",
+        "alfa-giulia-qv-2017"
+      ]
+    }
+  ]
+}

@@ -13,6 +13,8 @@ export interface AccelerationOptions {
   distancesM?: readonly number[];
   /** Simulated time after the start (s). Long enough to settle at top speed. */
   maxS?: number;
+  /** Stop after the requested speed and distance splits. Top speed and slip then describe only that run. */
+  stopAtLastSplit?: boolean;
   level?: AiLevel;
   seed?: number;
   /**
@@ -47,6 +49,8 @@ const H = 1 / 120;
 export function runAccelerationTest(car: CarConfig, track: TrackConfig, opts: AccelerationOptions = {}): AccelerationResult {
   const speeds = [...(opts.speedsKmh ?? [80, 100, 120])].sort((a, b) => a - b);
   const distances = [...(opts.distancesM ?? [400, 1000])].sort((a, b) => a - b);
+  const lastSpeed = speeds.at(-1);
+  const lastDistance = distances.at(-1);
   const maxS = opts.maxS ?? 120;
   const sim = new VehicleSimulation(opts.payloadKg ? { ...car, massKg: car.massKg + opts.payloadKg } : car, track);
   const ai = new DragAI(car, opts.level ?? 'advanced', opts.seed ?? 7);
@@ -120,6 +124,9 @@ export function runAccelerationTest(car: CarConfig, track: TrackConfig, opts: Ac
     prevV = v;
     prevX = x;
     prevT = t;
+    if (opts.stopAtLastSplit &&
+      (lastSpeed === undefined || speedTimes.get(lastSpeed) !== null) &&
+      (lastDistance === undefined || distanceTimes.get(lastDistance) !== null)) break;
   }
   return {
     speedTimes,

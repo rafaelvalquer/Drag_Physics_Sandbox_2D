@@ -9,6 +9,7 @@ import { orificeMassFlow, throttleAttenuation } from './GasFlow';
 import { IgnitionModule } from './IgnitionModule';
 import { IdleAirController } from './IdleAirController';
 import { Turbocharger } from './Turbocharger';
+import { EngineThermalModel } from './EngineThermalModel';
 
 export interface EngineInputs {
   /** Driver / AI throttle request 0..1. */
@@ -68,6 +69,7 @@ export class EngineModel {
   readonly turbo: Turbocharger | null;
   readonly torqueCurve: MonotoneCubic;
   readonly frame: EngineTelemetryFrame;
+  readonly thermal: EngineThermalModel;
 
   ambient: Ambient = { pressurePa: ATMOSPHERIC_PRESSURE, temperatureK: 298.15 };
   dyno: DynoControl = { enabled: false, targetOmega: 0, maxTorque: 3000, hold: false };
@@ -118,6 +120,7 @@ export class EngineModel {
     this.geometry = engineGeometry(cfg);
     this.crank = new Dof('crank', cfg.inertiaKgM2);
     this.torqueCurve = new MonotoneCubic(cfg.torqueCurve.rpm, cfg.torqueCurve.torqueNm);
+    this.thermal = new EngineThermalModel(cfg, this.geometry.displacement);
     this.ignition = new IgnitionModule(cfg.firingAnglesDeg, rpmToRadS(cfg.revLimitRpm), cfg.limiterCutTimeS);
     this.throttleArea = (Math.PI * (cfg.throttle.bodyDiameterMm / 1000) ** 2) / 4;
     this.manifoldVolume = cfg.intake.manifoldVolumeL / 1000;
@@ -187,6 +190,7 @@ export class EngineModel {
     this.exhaustTempK = this.ambient.temperatureK + 20;
     this.idleAir.reset();
     this.turbo?.reset();
+    this.thermal.reset();
     this.ignition.reset(0);
     this.crankingTime = 0;
     this.catchTime = 0;
@@ -313,11 +317,16 @@ export class EngineModel {
     tempK = this.ambient.temperatureK,
   ): number {
     const area = this.throttleEffectiveArea(opening);
+    const efficiency = omega > 0 ? this.volumetricEfficiency(radSToRpm(omega)) : 0;
+    const densityDivisor = R_AIR * tempK;
+    const displacement = this.geometry.displacement;
+    const cyclesPerSecond = omega / FOUR_PI;
     let lo = 200;
     let hi = upstreamPa;
     for (let i = 0; i < 40; i++) {
       const mid = 0.5 * (lo + hi);
-      const net = orificeMassFlow(area, upstreamPa, mid, tempK, tempK) - this.cylinderMassFlow(mid, omega, tempK);
+      const flow = efficiency * (mid / densityDivisor) * displacement * cyclesPerSecond;
+      const net = orificeMassFlow(area, upstreamPa, mid, tempK, tempK) - flow;
       if (net > 0) lo = mid;
       else hi = mid;
     }
@@ -345,7 +354,7 @@ export class EngineModel {
       if (!this.turbo) return { map, flow, target: 0 };
       const e = this.cfg.egt;
       const load = map / this.referencePressure;
-      const egt = e.idleK + (e.maxK - e.idleK) * clamp01(load * (0.3 + 0.7 * (rpm / this.cfg.redlineRpm)));
+      const egt = e.idleK + (e.maxK - e.idleK) * clamp01(load * this.fueledFraction(flow) * (0.3 + 0.7 * (rpm / this.cfg.redlineRpm)));
       return { map, flow, target: this.turbo.steadyBoost(flow, egt / e.maxK) };
     };
     if (!this.turbo) {
@@ -427,7 +436,7 @@ export class EngineModel {
     const op = this.steadyWot(rpm);
     const w = rpmToRadS(rpm);
     const back = this.backPressureFor(ATMOSPHERIC_PRESSURE, op.flow, op.boost);
-    const indicatedNm = this.wotIndicatedTorque(rpm) * this.willansFactor(op.map);
+    const indicatedNm = this.wotIndicatedTorque(rpm) * this.willansFactor(op.map) * this.fueledFraction(op.flow);
     const frictionNm = this.frictionTorque(w) + this.cfg.accessoriesNm;
     const pumpingNm = this.pumpingLoss(op.map, back);
     return { ...op, back, indicatedNm, frictionNm, pumpingNm, brakeNm: indicatedNm - frictionNm - pumpingNm };
@@ -447,7 +456,14 @@ export class EngineModel {
     }
     const back = this.backPressureFor(this.ambient.pressurePa, flow, boostPa);
     const pumping = this.pumpingLoss(p, back);
-    return this.wotIndicatedTorque(rpm) * this.willansFactor(p) - this.frictionTorque(w) - this.cfg.accessoriesNm - pumping;
+    return this.wotIndicatedTorque(rpm) * this.willansFactor(p) * this.fueledFraction(flow) - this.frictionTorque(w) - this.cfg.accessoriesNm - pumping;
+  }
+
+  /** Fraction of the trapped air the fuel system can serve at the commanded mixture. */
+  private fueledFraction(airKgS: number): number {
+    const fueling = this.cfg.fueling;
+    if (!fueling || airKgS <= 0) return 1;
+    return Math.min(1, (fueling.maxFuelKgS * fueling.airFuelRatio) / airKgS);
   }
 
   /**
@@ -614,7 +630,7 @@ export class EngineModel {
     this.load = clamp(this.manifoldPressure / this.referencePressure, 0, 1.8);
     const indicated = this.wotIndicatedTorque(Math.max(rpm, cfg.torqueCurve.rpm[0]!));
     const willans = this.willansFactor(this.manifoldPressure);
-    this.torqueCombustion = omega > 0 ? indicated * willans * burn : 0;
+    this.torqueCombustion = omega > 0 ? indicated * willans * burn * this.fueledFraction(this.airMassFlow) * this.thermal.torqueFraction : 0;
 
     // ----- losses -----
     const back = this.backPressure();
@@ -656,7 +672,7 @@ export class EngineModel {
   }
 
   /** Integrates the crank angle and updates ignition events, limiter and run state. */
-  postStep(h: number, input: EngineInputs, simTime: number): void {
+  postStep(h: number, input: EngineInputs, simTime: number, speedMps = 0): void {
     const cfg = this.cfg;
     const omega = this.crank.v;
     const rpm = radSToRpm(omega);
@@ -678,9 +694,10 @@ export class EngineModel {
     // exhaust gas temperature (first order, approximate)
     const burning = burningState && !this.fuelCut && !limiter && rpm > 200;
     const target = burning
-      ? cfg.egt.idleK + (cfg.egt.maxK - cfg.egt.idleK) * clamp01(this.load * (0.3 + 0.7 * (rpm / cfg.redlineRpm)))
+      ? cfg.egt.idleK + (cfg.egt.maxK - cfg.egt.idleK) * clamp01(this.load * this.fueledFraction(this.airMassFlow) * (0.3 + 0.7 * (rpm / cfg.redlineRpm)))
       : this.ambient.temperatureK + (rpm > 100 ? 120 : 0);
     this.exhaustTempK = firstOrder(this.exhaustTempK, target, h, target > this.exhaustTempK ? 0.7 : 2.5);
+    this.thermal.step(h, Math.max(0, this.torqueCombustion * omega), this.ambient.temperatureK - 273.15, speedMps);
 
     // run state machine
     switch (this.runState) {

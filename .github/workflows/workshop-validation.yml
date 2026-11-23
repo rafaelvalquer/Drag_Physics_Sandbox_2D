@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - feature/workshop-premium-expansion
+      - feature/career-complete-parts-upgrades
   pull_request:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   validate:
@@ -51,5 +53,41 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - name: Workshop physics and Gol AP balancing
-        run: npx vitest run tests/unit/career/tuning.test.ts
+      - name: Workshop physics and representative stage audits
+        run: |
+          npx vitest run tests/unit/career/tuning.test.ts
+          npx tsx scripts/parts-stage-report.ts --car=vw-gol-gts-1988 --groups=classic-na-compression,classic-turbo-compression,classic-manual-gearbox --out=audit --fail
+          npx tsx scripts/parts-stage-report.ts --car=bmw-320i-f30-2014 --groups=modern-turbo-compression,modern-exhaust-system,modern-exhaust-downpipe --out=audit --fail
+          npx tsx scripts/parts-stage-report.ts --car=nissan-gtr-r35-2015 --groups=modern-turbo-compression,launch-control --out=audit --fail
+
+  full-tuning-audit:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        report: [coverage, stages, gains, economy]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Run full workshop audit
+        shell: bash
+        run: |
+          mkdir -p audit
+          case "${{ matrix.report }}" in
+            coverage) npx tsx scripts/parts-coverage-report.ts audit --extended --fail ;;
+            stages) npx tsx scripts/parts-stage-report.ts --out=audit --extended --fail ;;
+            gains) npx tsx scripts/parts-gain-report.ts --fail | tee audit/parts-gain.log ;;
+            economy) npx tsx scripts/parts-economy-report.ts audit --fail ;;
+          esac
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workshop-${{ matrix.report }}
+          path: audit/

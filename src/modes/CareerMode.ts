@@ -16,6 +16,7 @@ import {
   isPartUnlocked,
   nextEvent,
   partStatus,
+  partChapter,
   stockStatus,
   partRequirements,
   unlocksOf,
@@ -31,12 +32,15 @@ import type { RaceRecord } from '../game/career/CareerController';
 import { TelemetryProbe, runHeadlessRace } from '../game/career/headlessRace';
 import { ownedCarBuild, ownedCarConfig, ownedCarLook, rivalBuild, rivalCar } from '../game/career/RivalBuildFactory';
 import { BUILD_RESOLVER_VERSION, resolveBuild, type BuildResult } from '../game/career/tuning/BuildResolver';
+import { compareTorqueBands } from '../game/career/tuning/breathingModel';
 import type { BuildTune } from '../game/career/tuning/buildCommon';
 import { failureSpecFor, reconcileTune, tuneReliability } from '../game/career/tuning/TuningCapabilities';
 import { ISSUE_LABEL } from '../game/career/tuning/buildIssues';
 import { planInstall, type InstallPlan } from '../game/career/tuning/ProjectRequirements';
 import { playBlownEngine, playRiskWarning } from '../audio/core/blownEngineSound';
 import { ALL_PARTS, CATEGORY_DESCRIPTION, CATEGORY_LABEL, CATEGORY_ORDER_V1, UNLOCK_LABEL, WORKSHOP_TABS, findPart, type PartCategory, type PartDef } from '../game/career/tuning/parts';
+import { progressionOf } from '../game/career/tuning/partProgression';
+import { factoryFuelSupply } from '../game/career/tuning/fuelDelivery';
 import { RACE_DISTANCES, RaceController, type LaneResult, type RaceLane } from '../game/race/RaceController';
 import { runAccelerationTest } from '../game/race/accelerationTest';
 import type { CameraMode, RenderVehicle, TrackMarker, TreeLights } from '../game/scenes/RaceScene';
@@ -749,6 +753,7 @@ export class CareerMode implements Mode {
   private workshopScreen(): HTMLElement {
     const s = this.controller.save!;
     const car = this.controller.activeCar!;
+    const family = familyOf(findCampaignCar(car.baseCarId)!);
     const visible = this.visibleParts(car);
     // a category is shown when it has parts for this car; a car of resolver version 1 keeps every
     // chapter 1 slot (its factory part), exactly as the chapter 1 workshop showed it
@@ -807,12 +812,21 @@ export class CareerMode implements Mode {
     const groups = tab.categories.map((cat, index) => {
       const inSlot = equipped.find((p) => p.category === cat);
       const categoryParts = allInTab.filter((p) => p.category === cat);
-      const entries = categoryParts.map((p) => {
-        const st = partStatus(s, car, p, familyOf(findCampaignCar(car.baseCarId)!));
+      const positionByGroup = new Map<string, number>();
+      const ordered = categoryParts.map((p, index) => {
+        const progression = progressionOf(p, family, car.baseCarId);
+        const group = progression?.group ?? p.id;
+        const position = positionByGroup.get(group) ?? index;
+        positionByGroup.set(group, position);
+        return { p, progression, position };
+      }).sort((a, b) => a.position - b.position || (a.progression?.tier ?? 0) - (b.progression?.tier ?? 0));
+      const entries = ordered.map(({ p, progression }) => {
+        const st = partStatus(s, car, p, family);
         return h('li', {
           class: `ws-part-card ${sel?.id === p.id ? 'sel' : ''} ${st.state}`,
           'data-testid': `ws-part-${p.id}`,
           'data-state': st.state,
+          'data-tier': progression?.tier,
           title: st.detail,
           tabindex: '0', role: 'button',
           onclick: () => { this.selectedPart = p.id; this.show('workshop'); },
@@ -824,9 +838,9 @@ export class CareerMode implements Mode {
             h('span', { class: 'ws-part-name' }, p.name),
             h('span', { class: `pill ${st.state}`, 'data-testid': `ws-pill-${p.id}` }, st.label)),
           h('small', { class: 'ws-part-meta' },
-            'chapter' in p ? `CAP. ${p.chapter} · ` : 'CAP. 1 · ',
+            `CAP. ${partChapter(p)} · ${cr(p.price)} · `,
+            progression ? `Stage ${progression.tier} · ${progression.specialization} · ` : null,
             st.state === 'locked' ? st.detail : p.physics),
-          ('chapter' in p && p.chapter === 1) ? h('span', { class: 'ws-new-tag' }, 'NOVO') : null,
         );
       });
       return h(
@@ -870,20 +884,15 @@ export class CareerMode implements Mode {
   }
 
   /**
-   * Parts the shop offers for this car: parts of resolver version 2 appear once chapter 2 is open,
-   * and only those that fit the car (engine family, induction, gearbox, driven axles). An AP part
-   * never shows on an N55; a manual clutch never shows on a DSG.
+   * Show hardware that fits this car even before its event or chapter unlock.
    */
   private visibleParts(car: OwnedCar): PartDef[] {
-    const s = this.controller.save!;
     const base = findCampaignCar(car.baseCarId)!;
-    const c2 = isChapterUnlocked(s, CHAPTER_2_ID);
     const v2 = buildVersionFor(car, car.installedParts) === 2;
     return ALL_PARTS.filter((p) => {
       if (car.installedParts.includes(p.id)) return true;
-      if (p.since === 2 && !c2) return false;
       // version 2 compatibility rules apply to the cars resolved by version 2 and to v2 parts
-      if ((v2 || p.since === 2) && incompatibility(base, p)) return false;
+      if ((v2 || p.since === 2 || p.compat?.cars) && incompatibility(base, p)) return false;
       return true;
     });
   }
@@ -996,6 +1005,23 @@ export class CareerMode implements Mode {
         const [lo, hi] = band(x);
         return hi - lo;
       };
+      const changed = (label: string, a: number | undefined, b: number | undefined, format: (n: number) => string, better: 'higher' | 'lower' | 'neutral') =>
+        a === undefined || b === undefined || Math.abs(b - a) < 1e-6 ? null : row(label, format(a), format(b), a, b, better);
+      const t0 = before.car.transmission;
+      const t1 = after.car.transmission;
+      const torque = (n: number): string => `${f1(n)} N·m`;
+      const ms = (n: number): string => `${f1(n * 1000)} ms`;
+      const rpm = (n: number): string => n.toLocaleString('pt-BR');
+      const bandRows = compareTorqueBands(before.car.engine, after.car.engine)
+        .filter(({ beforeNm, afterNm }) => Math.abs(afterNm - beforeNm) >= 0.1)
+        .map(({ fromRpm, toRpm, beforeNm, afterNm }) =>
+          row(`Torque médio, ${rpm(fromRpm)}–${rpm(toRpm)} rpm`, torque(beforeNm), torque(afterNm), beforeNm, afterNm));
+      const turbo0 = before.car.engine.turbo;
+      const turbo1 = after.car.engine.turbo;
+      const fuel0 = before.car.engine.fueling;
+      const fuel1 = after.car.engine.fueling;
+      const fuelBase = fuel0 || fuel1 ? findCampaignCar(before.car.id) : undefined;
+      const originalFuelRate = fuelBase ? factoryFuelSupply(fuelBase.engine).maxFuelKgS : undefined;
       cmpHost.append(
         h(
           'table',
@@ -1003,8 +1029,22 @@ export class CareerMode implements Mode {
           h('tr', {}, h('th', {}, ''), h('th', {}, 'Antes'), h('th', {}, afterLabel)),
           row('Potência', `${f1(before.peakPowerCv)} cv`, `${f1(after.peakPowerCv)} cv`, before.peakPowerCv, after.peakPowerCv, 'higher', 0.05),
           row('Torque', `${f1(before.peakTorqueNm)} N·m`, `${f1(after.peakTorqueNm)} N·m`, before.peakTorqueNm, after.peakTorqueNm, 'higher', 0.05),
+          ...bandRows,
           row('Faixa útil (90 % do torque)', range(before), range(after), width(before), width(after), 'higher'),
-          row('Embreagem', `${before.car.transmission.clutch.maxTorqueNm} N·m`, `${after.car.transmission.clutch.maxTorqueNm} N·m`, before.car.transmission.clutch.maxTorqueNm, after.car.transmission.clutch.maxTorqueNm, 'higher'),
+          row(t0.powershift ? 'Capacidade do câmbio' : 'Embreagem', torque(t0.clutch.maxTorqueNm), torque(t1.clutch.maxTorqueNm), t0.clutch.maxTorqueNm, t1.clutch.maxTorqueNm),
+          changed('Capacidade dos internos', before.internalTorqueLimitNm, after.internalTorqueLimitNm, torque, 'higher'),
+          changed('Taxa de compressão', before.car.engine.compressionRatio, after.car.engine.compressionRatio, (n) => `${f2(n)}:1`, 'neutral'),
+          changed('Rotação de largada', t0.clutch.launchRpm, t1.clutch.launchRpm, (n) => `${n} rpm`, 'neutral'),
+          changed('Constante de enchimento do turbo', turbo0?.spoolTimeS, turbo1?.spoolTimeS, ms, 'lower'),
+          changed('Temperatura da carga na pressão-alvo', before.chargeTemperatureAtTargetK, after.chargeTemperatureAtTargetK, (n) => `${f1(n - 273.15)} °C`, 'lower'),
+          changed('Pressão sem atraso por detonação', before.knockFreeBoostBar, after.knockFreeBoostBar, (n) => `${f2(n)} bar`, 'higher'),
+          changed('Fase de torque da troca', t0.powershift?.torquePhaseS, t1.powershift?.torquePhaseS, ms, 'lower'),
+          changed('Travamento do conversor', t0.torqueConverter?.lockup.maxTorqueNm, t1.torqueConverter?.lockup.maxTorqueNm, torque, 'higher'),
+          changed('Acoplamento central AWD', before.car.awd?.centerCouplingNm, after.car.awd?.centerCouplingNm, torque, 'higher'),
+          changed('Eficiência da transmissão', t0.efficiency, t1.efficiency, (n) => `${f1(n * 100)} %`, 'higher'),
+          changed('Vazão de combustível', fuel0?.maxFuelKgS ?? originalFuelRate, fuel1?.maxFuelKgS ?? originalFuelRate, (n) => `${f1(n * 1000)} g/s`, 'higher'),
+          changed('Corte', before.car.engine.revLimitRpm, after.car.engine.revLimitRpm, (n) => `${n} rpm`, 'neutral'),
+          changed('Massa', before.car.massKg, after.car.massKg, (n) => `${f1(n)} kg`, 'lower'),
           row('Aderência (μ pico)', f2(before.car.tires.muPeak), f2(after.car.tires.muPeak), before.car.tires.muPeak, after.car.tires.muPeak, 'higher', 0.005),
           row('Relação final', f3(before.car.transmission.finalDrive), f3(after.car.transmission.finalDrive), before.car.transmission.finalDrive, after.car.transmission.finalDrive, 'neutral', 0.0005),
           row('0–100 km/h (estimativa)', eb ? `${f2(eb.t100)} s` : '…', ea ? `${f2(ea.t100)} s` : '…', eb?.t100 ?? undefined, ea?.t100 ?? undefined, 'lower', 0.005),
@@ -1773,9 +1813,15 @@ function stockSpec(car: CarConfig, cat: PartCategory): string {
     case 'intercooler':
       return 'Intercooler original de fábrica (≈ 60 % de eficiência).';
     case 'boost-control':
-      return 'Wastegate original: segura ≈ 0,35 bar acima da pressão de fábrica.';
+      return 'Solenoide original de controle da pressão.';
+    case 'turbo-wastegate':
+      return e.induction === 'turbo'
+        ? 'Atuador original: sustenta até 0,35 bar acima do alvo de fábrica.'
+        : 'Sem atuador separado na configuração original.';
     case 'cylinder-head':
       return 'Cabeçote original, dutos de fundição.';
+    case 'engine-compression':
+      return `Taxa de compressão original: ${e.compressionRatio.toFixed(2).replace('.', ',')}:1.`;
     case 'pistons':
       return `Pistões e bielas originais; taxa ${e.compressionRatio.toFixed(1).replace('.', ',')}:1.`;
     case 'flywheel':

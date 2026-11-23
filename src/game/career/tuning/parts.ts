@@ -1,6 +1,19 @@
 import type { TransmissionKind, TurboConfig } from '../../../data/schema';
 import { CHAPTER2_PARTS } from './chapter2Parts';
 import { CHAPTER3_PARTS } from './chapter3Parts';
+import { MODERN_BREATHING_PARTS } from './modernBreathingParts';
+import { MODERN_DRIVELINE_PARTS } from './modernDrivelineParts';
+import { MODERN_FUEL_PARTS } from './modernFuelParts';
+import { MODERN_TOP_END_PARTS } from './modernTopEndParts';
+import { MODERN_INTERNAL_PARTS } from './modernInternalParts';
+import { MODERN_IGNITION_PARTS } from './modernIgnitionParts';
+import { MODERN_CONVERSION_PARTS } from './modernConversionParts';
+import { MODERN_INTERCOOLER_PARTS, MODERN_TURBO_PARTS } from './modernTurboParts';
+import { MODERN_PRESSURE_PARTS } from './modernPressureParts';
+import { MODERN_ECU_PARTS } from './modernEcuParts';
+import { COOLING_PARTS } from './coolingParts';
+import { MODERN_SUSPENSION_PARTS } from './modernSuspensionParts';
+import type { PartProgression } from './partProgression';
 
 /**
  * Career parts. Each part is a discriminated union member by `category` and carries the PHYSICAL
@@ -10,7 +23,7 @@ import { CHAPTER3_PARTS } from './chapter3Parts';
  * One slot per category: installing a part of an occupied category replaces the previous one
  * (e.g. semi-slick tyres replace sport tyres; nothing stacks).
  */
-import { EXPANDED_PARTS } from './expandedParts';
+import { CELTA_TURBO_COMPRESSION, EXPANDED_PARTS } from './expandedParts';
 
 export type PartCategory =
   | 'intake-filter' | 'intake-manifold' | 'intake-throttle' | 'intake-airbox'
@@ -35,9 +48,10 @@ export type V2Category =
   | 'flywheel'
   | 'gearbox'
   | 'awd'
-  | 'suspension';
+  | 'suspension'
+  | 'exhaust-downpipe';
 
-export const V2_CATEGORIES: readonly V2Category[] = ['cylinder-head', 'pistons', 'flywheel', 'ecu', 'intercooler', 'boost-control', 'gearbox', 'awd', 'suspension'];
+export const V2_CATEGORIES: readonly V2Category[] = ['cylinder-head', 'pistons', 'flywheel', 'ecu', 'intercooler', 'boost-control', 'gearbox', 'awd', 'suspension', 'exhaust-downpipe'];
 
 /**
  * Slot-catalogue categories that are hardware of the CAR, not of a classic engine (mass, cooling,
@@ -61,7 +75,7 @@ export interface WorkshopTab {
 export const WORKSHOP_TABS: readonly WorkshopTab[] = [
   { id: 'engine', label: 'Motor', icon: '⚙', description: 'Comando, cabeçote, taxa e internos', categories: ['camshaft', 'engine-head', 'engine-compression', 'engine-internals', 'engine-flywheel', 'cylinder-head', 'pistons', 'flywheel', 'engine-valvetrain'] },
   { id: 'intake', label: 'Admissão', icon: '◉', description: 'Ar limpo, dutos e resposta', categories: ['intake-filter', 'intake-manifold', 'intake-throttle', 'intake-airbox'] },
-  { id: 'exhaust', label: 'Escape', icon: '≋', description: 'Contrapressão e acústica', categories: ['exhaust', 'exhaust-header', 'exhaust-pipe', 'exhaust-muffler'] },
+  { id: 'exhaust', label: 'Escape', icon: '≋', description: 'Contrapressão e acústica', categories: ['exhaust', 'exhaust-header', 'exhaust-downpipe', 'exhaust-pipe', 'exhaust-muffler'] },
   { id: 'transmission', label: 'Transmissão', icon: '⌁', description: 'Relações e embreagem', categories: ['clutch', 'transmission-gearbox', 'differential', 'gearbox', 'awd'] },
   { id: 'tires', label: 'Pneus', icon: '◎', description: 'Composto, largura e pressão', categories: ['tires', 'tires-width', 'tires-pressure'] },
   { id: 'turbo', label: 'Turbo', icon: '◌', description: 'Pressão, spool e temperatura', categories: ['turbo', 'turbo-turbine', 'turbo-intercooler', 'turbo-wastegate', 'turbo-boost', 'intercooler'] },
@@ -85,6 +99,7 @@ export const CATEGORY_LABEL: Record<PartCategory, string> = {
   camshaft: 'Comando de válvulas', 'engine-head': 'Cabeçote', 'engine-compression': 'Taxa de compressão',
   'engine-internals': 'Internos do motor', 'engine-flywheel': 'Volante do motor',
   exhaust: 'Escape completo', 'exhaust-header': 'Coletor de escape',
+  'exhaust-downpipe': 'Downpipe',
   'exhaust-pipe': 'Tubulação de escape', 'exhaust-muffler': 'Abafador',
   clutch: 'Embreagem', differential: 'Relação final', 'transmission-gearbox': 'Câmbio',
   tires: 'Composto', 'tires-width': 'Largura', 'tires-pressure': 'Pressão e setup',
@@ -112,6 +127,7 @@ export const CATEGORY_DESCRIPTION: Record<PartCategory, string> = {
   'engine-compression': 'Rendimento e limite para sobrealimentação.', 'engine-internals': 'Resistência mecânica do conjunto.',
   'engine-flywheel': 'Inércia rotacional e resposta do motor.',
   exhaust: 'Geometria global e contrapressão.', 'exhaust-header': 'Primários e coleta dos gases.',
+  'exhaust-downpipe': 'Perda de carga na saída da turbina.',
   'exhaust-pipe': 'Diâmetro e restrição da linha.', 'exhaust-muffler': 'Silenciamento versus fluxo.',
   clutch: 'Capacidade de torque e engate.', differential: 'Multiplicação final da transmissão.',
   'transmission-gearbox': 'Escalonamento e recuperação de giro.',
@@ -136,6 +152,10 @@ export const CATEGORY_DESCRIPTION: Record<PartCategory, string> = {
 /** Numeric mechanical changes use SI units or the documented suffix (Bar, KPa, Mm, Rpm).
  * Values are applied to hardware / operating conditions, never to advertised horsepower. */
 export interface MechanicalMods {
+  radiatorAreaScale?: number;
+  oilCoolerAreaScale?: number;
+  fanFlowScale?: number;
+  coolingMassAddKg?: number;
   [key: string]: number | undefined;
   filterDropKPa?: number; filterDropReductionKPa?: number; airboxVolumeScale?: number;
   runnerLengthScale?: number; runnerDiameterAddMm?: number; plenumScale?: number;
@@ -172,6 +192,8 @@ export const LEGACY_FAMILY = 'legacy';
  * rules exactly as they were). An absent list means "fits everything".
  */
 export interface PartCompat {
+  /** Vehicle-specific fitment when a family or architecture alone is too broad. */
+  cars?: readonly string[];
   /** Engine families the part is made for (LEGACY_FAMILY = engines without a family). */
   families?: readonly string[];
   /** Induction the part needs. */
@@ -199,6 +221,7 @@ interface PartBase {
   /** First resolver version that knows the part (absent = 1). */
   since?: 1 | 2;
   compat?: PartCompat;
+  progression?: PartProgression;
   /** Career chapter whose shop sells the part (absent = the chapter of its unlock). */
   chapter?: 1 | 2 | 3;
 }
@@ -215,11 +238,22 @@ export interface ExhaustPart extends PartBase {
   /** Back pressure at the reference flow (kPa). */
   backPressureKPa: number;
   /** Acoustic geometry preset of the new system (lengths, diameters, chambers). */
-  acousticPreset: 'sport';
+  acousticPreset?: 'sport';
   /** Diameter scale of the primaries (header). */
   headerDiameterScale: number;
+  tailpipeDiameterScale?: number;
+  mufflerAbsorptionScale?: number;
   /** Factory turbo: a freer path after the turbine lets it reach speed sooner (spool time scale). */
   spoolTimeScale?: number;
+  /** A downpipe changes its own section and can coexist with the rest of the exhaust. */
+  section?: 'downpipe';
+}
+
+export interface DownpipePart extends PartBase {
+  category: 'exhaust-downpipe';
+  backPressureReductionKPa: number;
+  /** Relative attenuation at the catalyst, represented in the exhaust's aggregate damping. */
+  absorptionScale: number;
 }
 
 export interface ManifoldPart extends PartBase {
@@ -237,6 +271,8 @@ export interface CamPart extends PartBase {
   evoDeltaDeg: number;
   evcDeltaDeg: number;
   liftAddMm: number;
+  /** Override for systems that change intake lift independently of the exhaust valves. */
+  exhaustLiftAddMm?: number;
   /** Valve-train limit gained with the stiffer springs of the kit. */
   revLimitAddRpm: number;
 }
@@ -257,6 +293,13 @@ export interface TurboPart extends PartBase {
   massAddKg: number;
   /** Intercooler effectiveness (fraction of the compressor temperature rise removed). */
   intercoolerEffectiveness: number;
+  /** Minimum supporting hardware for a modern NA conversion. */
+  conversion?: {
+    maxCompressionRatio: number;
+    minFuelCapacityScale: number;
+    minInternalsTorqueScale: number;
+    minIgnitionTier: 1 | 2 | 3;
+  };
 }
 
 export interface ClutchPart extends PartBase {
@@ -276,6 +319,27 @@ export interface DifferentialPart extends PartBase {
   finalDriveScale: number;
   /** New gears and bearings: gearbox/driveline efficiency gained (fraction). */
   efficiencyAdd?: number;
+}
+
+export interface ManualGearsetPart extends PartBase {
+  category: 'transmission-gearbox';
+  /** Target spread for the intermediate gears, relative to the original ratios. */
+  gearSpreadScale: number;
+  efficiencyAdd: number;
+}
+
+export interface FuelSystemPart extends PartBase {
+  category: 'electronics-fuel';
+  /** Continuous metered fuel delivery relative to the factory hardware estimate. */
+  fuelCapacityScale: number;
+}
+
+export interface IgnitionPart extends PartBase {
+  category: 'electronics-ignition';
+  /** Effective burn duration with the calibrated plug, gap and coil. */
+  burnDurationScale: number;
+  /** Residual torque loss from protective spark retard under boost. */
+  knockRetardScale: number;
 }
 
 export interface TirePart extends PartBase {
@@ -312,6 +376,16 @@ export interface EcuPart extends PartBase {
   wastegateHeadroomBar?: number;
   /** Hardware the map is calibrated for: the build is refused without one of the ids of each entry. */
   requiresParts?: readonly { ids: readonly string[]; label: string }[];
+  /** Minimum relative torque rating of the fitted rotating assembly. */
+  minInternalsTorqueScale?: number;
+  /** Minimum compressor capacity of the turbo hardware required by this map. */
+  minTurboFlowScale?: number;
+  /** Minimum fraction of the compressor heat that the charge cooler must remove. */
+  minIntercoolerEffectiveness?: number;
+  /** Minimum fuel flow as a multiple of the original system capacity. */
+  minFuelCapacityScale?: number;
+  /** Full-load air/fuel ratio relative to the stock map for this induction and fuel. */
+  fuelTargetScale?: number;
   /** Above this fraction of the factory internals' torque, forged pistons/rods are required. */
   forgedAboveFraction?: number;
   /** Staged map: torque target at most this multiple of the factory peak torque. */
@@ -331,6 +405,10 @@ export interface TurboUpgradePart extends PartBase {
   massAddKg: number;
   /** Larger turbine housing: exhaust back pressure removed at the reference flow (kPa). */
   backPressureReductionKPa?: number;
+  /** Compressor isentropic efficiency in this operating range. */
+  compressorEfficiency?: number;
+  /** Stage-specific supporting hardware. The legacy hybrid keeps its prior requirements. */
+  factoryTurboStage?: 1 | 2 | 3;
 }
 
 export interface IntercoolerPart extends PartBase {
@@ -342,14 +420,20 @@ export interface IntercoolerPart extends PartBase {
   massAddKg: number;
 }
 
-/** Wastegate actuator + electronic boost control solenoid. */
+/** Electronic boost control. Legacy combined kits also include an actuator. */
 export interface BoostControlPart extends PartBase {
   category: 'boost-control';
   /** Highest boost the wastegate can hold above the factory target (bar); the stock one holds 0.35. */
-  wastegateHeadroomBar: number;
+  wastegateHeadroomBar?: number;
   spoolTimeScale: number;
   /** Boost held above the target at high flow, where the factory wastegate lets it taper (bar). */
   holdAddBar?: number;
+}
+
+export interface WastegatePart extends PartBase {
+  category: 'turbo-wastegate';
+  /** Pressure the actuator can hold above the original target. */
+  actuatorHeadroomBar: number;
 }
 
 /** Ported cylinder head (flow capacity where the valves choke). */
@@ -369,6 +453,17 @@ export interface PistonPart extends PartBase {
   frictionScale?: number;
   /** Lighter pistons and rods: scale of the engine's rotating inertia. */
   inertiaScale?: number;
+  /** Safe speed gained by reducing reciprocating loads, with the factory cut unchanged. */
+  safeRpmReserve?: number;
+  /** Relative exposure time allowed above the new safe speed. */
+  enduranceScale?: number;
+}
+
+export interface CompressionPart extends PartBase {
+  category: 'engine-compression';
+  /** Change in compression ratio from machining the combustion chambers to a measured volume. */
+  compressionAdd: number;
+  conversionPreparation?: true;
 }
 
 export interface FlywheelPart extends PartBase {
@@ -386,7 +481,7 @@ export interface GearboxPart extends PartBase {
   capacityScale: number;
   shiftTimeScale: number;
   launchRpmAdd: number;
-  /** Torque converter: lockup capacity and K factor (lower K = higher stall) scales. */
+  /** Torque converter: lockup capacity and K factor (higher K = higher stall at the same torque) scales. */
   lockupScale?: number;
   converterKScale?: number;
   /** Efficiency gained by the new clutch packs / pump (fraction). */
@@ -430,21 +525,25 @@ export interface LaunchControlPart extends PartBase {
   category: 'electronics-launch';
   /** Default launch speed added over the clutch logic's (rpm). */
   launchRpmAdd: number;
+  adjustmentStepRpm?: number;
   modernUnlock?: UnlockId;
 }
 
 /** Slot-catalogue part (classic engines, BuildResolver v1): hardware changes in `mod`. */
 export interface ExpandedPart extends PartBase {
-  category: Exclude<PartCategory, V2Category>;
+  category: Exclude<PartCategory, V2Category | 'electronics-launch'>;
   chapter: 1 | 2 | 3;
   mod: MechanicalMods;
   /** This part is only meaningful with a turbo kit already installed. */
   requiresTurbo?: boolean;
   /** Extra career unlock this part needs on a modern engine family (generic categories only). */
   modernUnlock?: UnlockId;
+  /** Modern hardware with an explicit application path in resolver 2. */
+  modernBreathing?: true;
 }
 
 export type PartDef =
+  | DownpipePart
   | FilterPart
   | ExhaustPart
   | ManifoldPart
@@ -452,14 +551,19 @@ export type PartDef =
   | TurboPart
   | ClutchPart
   | DifferentialPart
+  | ManualGearsetPart
+  | FuelSystemPart
+  | IgnitionPart
   | TirePart
   | ExpandedPart
   | EcuPart
   | TurboUpgradePart
   | IntercoolerPart
   | BoostControlPart
+  | WastegatePart
   | HeadPart
   | PistonPart
+  | CompressionPart
   | FlywheelPart
   | GearboxPart
   | AwdPart
@@ -477,6 +581,7 @@ export type UnlockId =
   | 'part-cam'
   | 'workshop-transmission'
   | 'part-clutch'
+  | 'part-launch-pro'
   | 'part-differential'
   | 'part-tires-semislick'
   | 'engine-tuners'
@@ -499,9 +604,14 @@ export type UnlockId =
   | 'c2-generic-tires'
   | 'c2-generic-chassis'
   | 'c2-stage2'
+  | 'c2-workshop-street'
+  | 'c2-workshop-sport'
   | 'c3-stage3'
   // Chapter 3 — Elite da Madrugada
   | 'c3-v6-parts'
+  | 'c3-workshop-street'
+  | 'c3-workshop-sport'
+  | 'c3-workshop-race'
   | 'c3-dealer-gtr'
   | 'c3-final-challenge';
 
@@ -514,6 +624,7 @@ export const UNLOCK_LABEL: Record<UnlockId, string> = {
   'part-cam': 'Comando esportivo',
   'workshop-transmission': 'Oficina de transmissão',
   'part-clutch': 'Embreagem reforçada',
+  'part-launch-pro': 'Controle de largada de competição',
   'part-differential': 'Diferencial alternativo',
   'part-tires-semislick': 'Pneus semi-slick',
   'engine-tuners': 'Preparadores de motor (dinamômetro da oficina)',
@@ -535,8 +646,13 @@ export const UNLOCK_LABEL: Record<UnlockId, string> = {
   'c2-generic-tires': 'Largura e pressão de pneus nos carros modernos',
   'c2-generic-chassis': 'Alívio de peso e arrefecimento nos carros modernos',
   'c2-stage2': 'Stage 2 do turbo de fábrica (downpipe, admissão direta, mapa Stage 2)',
+  'c2-workshop-street': 'Oficina da Liga · Stage 1',
+  'c2-workshop-sport': 'Oficina da Liga · Stage 2',
   'c3-stage3': 'Stage 3 do turbo de fábrica',
   'c3-v6-parts': 'Peças dos V6 aspirados (admissão, escape, comandos, remap, cabeçotes)',
+  'c3-workshop-street': 'Oficina da Elite · Stage 1',
+  'c3-workshop-sport': 'Oficina da Elite · Stage 2 e Stage 3 da Liga',
+  'c3-workshop-race': 'Oficina da Elite · Stage 3',
   'c3-dealer-gtr': 'GT-R à venda na revenda Elite',
   'c3-final-challenge': 'Duelo final da Elite',
 };
@@ -564,6 +680,40 @@ const BASE_PARTS: readonly PartDef[] = [
     backPressureKPa: 7,
     acousticPreset: 'sport',
     headerDiameterScale: 1.08,
+  },
+  {
+    id: 'exhaust-classic-flow',
+    category: 'exhaust',
+    name: 'Escape completo de alta vazão',
+    chapter: 2,
+    price: 1340,
+    unlock: 'part-exhaust',
+    compat: { families: [LEGACY_FAMILY] },
+    progression: { tier: 2, group: 'classic-exhaust-system', specialization: 'rua' },
+    description: 'Coletor, linha e abafador dimensionados como um único conjunto.',
+    physics: 'Contrapressão de 5,5 kPa no fluxo nominal, com tubo de saída de maior seção e menor absorção sonora.',
+    backPressureKPa: 5.5,
+    acousticPreset: 'sport',
+    headerDiameterScale: 1.12,
+    tailpipeDiameterScale: 1.06,
+    mufflerAbsorptionScale: 0.76,
+  },
+  {
+    id: 'exhaust-classic-race',
+    category: 'exhaust',
+    name: 'Escape completo de competição',
+    chapter: 3,
+    price: 2150,
+    unlock: 'part-exhaust',
+    compat: { families: [LEGACY_FAMILY] },
+    progression: { tier: 3, group: 'classic-exhaust-system', specialization: 'rua' },
+    description: 'Linha completa de competição, com primários largos e escape de baixa restrição.',
+    physics: 'Contrapressão de 4,1 kPa no fluxo nominal, diâmetros maiores e menor absorção sonora que o sistema de alta vazão.',
+    backPressureKPa: 4.1,
+    acousticPreset: 'sport',
+    headerDiameterScale: 1.16,
+    tailpipeDiameterScale: 1.12,
+    mufflerAbsorptionScale: 0.49,
   },
   {
     id: 'manifold-sport',
@@ -686,6 +836,22 @@ const BASE_PARTS: readonly PartDef[] = [
 
 /** Dyno Lab hardware: fits the classic and the modern engines (the parts are not engine specific). */
 const DYNO_LAB_PARTS: readonly PartDef[] = [
+  ...([1, 3] as const).map((tier): ValveSpringPart => {
+    const safeRpmAdd = tier === 1 ? 200 : 600;
+    return {
+      id: `valve-springs-classic-s${tier}`,
+      category: 'engine-valvetrain',
+      name: `Molas e pratos Stage ${tier}`,
+      chapter: tier,
+      price: tier === 1 ? 480 : 1420,
+      unlock: 'part-cam',
+      compat: { families: [LEGACY_FAMILY] },
+      progression: { tier, group: 'classic-valve-springs', specialization: 'rua' },
+      description: 'Molas e pratos adequados ao trem de válvulas dos motores clássicos.',
+      physics: `O trem de válvulas suporta ${safeRpmAdd} rpm adicionais. O corte permanece definido pela ignição.`,
+      safeRpmAdd,
+    };
+  }),
   {
     id: 'valve-springs',
     category: 'engine-valvetrain',
@@ -699,6 +865,19 @@ const DYNO_LAB_PARTS: readonly PartDef[] = [
     safeRpmAdd: 400,
   },
   {
+    id: 'launch-control-street',
+    category: 'electronics-launch',
+    name: 'Controle de largada de rua',
+    price: 560,
+    unlock: 'part-clutch',
+    modernUnlock: 'c2-gearbox',
+    compat: { transmissions: ['manual', 'dual-clutch'] },
+    description: 'Módulo de largada para embreagem manual automatizada ou dupla embreagem.',
+    physics: 'Eleva o alvo inicial da largada em até 200 rpm e permite ajustá-lo no Dyno Lab.',
+    launchRpmAdd: 200,
+    progression: { tier: 1, group: 'launch-control', specialization: 'rua' },
+  },
+  {
     id: 'launch-control',
     category: 'electronics-launch',
     name: 'Controle de largada (two-step)',
@@ -710,13 +889,48 @@ const DYNO_LAB_PARTS: readonly PartDef[] = [
     physics:
       'A embreagem automática (ou o pacote da dupla embreagem) morde a +400 rpm sobre a rotação de largada original, e a rotação de largada passa a ser ajustável no Dyno Lab. No automático com conversor não existe: lá a largada é o estol do conversor.',
     launchRpmAdd: 400,
+    progression: { tier: 2, group: 'launch-control', specialization: 'rua' },
+  },
+  {
+    id: 'launch-control-pro',
+    category: 'electronics-launch',
+    name: 'Controle de largada de competição',
+    price: 1550,
+    unlock: 'part-launch-pro',
+    modernUnlock: 'c2-gearbox',
+    compat: { transmissions: ['manual', 'dual-clutch'] },
+    description: 'Módulo com alvo de largada mais alto e ajuste fino para acertar a saída conforme o pneu.',
+    physics: 'Eleva o alvo inicial da largada em até 550 rpm. O Dyno Lab ajusta a rotação em passos de 50 rpm.',
+    launchRpmAdd: 550,
+    adjustmentStepRpm: 50,
+    progression: { tier: 3, group: 'launch-control', specialization: 'rua' },
   },
 ];
 
-export const PARTS: readonly PartDef[] = [...BASE_PARTS, ...EXPANDED_PARTS, ...DYNO_LAB_PARTS];
+const modernSlick = CHAPTER2_PARTS.find((part): part is TirePart => part.id === 'tires-slick' && 'grade' in part)!;
+const classicSlick: TirePart = {
+  ...modernSlick,
+  id: 'tires-classic-slick',
+  since: 1,
+  chapter: 3,
+  unlock: 'part-tires-semislick',
+  compat: { families: [LEGACY_FAMILY] },
+};
+
+export const PARTS: readonly PartDef[] = [...BASE_PARTS, ...EXPANDED_PARTS, ...DYNO_LAB_PARTS, ...CELTA_TURBO_COMPRESSION, classicSlick];
 
 /** Every part of every resolver version (ids are unique across versions). */
-export const ALL_PARTS: readonly PartDef[] = [...PARTS, ...CHAPTER2_PARTS, ...CHAPTER3_PARTS];
+export const ALL_PARTS: readonly PartDef[] = [
+  ...PARTS, ...CHAPTER2_PARTS, ...CHAPTER3_PARTS, ...MODERN_BREATHING_PARTS,
+  ...MODERN_DRIVELINE_PARTS, ...MODERN_FUEL_PARTS, ...MODERN_TOP_END_PARTS, ...MODERN_INTERNAL_PARTS,
+  ...MODERN_IGNITION_PARTS,
+  ...MODERN_CONVERSION_PARTS,
+  ...MODERN_TURBO_PARTS, ...MODERN_INTERCOOLER_PARTS,
+  ...MODERN_PRESSURE_PARTS,
+  ...MODERN_ECU_PARTS,
+  ...COOLING_PARTS,
+  ...MODERN_SUSPENSION_PARTS,
+];
 
 export function findPart(id: string): PartDef | undefined {
   return ALL_PARTS.find((p) => p.id === id);

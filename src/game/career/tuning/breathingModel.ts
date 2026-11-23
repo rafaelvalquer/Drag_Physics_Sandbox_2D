@@ -1,7 +1,9 @@
 import type { EngineConfig } from '../../../data/schema';
+import { MonotoneCubic } from '../../../core/math';
 import { ATMOSPHERIC_PRESSURE, R_AIR, STANDARD_TEMPERATURE_K } from '../../../core/units';
 import { EngineModel, WILLANS_OFFSET } from '../../../physics/engine/EngineModel';
 import { engineGeometry } from '../../../physics/engine/EngineGeometry';
+import { memoizeEngineCalibration } from './engineCalibrationCache';
 import type { CamPart, ExhaustPart, FilterPart, ManifoldPart, TurboPart, MechanicalMods } from './parts';
 
 /**
@@ -44,6 +46,64 @@ const LIFT_GAIN_PER_MM = 0.03;
 /** Low-speed dilution per degree of extra valve overlap. */
 const OVERLAP_LOSS_PER_DEG = 0.0016;
 
+export interface CamGeometryDelta {
+  evo: number;
+  evc: number;
+  ivo: number;
+  ivc: number;
+  lift: number;
+  exhaustLift: number;
+}
+
+export function camGeometryDelta(part: CamPart | undefined, mod: MechanicalMods = {}): CamGeometryDelta {
+  const lift = part?.liftAddMm ?? mod.camLiftAddMm ?? 0;
+  return {
+    evo: part?.evoDeltaDeg ?? mod.camEvoDeltaDeg ?? 0,
+    evc: part?.evcDeltaDeg ?? mod.camEvcDeltaDeg ?? 0,
+    ivo: part?.ivoDeltaDeg ?? mod.camIvoDeltaDeg ?? 0,
+    ivc: part?.ivcDeltaDeg ?? mod.camIvcDeltaDeg ?? 0,
+    lift,
+    exhaustLift: part?.exhaustLiftAddMm ?? lift,
+  };
+}
+
+export function modifiedCam(stock: EngineConfig['cam'], delta: CamGeometryDelta): EngineConfig['cam'] {
+  return {
+    evoDeg: stock.evoDeg + delta.evo,
+    evcDeg: stock.evcDeg + delta.evc,
+    ivoDeg: stock.ivoDeg + delta.ivo,
+    ivcDeg: stock.ivcDeg + delta.ivc,
+    intakeLiftMm: stock.intakeLiftMm + delta.lift,
+    exhaustLiftMm: stock.exhaustLiftMm + delta.exhaustLift,
+  };
+}
+
+/** Trapped-charge change from intake closing, valve curtain area and low-speed residual dilution. */
+export function camChargeRatio(x: number, delta: CamGeometryDelta): number {
+  const overlapAdd = delta.evc - delta.ivo;
+  return (1 + IVC_SENSITIVITY_PER_DEG * delta.ivc * (x - IVC_PIVOT)) *
+    (1 + LIFT_GAIN_PER_MM * delta.lift * smoothstep(0.55, 1.15, x)) *
+    (1 - OVERLAP_LOSS_PER_DEG * overlapAdd * Math.max(0, 0.6 - x) / 0.6);
+}
+
+export function headChargeRatio(x: number, flowGain: number): number {
+  return 1 + flowGain * smoothstep(0.5, 1.1, x);
+}
+
+export function throttleChargeRatio(x: number, stockDiameterMm: number, diameterMm: number): number {
+  return 1 + Math.min(0.012, (diameterMm * diameterMm / (stockDiameterMm * stockDiameterMm) - 1) * 0.055) * smoothstep(0.55, 1.1, x);
+}
+
+/** Change in runner pressure loss from the stock duct at the same air mass flow. */
+export function runnerPressureRecoveryPa(flowRatio: number, stockDiameterMm: number, diameterMm: number): number {
+  return STOCK_RUNNER_DROP_KPA * 1000 * flowRatio ** 2 * (1 - (stockDiameterMm / diameterMm) ** 4);
+}
+
+export function intakeRamRatio(rpm: number, tunedStock: number, tunedNew: number): number {
+  const ram = (tuned: number): number => 1 + RAM_TUNING_AMPLITUDE * Math.exp(-(((rpm - tuned) / (RAM_TUNING_WIDTH * tuned)) ** 2));
+  return ram(tunedNew) / ram(tunedStock);
+}
+
 export interface EngineParts {
   filter?: FilterPart;
   manifold?: ManifoldPart;
@@ -68,6 +128,11 @@ export interface EngineParts {
 /** Otto cycle efficiency 1 − r^(1−γ) (γ = 1.3 for the real charge). */
 export function ottoEfficiency(cr: number): number {
   return 1 - Math.pow(cr, -0.3);
+}
+
+/** Change in indicated work from combustion duration at the same fuel and ignition advance. */
+export function burnWorkRatio(durationScale: number): number {
+  return 1 / Math.pow(durationScale, 0.15);
 }
 
 /** Stock breathing assumed for an engine that has none documented (estimated values). */
@@ -146,19 +211,23 @@ export interface BreathingResult {
   steadyBoostBar: { rpm: number; bar: number }[];
   /** Largest torque fraction lost to the ignition retard against knock (0 without turbo). */
   knockLoss: number;
+  /** Intake charge after the intercooler at the requested boost under reference conditions. */
+  chargeTemperatureAtTargetK?: number;
 }
 
 /**
  * Derives the engine configuration of the given parts from a stock engine (which must carry a
  * `breathing` block — see withStockBreathing).
  */
-export function applyEngineParts(stock: EngineConfig, parts: EngineParts): BreathingResult {
+export const applyEngineParts = memoizeEngineCalibration(calibrateEngineParts);
+
+function calibrateEngineParts(stock: EngineConfig, parts: EngineParts): BreathingResult {
   const b0 = stock.breathing!;
   const mod = parts.mod ?? {};
   const compressionRatio = Math.max(6, stock.compressionRatio + (mod.compressionRatioDelta ?? 0));
   const otto = (r: number): number => 1 - 1 / Math.pow(r, 0.33);
   const thermalRatio = otto(compressionRatio) / otto(stock.compressionRatio);
-  const burnRatio = 1 / Math.pow(mod.burnDurationScale ?? 1, 0.15);
+  const burnRatio = burnWorkRatio(mod.burnDurationScale ?? 1);
   const g = engineGeometry(stock);
   const vdOver4pi = g.displacement / (4 * Math.PI);
   const ratedRpm = powerPeakRpm(stock.torqueCurve, stock.revLimitRpm);
@@ -180,23 +249,9 @@ export function applyEngineParts(stock: EngineConfig, parts: EngineParts): Breat
   const runnerL = stock.intake.runnerLengthM * (m?.runnerLengthScale ?? mod.runnerLengthScale ?? 1);
   const runnerD = stock.intake.runnerDiameterMm + (m?.runnerDiameterAddMm ?? mod.runnerDiameterAddMm ?? 0);
   const c = parts.cam;
-  const camDelta = {
-    evo: c?.evoDeltaDeg ?? mod.camEvoDeltaDeg ?? 0,
-    evc: c?.evcDeltaDeg ?? mod.camEvcDeltaDeg ?? 0,
-    ivo: c?.ivoDeltaDeg ?? mod.camIvoDeltaDeg ?? 0,
-    ivc: c?.ivcDeltaDeg ?? mod.camIvcDeltaDeg ?? 0,
-    lift: c?.liftAddMm ?? mod.camLiftAddMm ?? 0,
-  };
+  const camDelta = camGeometryDelta(c, mod);
   const hasCam = !!c || !!mod.camLiftAddMm || !!mod.camIvcDeltaDeg;
-  const cam = hasCam ? {
-    evoDeg: stock.cam.evoDeg + camDelta.evo,
-    evcDeg: stock.cam.evcDeg + camDelta.evc,
-    ivoDeg: stock.cam.ivoDeg + camDelta.ivo,
-    ivcDeg: stock.cam.ivcDeg + camDelta.ivc,
-    intakeLiftMm: stock.cam.intakeLiftMm + camDelta.lift,
-    exhaustLiftMm: stock.cam.exhaustLiftMm + camDelta.lift,
-  } : stock.cam;
-  const overlapAdd = camDelta.evc - camDelta.ivo;
+  const cam = hasCam ? modifiedCam(stock.cam, camDelta) : stock.cam;
 
   // ---- stock operating points (same EngineModel the race uses) ----
   const stockExt = extendCurve(stock, curveTop);
@@ -206,7 +261,6 @@ export function applyEngineParts(stock: EngineConfig, parts: EngineParts): Breat
   // Helmholtz: tuned speed ∝ √(A/L); the stock manifold is assumed tuned at the torque peak.
   const tunedStock = torqueRpm;
   const tunedNew = tunedStock * (runnerD / stock.intake.runnerDiameterMm) * Math.sqrt(stock.intake.runnerLengthM / runnerL);
-  const ram = (rpm: number, tuned: number): number => 1 + RAM_TUNING_AMPLITUDE * Math.exp(-(((rpm - tuned) / (RAM_TUNING_WIDTH * tuned)) ** 2));
   const runnerDrop = (flow: number, d: number): number => STOCK_RUNNER_DROP_KPA * 1000 * (stock.intake.runnerDiameterMm / d) ** 4 * (flow / b0.referenceFlowKgS) ** 2;
 
   const na: number[] = [];
@@ -224,18 +278,14 @@ export function applyEngineParts(stock: EngineConfig, parts: EngineParts): Breat
     const residual = (p: number, pm: number): number => Math.pow(p / pm, 1 / GAMMA_EXHAUST) / stock.compressionRatio;
     const residualRatio = (1 - residual(back, map)) / (1 - residual(op.back, op.map));
     const x = rpm / ratedRpm;
-    const camRatio = hasCam
-      ? (1 + IVC_SENSITIVITY_PER_DEG * camDelta.ivc * (x - IVC_PIVOT)) *
-        (1 + LIFT_GAIN_PER_MM * camDelta.lift * smoothstep(0.55, 1.15, x)) *
-        (1 - OVERLAP_LOSS_PER_DEG * overlapAdd * Math.max(0, 0.6 - x) / 0.6)
-      : 1;
+    const camRatio = hasCam ? camChargeRatio(x, camDelta) : 1;
     // Port flow, throttle cross-section and Otto efficiency alter trapped mass / indicated work,
     // not an arbitrary power multiplier; strongest flow effect near peak rated air demand.
     const portFlowRatio = 1 + ((mod.headFlowScale ?? 1) - 1) * smoothstep(0.48, 1.2, x);
     const throttleDiam = stock.throttle.bodyDiameterMm;
     const newThrottle = throttleDiam + (mod.throttleDiameterAddMm ?? 0);
-    const throttleFlowRatio = 1 + Math.min(0.012, (newThrottle * newThrottle / (throttleDiam * throttleDiam) - 1) * 0.055) * smoothstep(0.55, 1.1, x);
-    const ramRatio = (ram(rpm, tunedNew) / ram(rpm, tunedStock)) * (headGain ? 1 + headGain * smoothstep(0.5, 1.1, x) : 1);
+    const throttleFlowRatio = throttleChargeRatio(x, throttleDiam, newThrottle);
+    const ramRatio = intakeRamRatio(rpm, tunedStock, tunedNew) * headChargeRatio(x, headGain);
     const willans = (p: number): number => p - WILLANS_OFFSET * ATMOSPHERIC_PRESSURE;
     // Willans line: indicated work ∝ (charge − offset); the charge follows MAP × trapped-mass ratios
     const chargeRatio = residualRatio * camRatio * ramRatio * portFlowRatio * throttleFlowRatio;
@@ -287,12 +337,16 @@ export function applyEngineParts(stock: EngineConfig, parts: EngineParts): Breat
     fullBoostFlowFraction: turbo.turbo.fullBoostFlowFraction * (mod.turboFlowScale ?? 1),
   };
   const intercooler = Math.min(0.92, (mod.intercoolerEffectiveness ?? turbo.intercoolerEffectiveness) + (mod.intercoolerEffectivenessAdd ?? 0));
+  const chargeTemperatureK = (pressureRatio: number): number => {
+    const riseK = STANDARD_TEMPERATURE_K * (Math.pow(pressureRatio, 0.2857) - 1) / COMPRESSOR_EFFICIENCY;
+    return STANDARD_TEMPERATURE_K + (1 - intercooler) * riseK;
+  };
   let knockLoss = 0;
 
   // ---- turbo: fixed point between the curve and the steady boost it produces ----
   const fuel = engineFuel(stock);
   const knockPerBar = fuel === 'ethanol' ? turbo.knockLossPerBarEthanol : turbo.knockLossPerBarPetrol;
-  const crExcess = Math.max(1, compressionRatio - 7);
+  const crExcess = Math.max(1, compression - 7);
   let curve = base.torqueCurve.torqueNm.slice();
   let boosts: number[] = grid.map(() => 0);
   for (let pass = 0; pass < 5; pass++) {
@@ -303,8 +357,7 @@ export function applyEngineParts(stock: EngineConfig, parts: EngineParts): Breat
     for (let i = 0; i < grid.length; i++) {
       const op = model.wotOperatingPoint(grid[i]!);
       const pr = (ATMOSPHERIC_PRESSURE + op.boost) / ATMOSPHERIC_PRESSURE;
-      const t2 = STANDARD_TEMPERATURE_K * (1 + (Math.pow(pr, 0.2857) - 1) / COMPRESSOR_EFFICIENCY);
-      const tCharge = t2 - intercooler * (t2 - STANDARD_TEMPERATURE_K);
+      const tCharge = chargeTemperatureK(pr);
       // boosted MAP scaled from the NA point (same restriction ratio, higher upstream pressure)
       const mapT = naMap[i]! * pr;
       const willans = (p: number): number => p - WILLANS_OFFSET * ATMOSPHERIC_PRESSURE;
@@ -325,12 +378,31 @@ export function applyEngineParts(stock: EngineConfig, parts: EngineParts): Breat
     engine: { ...base, induction: 'turbo', turbo: turboCfg, torqueCurve: { rpm: grid, torqueNm: curve } },
     steadyBoostBar: grid.map((rpm, i) => ({ rpm, bar: Math.round(boosts[i]! * 100) / 100 })),
     knockLoss,
+    chargeTemperatureAtTargetK: chargeTemperatureK(1 + turboCfg.maxBoostBar * 1e5 / ATMOSPHERIC_PRESSURE),
   };
 }
 
 /** Fuel of an engine: the field when present, else inferred from the id (older data). */
 export function engineFuel(e: EngineConfig): 'gasoline' | 'ethanol' {
   return e.fuel ?? (/ethanol|etanol|alcool/i.test(e.id) ? 'ethanol' : 'gasoline');
+}
+
+/** Compare mean torque over thirds of the rev range shared by both configurations. */
+export function compareTorqueBands(before: EngineConfig, after: EngineConfig) {
+  const a = new MonotoneCubic(before.torqueCurve.rpm, before.torqueCurve.torqueNm);
+  const b = new MonotoneCubic(after.torqueCurve.rpm, after.torqueCurve.torqueNm);
+  const floor = 1.5 * Math.max(before.idleRpm, after.idleRpm);
+  const span = Math.min(before.revLimitRpm, after.revLimitRpm) - floor;
+  return [0, 1, 2].map((index) => {
+    const fromRpm = Math.round(floor + span * index / 3);
+    const toRpm = Math.round(floor + span * (index + 1) / 3);
+    const mean = (curve: MonotoneCubic): number => {
+      let sum = 0;
+      for (let i = 0; i < 16; i++) sum += curve.evaluate(fromRpm + (toRpm - fromRpm) * (i + 0.5) / 16);
+      return sum / 16;
+    };
+    return { fromRpm, toRpm, beforeNm: mean(a), afterNm: mean(b) };
+  });
 }
 
 /** Highest compression ratio that takes 0.6 bar of boost with ignition retard alone. */
