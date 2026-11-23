@@ -31,6 +31,10 @@ export const CHANNELS: Channel[] = [
   { id: 'pitch', label: 'arfagem', unit: 'rad', get: (s) => s.pitch },
   { id: 'shift', label: 'estado troca', unit: 'enum', get: (s) => SHIFT_CODES[s.shift.state] ?? -1 },
   { id: 'egt', label: 'temp. escape', unit: 'K', get: (s) => s.engine.exhaustTempK },
+  { id: 'nitroStage', label: 'N₂O estágio ativo', unit: '0..2', get: (s) => s.nitrous?.telemetry().activeStage ?? 0 },
+  { id: 'nitroFlow', label: 'N₂O vazão', unit: 'g/s', get: (s) => (s.nitrous?.telemetry().flowKgPerS ?? 0) * 1000 },
+  { id: 'nitroTq', label: 'N₂O torque extra', unit: 'N·m', get: (s) => s.nitrous?.telemetry().additionalTorqueNm ?? 0 },
+  { id: 'nitroLeft', label: 'N₂O restante', unit: '0..1', get: (s) => s.nitrous?.telemetry().remainingFraction ?? 0 },
 ];
 
 const SHIFT_CODES: Record<string, number> = { IDLE: 0, TORQUE_CUT: 1, CLUTCH_DISENGAGE: 2, GEAR_CHANGE: 3, REV_MATCH: 4, CLUTCH_ENGAGE: 5, COMPLETE: 6 };
