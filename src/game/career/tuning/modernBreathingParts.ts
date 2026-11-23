@@ -3,7 +3,7 @@ import { CHAPTER3_CARS } from '../../../data/cars/chapter3/index';
 import type { CarConfig } from '../../../data/schema';
 import { modernStageRelease } from './modernStageRelease';
 import type { PartTier } from './partProgression';
-import type { ExpandedPart, FilterPart, MechanicalMods } from './parts';
+import type { DownpipePart, ExhaustPart, ExpandedPart, FilterPart, MechanicalMods } from './parts';
 
 const tiers = [1, 2, 3] as const;
 const number = (value: number): string => value.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
@@ -107,7 +107,56 @@ function filterPart(car: CarConfig, family: string, origin: 2 | 3, tier: PartTie
   };
 }
 
-function forChapter(cars: readonly CarConfig[], origin: 2 | 3): (ExpandedPart | FilterPart)[] {
+function fullExhaustPart(car: CarConfig, family: string, origin: 2 | 3, tier: PartTier): ExhaustPart {
+  const twinBank = car.engine.architecture === 'V6';
+  const stockPressure = car.engine.breathing?.exhaustBackPressureKPa ?? 18;
+  // Keep the IS 350's street systems in the operating range of its stock converter and shift map.
+  const drop = family === 'toyota-2gr-fse'
+    ? stockPressure * tiersValue(tier, 0.14, 0.22, 0.315)
+    : sectionDrop(car, tier, 0.21);
+  const headerDiameterScale = tiersValue(tier, 1.05, 1.095, 1.14);
+  const tailpipeDiameterScale = tiersValue(tier, 1.065, 1.13, 1.2);
+  const mufflerAbsorptionScale = tiersValue(tier, 0.85, 0.72, 0.59);
+  return {
+    id: `exhaust-${family}-s${tier}`,
+    category: 'exhaust',
+    name: `Escape completo${twinBank ? ' V6' : ''} Stage ${tier}`,
+    ...modernStageRelease(origin, tier),
+    price: Math.round((twinBank ? 2200 : 1700) * Math.sqrt(car.engine.ratedPowerCv / 170) * tiersValue(tier, 1, 1.65, 2.5) / 50) * 50,
+    since: 2,
+    compat: { families: [family] },
+    progression: { tier, group: 'modern-exhaust-system', specialization: 'rua' },
+    description: twinBank
+      ? 'Coletores nas duas bancadas, tubulação e abafadores de maior vazão.'
+      : 'Coletor, tubulação e abafador redimensionados como conjunto.',
+    physics: `A queda de pressão diminui ${number(drop)} kPa no fluxo nominal. Redimensiona primários, ponteira e silenciamento.`,
+    backPressureKPa: stockPressure - drop,
+    headerDiameterScale,
+    tailpipeDiameterScale,
+    mufflerAbsorptionScale,
+  };
+}
+
+function downpipePart(car: CarConfig, family: string, origin: 2 | 3, tier: PartTier): DownpipePart {
+  const pair = car.engine.turbo?.layout === 'parallel-twin';
+  const drop = sectionDrop(car, tier, 0.11);
+  return {
+    id: `exhaust-downpipe-${family}-s${tier}`,
+    category: 'exhaust-downpipe',
+    name: `Downpipe${pair ? ' duplo' : ''} Stage ${tier}`,
+    ...modernStageRelease(origin, tier),
+    price: Math.round((pair ? 1580 : 1050) * Math.sqrt(car.engine.ratedPowerCv / 170) * tiersValue(tier, 1, 1.65, 2.5) / 50) * 50,
+    since: 2,
+    compat: { families: [family], induction: 'turbo' },
+    progression: { tier, group: 'modern-exhaust-downpipe', specialization: 'turbo' },
+    description: pair ? 'Uma saída de alta vazão após a turbina de cada bancada.' : 'Saída dimensionada para reduzir a restrição depois da turbina.',
+    physics: `A queda de pressão diminui ${number(drop)} kPa no fluxo nominal. A saída oferece menos atenuação sonora.`,
+    backPressureReductionKPa: drop,
+    absorptionScale: tiersValue(tier, 0.94, 0.88, 0.82),
+  };
+}
+
+function forChapter(cars: readonly CarConfig[], origin: 2 | 3): (ExpandedPart | FilterPart | ExhaustPart | DownpipePart)[] {
   const families = new Map<string, CarConfig>();
   for (const car of cars) {
     const family = car.engine.family;
@@ -116,6 +165,8 @@ function forChapter(cars: readonly CarConfig[], origin: 2 | 3): (ExpandedPart | 
   }
   return [...families].flatMap(([family, car]) => [
     ...tiers.map((tier) => filterPart(car, family, origin, tier)),
+    ...tiers.map((tier) => fullExhaustPart(car, family, origin, tier)),
+    ...(car.engine.induction === 'turbo' ? tiers.map((tier) => downpipePart(car, family, origin, tier)) : []),
     ...specs.flatMap((spec) => tiers.map((tier): ExpandedPart => ({
       id: `${spec.slot}-${family}-s${tier}`,
       category: spec.slot,

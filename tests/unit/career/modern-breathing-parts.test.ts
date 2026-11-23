@@ -16,7 +16,7 @@ describe('admissão e escape modernos por família', () => {
     '%s resolve os três estágios de cada seção',
     (_, car) => {
       const options = MODERN_BREATHING_PARTS.filter((part) => !incompatibility(car, part));
-      expect(options).toHaveLength(18);
+      expect(options).toHaveLength(car.engine.induction === 'turbo' ? 24 : 21);
       const stock = resolveBuild(car, [], {}, 2);
       if (!stock.ok) throw new Error(stock.errors.join('; '));
       const metric = (part: typeof options[number], build: typeof stock): number => {
@@ -33,6 +33,12 @@ describe('admissão e escape modernos por família', () => {
           if (!next.ok) throw new Error(`${part.id}: ${next.errors.join('; ')}`);
           expect(metric(part, next), part.id).toBeLessThan(metric(part, previous));
           expect(next.car.exhaust.layout).toBe(stock.car.exhaust.layout);
+          if (part.category === 'exhaust') {
+            expect(next.car.exhaust.tailpipeDiameterMm).toBeGreaterThan(previous.car.exhaust.tailpipeDiameterMm);
+          }
+          if (part.category === 'exhaust' || part.category === 'exhaust-downpipe') {
+            expect(next.car.exhaust.mufflerAbsorption).toBeLessThan(previous.car.exhaust.mufflerAbsorption);
+          }
           previous = next;
         }
         expect(CareerController.withPart([series[0]!.id], series[1]!.id)).toEqual({
@@ -54,12 +60,44 @@ describe('admissão e escape modernos por família', () => {
     expect(exhaustPressureAfterSections(18, 14, false, sections)).toBe(13);
     expect(exhaustPressureAfterSections(18, 10, false, sections)).toBe(10);
     expect(exhaustPressureAfterSections(18, 14, true, sections)).toBe(9);
+    expect(exhaustPressureAfterSections(18, 10, false, sections, 3)).toBe(7);
+    expect(exhaustPressureAfterSections(18, 14, true, sections, 3)).toBe(9);
   });
 
-  it.each(['toyota-2gr-fse', 'alfa-690t'])('preserva a arrancada ao acelerar a borboleta do %s', (family) => {
+  it.each(['bmw-n20', 'nissan-vr38dett'])('combina downpipe e escape sem duplicar seções no %s', (family) => {
+    const car = [...CHAPTER2_CARS, ...CHAPTER3_CARS].find((item) => item.engine.family === family)!;
+    const options = MODERN_BREATHING_PARTS.filter((part) => !incompatibility(car, part) && part.progression?.tier === 3);
+    const select = (category: typeof options[number]['category']) => options.find((part) => part.category === category)!;
+    const exhaust = select('exhaust').id;
+    const downpipe = select('exhaust-downpipe');
+    const sections = (['exhaust-header', 'exhaust-pipe', 'exhaust-muffler'] as const).map((slot) => select(slot).id);
+    const build = (ids: string[]) => {
+      const resolved = resolveBuild(car, ids, {}, 2);
+      if (!resolved.ok) throw new Error(resolved.errors.join('; '));
+      return resolved;
+    };
+    const full = build([exhaust]);
+    const bestSectionPressure = Math.min(full.exhaustRestrictionKPa!, build(sections).exhaustRestrictionKPa!);
+    expect(build([exhaust, ...sections]).exhaustRestrictionKPa).toBeCloseTo(bestSectionPressure);
+    expect(downpipe.category).toBe('exhaust-downpipe');
+    if (downpipe.category !== 'exhaust-downpipe') throw new Error('Downpipe ausente');
+    expect(build([exhaust, downpipe.id]).exhaustRestrictionKPa)
+      .toBeCloseTo(full.exhaustRestrictionKPa! - downpipe.backPressureReductionKPa);
+    expect(build([exhaust, downpipe.id, ...sections]).exhaustRestrictionKPa)
+      .toBeCloseTo(bestSectionPressure - downpipe.backPressureReductionKPa);
+    expect(build(['downpipe-catless', downpipe.id]).exhaustRestrictionKPa)
+      .toBe(build(['downpipe-catless']).exhaustRestrictionKPa);
+    expect(build([exhaust, downpipe.id, ...sections]).car).toEqual(build([...sections, downpipe.id, exhaust]).car);
+  });
+
+  it.each([
+    ['toyota-2gr-fse', 'intake-throttle'],
+    ['alfa-690t', 'intake-throttle'],
+    ['toyota-2gr-fse', 'exhaust'],
+  ] as const)('preserva a arrancada do %s ao preparar %s', (family, slot) => {
     const car = CHAPTER3_CARS.find((item) => item.engine.family === family)!;
     const track = TRACKS.find((item) => item.id === 'test-track')!;
-    const stages = MODERN_BREATHING_PARTS.filter((part) => part.category === 'intake-throttle' && !incompatibility(car, part));
+    const stages = MODERN_BREATHING_PARTS.filter((part) => part.category === slot && !incompatibility(car, part));
     const results = auditPartStages(car, stages, track, 2);
     expect(results.map(({ audit }) => audit.status)).toEqual(['gain', 'gain', 'gain']);
     for (const { audit } of results) {

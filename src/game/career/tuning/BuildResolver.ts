@@ -224,7 +224,7 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
   }
   if (exhaust || mod.headerDiameterScale || mod.exhaustDiameterScale || mod.exhaustAbsorptionScale) {
     // new geometry: wider primaries, the acoustic preset of a free-flowing system
-    const acousticBase = exhaust ? exhaustPreset(exhaust.acousticPreset, {
+    const acousticBase = exhaust?.acousticPreset ? exhaustPreset(exhaust.acousticPreset, {
       layout: base.exhaust.layout,
       headerPrimaryLengthM: base.exhaust.headerPrimaryLengthM,
       headerDiameterMm: Math.min(base.exhaust.headerDiameterMm * exhaust.headerDiameterScale, 70),

@@ -9,14 +9,17 @@ export function isModernBreathingPart(part: PartDef): boolean {
     !!part.compat?.families?.length && supportedSlots.includes(part.category);
 }
 
-/** Section work and a complete system overlap. Downpipe restriction is separate. */
+/** A complete system overlaps its sections. The legacy catless package keeps its saved behavior. */
 export function exhaustPressureAfterSections(
   stockKPa: number,
   presetKPa: number,
-  independentDownpipe: boolean,
+  legacyCatlessPackage: boolean,
   mod: MechanicalMods,
+  downpipeReduction = 0,
 ): number {
   const presetReduction = stockKPa - Math.min(stockKPa, presetKPa);
   const sectionReduction = mod.backPressureReductionKPa ?? 0;
-  return stockKPa - (independentDownpipe ? presetReduction + sectionReduction : Math.max(presetReduction, sectionReduction));
+  return stockKPa - (legacyCatlessPackage
+    ? Math.max(presetReduction, downpipeReduction) + sectionReduction
+    : Math.max(presetReduction, sectionReduction) + downpipeReduction);
 }

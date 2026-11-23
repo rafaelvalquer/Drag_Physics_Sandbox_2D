@@ -352,7 +352,7 @@ function drivelineGain(part: PartDef, gain: PartGain): boolean {
 function breathingGain(part: PartDef, gain: PartGain): boolean {
   const group = progressionOf(part)?.group;
   if (!isModernBreathingPart(part) && group !== 'classic-throttle' && group !== 'modern-intake-filter' &&
-    !group?.startsWith('classic-exhaust-')) return false;
+    !group?.startsWith('classic-exhaust-') && !group?.startsWith('modern-exhaust-')) return false;
   // These street parts should not worsen the reference pass enough to outweigh the hardware gain.
   if (gain.etAfter - gain.etBefore > 0.05) return false;
   const reduction = (before: number | null, after: number | null): boolean =>

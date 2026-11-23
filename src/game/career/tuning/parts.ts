@@ -48,9 +48,10 @@ export type V2Category =
   | 'flywheel'
   | 'gearbox'
   | 'awd'
-  | 'suspension';
+  | 'suspension'
+  | 'exhaust-downpipe';
 
-export const V2_CATEGORIES: readonly V2Category[] = ['cylinder-head', 'pistons', 'flywheel', 'ecu', 'intercooler', 'boost-control', 'gearbox', 'awd', 'suspension'];
+export const V2_CATEGORIES: readonly V2Category[] = ['cylinder-head', 'pistons', 'flywheel', 'ecu', 'intercooler', 'boost-control', 'gearbox', 'awd', 'suspension', 'exhaust-downpipe'];
 
 /**
  * Slot-catalogue categories that are hardware of the CAR, not of a classic engine (mass, cooling,
@@ -74,7 +75,7 @@ export interface WorkshopTab {
 export const WORKSHOP_TABS: readonly WorkshopTab[] = [
   { id: 'engine', label: 'Motor', icon: '⚙', description: 'Comando, cabeçote, taxa e internos', categories: ['camshaft', 'engine-head', 'engine-compression', 'engine-internals', 'engine-flywheel', 'cylinder-head', 'pistons', 'flywheel', 'engine-valvetrain'] },
   { id: 'intake', label: 'Admissão', icon: '◉', description: 'Ar limpo, dutos e resposta', categories: ['intake-filter', 'intake-manifold', 'intake-throttle', 'intake-airbox'] },
-  { id: 'exhaust', label: 'Escape', icon: '≋', description: 'Contrapressão e acústica', categories: ['exhaust', 'exhaust-header', 'exhaust-pipe', 'exhaust-muffler'] },
+  { id: 'exhaust', label: 'Escape', icon: '≋', description: 'Contrapressão e acústica', categories: ['exhaust', 'exhaust-header', 'exhaust-downpipe', 'exhaust-pipe', 'exhaust-muffler'] },
   { id: 'transmission', label: 'Transmissão', icon: '⌁', description: 'Relações e embreagem', categories: ['clutch', 'transmission-gearbox', 'differential', 'gearbox', 'awd'] },
   { id: 'tires', label: 'Pneus', icon: '◎', description: 'Composto, largura e pressão', categories: ['tires', 'tires-width', 'tires-pressure'] },
   { id: 'turbo', label: 'Turbo', icon: '◌', description: 'Pressão, spool e temperatura', categories: ['turbo', 'turbo-turbine', 'turbo-intercooler', 'turbo-wastegate', 'turbo-boost', 'intercooler'] },
@@ -98,6 +99,7 @@ export const CATEGORY_LABEL: Record<PartCategory, string> = {
   camshaft: 'Comando de válvulas', 'engine-head': 'Cabeçote', 'engine-compression': 'Taxa de compressão',
   'engine-internals': 'Internos do motor', 'engine-flywheel': 'Volante do motor',
   exhaust: 'Escape completo', 'exhaust-header': 'Coletor de escape',
+  'exhaust-downpipe': 'Downpipe',
   'exhaust-pipe': 'Tubulação de escape', 'exhaust-muffler': 'Abafador',
   clutch: 'Embreagem', differential: 'Relação final', 'transmission-gearbox': 'Câmbio',
   tires: 'Composto', 'tires-width': 'Largura', 'tires-pressure': 'Pressão e setup',
@@ -125,6 +127,7 @@ export const CATEGORY_DESCRIPTION: Record<PartCategory, string> = {
   'engine-compression': 'Rendimento e limite para sobrealimentação.', 'engine-internals': 'Resistência mecânica do conjunto.',
   'engine-flywheel': 'Inércia rotacional e resposta do motor.',
   exhaust: 'Geometria global e contrapressão.', 'exhaust-header': 'Primários e coleta dos gases.',
+  'exhaust-downpipe': 'Perda de carga na saída da turbina.',
   'exhaust-pipe': 'Diâmetro e restrição da linha.', 'exhaust-muffler': 'Silenciamento versus fluxo.',
   clutch: 'Capacidade de torque e engate.', differential: 'Multiplicação final da transmissão.',
   'transmission-gearbox': 'Escalonamento e recuperação de giro.',
@@ -235,7 +238,7 @@ export interface ExhaustPart extends PartBase {
   /** Back pressure at the reference flow (kPa). */
   backPressureKPa: number;
   /** Acoustic geometry preset of the new system (lengths, diameters, chambers). */
-  acousticPreset: 'sport';
+  acousticPreset?: 'sport';
   /** Diameter scale of the primaries (header). */
   headerDiameterScale: number;
   tailpipeDiameterScale?: number;
@@ -244,6 +247,13 @@ export interface ExhaustPart extends PartBase {
   spoolTimeScale?: number;
   /** A downpipe changes its own section and can coexist with the rest of the exhaust. */
   section?: 'downpipe';
+}
+
+export interface DownpipePart extends PartBase {
+  category: 'exhaust-downpipe';
+  backPressureReductionKPa: number;
+  /** Relative attenuation at the catalyst, represented in the exhaust's aggregate damping. */
+  absorptionScale: number;
 }
 
 export interface ManifoldPart extends PartBase {
@@ -532,6 +542,7 @@ export interface ExpandedPart extends PartBase {
 }
 
 export type PartDef =
+  | DownpipePart
   | FilterPart
   | ExhaustPart
   | ManifoldPart

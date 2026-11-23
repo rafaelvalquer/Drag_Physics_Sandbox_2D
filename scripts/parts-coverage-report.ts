@@ -26,7 +26,11 @@ function notApplicable(car: CarConfig, slot: PartCategory, classic: boolean): st
   if (slot === 'awd' && car.drivenAxle !== 'awd') return 'Veículo sem tração integral.';
   if ((slot === 'engine-flywheel' || slot === 'clutch') && transmissionKindOf(car) !== 'manual')
     return 'Componente de câmbio manual. A preparação compatível pertence ao slot do câmbio.';
+  if (slot === 'electronics-launch' && transmissionKindOf(car) === 'torque-converter-auto')
+    return 'Na largada, o conversor determina o estol.';
   if (slot === 'turbo' && car.engine.induction === 'turbo') return 'Turbo de fábrica. O upgrade pertence ao slot da turbina.';
+  if (slot === 'exhaust-downpipe' && car.engine.induction !== 'turbo')
+    return 'Sem saída de turbina de fábrica. Em conversões a saída faz parte do kit.';
   if (!classic && car.engine.induction !== 'turbo' && ['turbo-turbine', 'turbo-intercooler', 'turbo-wastegate', 'turbo-boost'].includes(slot))
     return 'Sem turbo de fábrica. Componentes dependem de um projeto de conversão.';
   return null;
@@ -103,9 +107,9 @@ for (const car of cars) {
 }
 lines.push('', '¹ Inclui builds válidos cuja simulação falhou. ² Conta pares medidos, incluindo peças sem efeito. O JSON discrimina bloqueios por dependência, builds inválidos e falhas de simulação.', '');
 for (const car of cars) {
-  lines.push(`## ${car.name}`, '', '| Categoria | Opções compatíveis | Com ganho | Aplicabilidade |', '|---|---:|---:|---|');
+  lines.push(`## ${car.name}`, '', '| Categoria | Opções compatíveis | Com ganho | Estágios | Aplicabilidade |', '|---|---:|---:|---|---|');
   for (const category of car.categories) {
-    lines.push(`| ${category.slot} | ${category.compatibleOptions} | ${category.optionsWithGain} | ${category.reason ?? (category.compatibleOptions ? 'Aplicável' : 'Lacuna')} |`);
+    lines.push(`| ${category.slot} | ${category.compatibleOptions} | ${category.optionsWithGain} | ${category.tiers.join(', ') || '—'} | ${category.reason ?? (category.compatibleOptions ? 'Aplicável' : 'Lacuna')} |`);
   }
   lines.push('');
 }

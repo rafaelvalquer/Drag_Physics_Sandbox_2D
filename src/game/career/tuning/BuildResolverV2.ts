@@ -117,6 +117,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   const ignition = get('electronics-ignition');
   const ignitionMod = ignition && { burnDurationScale: ignition.burnDurationScale, knockRetardScale: ignition.knockRetardScale };
   const exhaust = get('exhaust');
+  const downpipe = get('exhaust-downpipe');
   const fuelSupply = get('electronics-fuel');
   const meteredFuel = fuelSupply || ecu?.fuelTargetScale !== undefined;
   const ratedRpm = powerPeakRpm(base.engine.torqueCurve, base.engine.revLimitRpm);
@@ -124,7 +125,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   const stockInput = meteredFuel && base.engine.fueling ? { ...base.engine, fueling: undefined } : base.engine;
   const stockEngine = withStockBreathing(stockInput, ratedRpm);
   const stockBackPressure = stockEngine.breathing!.exhaustBackPressureKPa;
-  const exhaustMod = sectionMod.backPressureReductionKPa === undefined ? sectionMod : {
+  const exhaustMod = sectionMod.backPressureReductionKPa === undefined && !downpipe ? sectionMod : {
     ...sectionMod,
     // The NA model applies the computed pressure once, including any complete system.
     backPressureKPa: exhaustPressureAfterSections(
@@ -132,6 +133,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
       exhaust?.backPressureKPa ?? stockBackPressure,
       exhaust?.section === 'downpipe',
       sectionMod,
+      downpipe?.backPressureReductionKPa,
     ),
     backPressureReductionKPa: undefined,
   };
@@ -188,7 +190,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
     const cam = get('camshaft');
     const head = get('cylinder-head');
     const manifold = get('intake-manifold');
-    const anyEngine = genericMod.coolingFrictionScale || genericMod.coolingKnockScale || ignition || ecu || turboUp || get('intercooler') || boostControl || pistons || get('intake-filter') || exhaust || cam || head || manifold || sectionParts.length > 0;
+    const anyEngine = genericMod.coolingFrictionScale || genericMod.coolingKnockScale || ignition || ecu || turboUp || get('intercooler') || boostControl || pistons || get('intake-filter') || exhaust || downpipe || cam || head || manifold || sectionParts.length > 0;
     if (anyEngine) {
       engineModified = true;
       const r = applyFactoryTurboParts(stockEngine, {
@@ -350,25 +352,29 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   }
   const ic = get('intercooler');
   if (ic) car.massKg += ic.massAddKg;
-  if (exhaust || sectionMod.headerDiameterScale || sectionMod.exhaustDiameterScale || sectionMod.exhaustAbsorptionScale) {
-    const acousticBase = exhaust
+  if (exhaust || downpipe || sectionMod.headerDiameterScale || sectionMod.exhaustDiameterScale || sectionMod.exhaustAbsorptionScale) {
+    const acousticBase = exhaust?.acousticPreset
       ? exhaustPreset(exhaust.acousticPreset, {
         layout: base.exhaust.layout,
         headerPrimaryLengthM: base.exhaust.headerPrimaryLengthM,
         headerDiameterMm: Math.min(base.exhaust.headerDiameterMm * exhaust.headerDiameterScale, 80),
       })
       : base.exhaust;
+    const headerScale = Math.max(sectionMod.headerDiameterScale ?? 1, exhaust?.acousticPreset ? 1 : exhaust?.headerDiameterScale ?? 1);
+    const tailpipeScale = Math.max(sectionMod.exhaustDiameterScale ?? 1, exhaust?.tailpipeDiameterScale ?? 1);
+    const dampingScale = Math.min(sectionMod.exhaustAbsorptionScale ?? 1, exhaust?.mufflerAbsorptionScale ?? 1);
+    const damping = dampingScale < 1
+      ? Math.min(acousticBase.mufflerAbsorption, base.exhaust.mufflerAbsorption * dampingScale)
+      : acousticBase.mufflerAbsorption;
     car.exhaust = {
       ...acousticBase,
-      headerDiameterMm: sectionMod.headerDiameterScale
-        ? Math.min(70, Math.max(acousticBase.headerDiameterMm, base.exhaust.headerDiameterMm * sectionMod.headerDiameterScale))
+      headerDiameterMm: headerScale > 1
+        ? Math.min(70, Math.max(acousticBase.headerDiameterMm, base.exhaust.headerDiameterMm * headerScale))
         : acousticBase.headerDiameterMm,
-      tailpipeDiameterMm: sectionMod.exhaustDiameterScale
-        ? Math.min(120, Math.max(acousticBase.tailpipeDiameterMm, base.exhaust.tailpipeDiameterMm * sectionMod.exhaustDiameterScale))
+      tailpipeDiameterMm: tailpipeScale > 1
+        ? Math.min(120, Math.max(acousticBase.tailpipeDiameterMm, base.exhaust.tailpipeDiameterMm * tailpipeScale))
         : acousticBase.tailpipeDiameterMm,
-      mufflerAbsorption: sectionMod.exhaustAbsorptionScale
-        ? Math.max(0, Math.min(acousticBase.mufflerAbsorption, base.exhaust.mufflerAbsorption * sectionMod.exhaustAbsorptionScale))
-        : acousticBase.mufflerAbsorption,
+      mufflerAbsorption: damping * (exhaust?.section === 'downpipe' ? 1 : downpipe?.absorptionScale ?? 1),
       outputGain: base.exhaust.outputGain,
     };
   }
