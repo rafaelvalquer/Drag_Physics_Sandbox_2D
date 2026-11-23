@@ -1251,6 +1251,8 @@ export class CareerMode implements Mode {
   // ------------------------------------------------------------------ dyno
 
   private dynoLab: DynoLabView | null = null;
+  /** How the Dyno Lab test run uses the N₂O kit (a car without one ignores it). */
+  private dynoNitro: 'off' | 'stage1' | 'all' = 'off';
 
   /**
    * Dyno Lab 3.0: editing a setting changes only the draft (measured after a debounce, with the A/B
@@ -1265,6 +1267,25 @@ export class CareerMode implements Mode {
     const b = ownedCarBuild(car);
     const caps = this.controller.capabilitiesOf(car)!;
     const track = TRACKS.find((t) => t.id === 'test-track') ?? this.trackCfg;
+    const nitroSelect = h(
+      'label',
+      { class: 'lead' },
+      'Nitro no teste: ',
+      h(
+        'select',
+        {
+          'data-testid': 'dyno-nitro-mode',
+          onchange: (e: Event) => {
+            this.dynoNitro = (e.target as HTMLSelectElement).value as 'off' | 'stage1' | 'all';
+            this.show('dyno');
+          },
+        },
+        h('option', { value: 'off', selected: this.dynoNitro === 'off' }, 'sem nitro'),
+        h('option', { value: 'stage1', selected: this.dynoNitro === 'stage1' }, 'só estágio 1'),
+        h('option', { value: 'all', selected: this.dynoNitro === 'all' }, 'todos os estágios'),
+      ),
+    );
+    const nitroNote = h('p', { class: 'lead', 'data-testid': 'dyno-nitro-note' });
     const view = buildDynoLab({
       carName: car.nickname,
       cfg: b.ok ? ownedCarConfig(car) : null,
@@ -1275,7 +1296,11 @@ export class CareerMode implements Mode {
       measure: async (tune, stale, prog) => {
         const r = resolveBuild(base, car.installedParts, tune, version);
         if (!r.ok) return { error: r.errors.join('; ') };
-        const m = await measureLab(r.car, track, () => stale() || !view.el.isConnected, prog);
+        const m = await measureLab(r.car, track, () => stale() || !view.el.isConnected, prog, { nitrous: this.dynoNitro });
+        const nz = m?.nitrous;
+        nitroNote.textContent = nz
+          ? `N₂O: estágio 1 chega a ${Math.round(nz.peakCvStage1)} cv na bancada${nz.peakCvStage2 !== null ? `, estágio 2 a ${Math.round(nz.peakCvStage2)} cv` : ''}; na pista ${nz.usedKg > 0 ? `gastou ${(nz.usedKg * 1000).toFixed(0)} g de ${(nz.capacityKg * 1000).toFixed(0)} g em ${nz.activeS.toFixed(1)} s` : 'sem nitro'}.`
+          : '';
         return m ?? (stale() || !view.el.isConnected ? null : { error: 'o motor não pegou no banco' });
       },
       reliabilityOf: (tune) => tuneReliability(caps, tune),
@@ -1292,7 +1317,7 @@ export class CareerMode implements Mode {
       onBack: () => this.show('garage'),
     });
     this.dynoLab = view;
-    return this.frame('Dyno Lab', 'career-dyno', h('p', { class: 'lead' }, `${car.nickname}: o dinamômetro mede o motor que está no carro, com as peças instaladas, e a pista de testes mede o carro. Os valores vêm da física, não da ficha.`), view.el);
+    return this.frame('Dyno Lab', 'career-dyno', h('p', { class: 'lead' }, `${car.nickname}: o dinamômetro mede o motor que está no carro, com as peças instaladas, e a pista de testes mede o carro. Os valores vêm da física, não da ficha.`), car.installedParts.some((p) => p.startsWith('nitrous-')) ? nitroSelect : null, nitroNote, view.el);
   }
 
   // ------------------------------------------------------------------ events
