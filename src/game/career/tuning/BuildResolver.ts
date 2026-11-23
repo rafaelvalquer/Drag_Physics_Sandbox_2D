@@ -186,6 +186,7 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
   const exhaust = engineParts.exhaust;
   let steadyBoostBar: { rpm: number; bar: number }[] = [];
   let knockLoss = 0;
+  let chargeTemperatureAtTargetK: number | undefined;
   // Non-engine upgrades (clutch, tyres, mass, suspension, internals) must not resample
   // the engine curve: restoring them keeps factory motor physics byte-for-byte.
   const nonEnginePrefix = /^(clutch|finalDrive|gearSpread|driveline|tire|massRemove|cgHeight|launchCg|internalTorqueLimit|fuelBoostLimit|radiatorArea|oilCoolerArea|fanFlow|coolingMass)/;
@@ -210,6 +211,7 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
     car.engine = r.engine;
     steadyBoostBar = r.steadyBoostBar;
     knockLoss = r.knockLoss;
+    chargeTemperatureAtTargetK = r.chargeTemperatureAtTargetK;
   } else {
     car.engine = structuredClone(stockEngine);
   }
@@ -310,6 +312,9 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
   const v = validateCar(car);
   if (!v.ok) errors.push(...v.errors);
   if (errors.length) return { ok: false, errors };
-  return { ok: true, car: deepFreeze(v.value!), parts, key, peakTorqueNm, peakPowerCv, steadyBoostBar, knockLoss, internalTorqueLimitNm, version: 1 };
+  return {
+    ok: true, car: deepFreeze(v.value!), parts, key, peakTorqueNm, peakPowerCv, steadyBoostBar, knockLoss,
+    internalTorqueLimitNm, chargeTemperatureAtTargetK, version: 1,
+  };
 }
 

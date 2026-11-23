@@ -94,3 +94,19 @@ describe('internos dos clássicos', () => {
     expect(pistons.peakTorqueNm).toBeLessThan(440);
   });
 });
+
+describe('intercoolers dos clássicos', () => {
+  it.each(CHAPTER1_CARS.map((car) => [car.id, car] as const))('%s resfria a carga por estágio à mesma pressão', (_, car) => {
+    const support = ['turbo-basic', 'clutch-reinforced'];
+    if (car.id === 'gm-celta-2003') support.push('compression-celta-turbo');
+    const tune = { boostBar: 0.6 };
+    let previousTemperature = Infinity;
+    for (const id of [null, 'ic-small', 'ic-medium', 'ic-large']) {
+      const result = resolveBuild(car, id ? [...support, id] : support, tune, 1);
+      if (!result.ok) throw new Error(result.errors.join('\n'));
+      expect(result.car.engine.turbo?.maxBoostBar).toBe(tune.boostBar);
+      expect(result.chargeTemperatureAtTargetK).toBeLessThan(previousTemperature);
+      previousTemperature = result.chargeTemperatureAtTargetK!;
+    }
+  });
+});

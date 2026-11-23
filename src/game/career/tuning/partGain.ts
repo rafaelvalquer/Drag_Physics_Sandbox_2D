@@ -289,12 +289,15 @@ function compareBuilds(base: ValidBuild, after: ValidBuild, part: PartDef, conte
   const turboFlowGain = group === 'modern-factory-turbo' && gain.etAfter - gain.etBefore <= 0.08 &&
     gain.cvAfter - gain.cvBefore >= 0.5 && gain.exhaustRestrictionBeforeKPa !== null && gain.exhaustRestrictionAfterKPa !== null &&
     gain.exhaustRestrictionBeforeKPa - gain.exhaustRestrictionAfterKPa >= 0.1;
-  const chargeCoolingGain = group === 'modern-intercooler' && gain.etAfter - gain.etBefore <= 0.05 &&
+  const classicTurbineGain = group === 'classic-turbine' && gain.etAfter - gain.etBefore <= 0.05 &&
+    gain.exhaustRestrictionBeforeKPa !== null && gain.exhaustRestrictionAfterKPa !== null &&
+    gain.exhaustRestrictionBeforeKPa - gain.exhaustRestrictionAfterKPa >= 0.25;
+  const chargeCoolingGain = (group === 'modern-intercooler' || group === 'classic-intercooler') && gain.etAfter - gain.etBefore <= 0.05 &&
     gain.chargeTemperatureBeforeK !== null && gain.chargeTemperatureAfterK !== null &&
     gain.chargeTemperatureBeforeK - gain.chargeTemperatureAfterK >= 0.5;
   const improvement = isGain(gain) || breathingGain(part, gain) || drivelineGain(part, gain) ||
     topEndGain(part, gain) || fuelGain || internalGain || classicInternalGain || compressionGain || ignitionGain || turboFlowGain || chargeCoolingGain ||
-    pressureControlGain(group, gain) || coolingGain || chassisGain(group, gain) || legacyFuelGain;
+    classicTurbineGain || pressureControlGain(group, gain) || coolingGain || chassisGain(group, gain) || legacyFuelGain;
   return { status: !effect ? 'no-effect' : improvement ? 'gain' : 'no-gain', gain };
 }
 
@@ -451,6 +454,10 @@ function conversionSupport(car: CarConfig): string[] {
 
 function auditContexts(car: CarConfig, part: PartDef): readonly string[][] {
   const group = progressionOf(part)?.group;
+  if (group === 'classic-turbo-kit') return [[
+    'clutch-ceramic-race', 'fuel-pump', 'forged-kit', 'ecu-race', 'ignition-race',
+    ...(car.id === 'gm-celta-2003' ? ['compression-celta-turbo-s3'] : []),
+  ]];
   if (group === 'classic-fuel') return CONTEXTS.filter((context) => context.some((id) => findPart(id)?.category === 'turbo'));
   if (car.engine.family === 'toyota-2gr-fse' && group === 'weight-reduction') return [['tires-sport']];
   if (car.engine.family === 'mercedes-m276' && (group === 'tire-compound' || group === 'tire-width'))

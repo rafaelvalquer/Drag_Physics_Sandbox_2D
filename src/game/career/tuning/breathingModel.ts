@@ -210,6 +210,8 @@ export interface BreathingResult {
   steadyBoostBar: { rpm: number; bar: number }[];
   /** Largest torque fraction lost to the ignition retard against knock (0 without turbo). */
   knockLoss: number;
+  /** Intake charge after the intercooler at the requested boost under reference conditions. */
+  chargeTemperatureAtTargetK?: number;
 }
 
 /**
@@ -334,6 +336,10 @@ function calibrateEngineParts(stock: EngineConfig, parts: EngineParts): Breathin
     fullBoostFlowFraction: turbo.turbo.fullBoostFlowFraction * (mod.turboFlowScale ?? 1),
   };
   const intercooler = Math.min(0.92, (mod.intercoolerEffectiveness ?? turbo.intercoolerEffectiveness) + (mod.intercoolerEffectivenessAdd ?? 0));
+  const chargeTemperatureK = (pressureRatio: number): number => {
+    const riseK = STANDARD_TEMPERATURE_K * (Math.pow(pressureRatio, 0.2857) - 1) / COMPRESSOR_EFFICIENCY;
+    return STANDARD_TEMPERATURE_K + (1 - intercooler) * riseK;
+  };
   let knockLoss = 0;
 
   // ---- turbo: fixed point between the curve and the steady boost it produces ----
@@ -350,8 +356,7 @@ function calibrateEngineParts(stock: EngineConfig, parts: EngineParts): Breathin
     for (let i = 0; i < grid.length; i++) {
       const op = model.wotOperatingPoint(grid[i]!);
       const pr = (ATMOSPHERIC_PRESSURE + op.boost) / ATMOSPHERIC_PRESSURE;
-      const t2 = STANDARD_TEMPERATURE_K * (1 + (Math.pow(pr, 0.2857) - 1) / COMPRESSOR_EFFICIENCY);
-      const tCharge = t2 - intercooler * (t2 - STANDARD_TEMPERATURE_K);
+      const tCharge = chargeTemperatureK(pr);
       // boosted MAP scaled from the NA point (same restriction ratio, higher upstream pressure)
       const mapT = naMap[i]! * pr;
       const willans = (p: number): number => p - WILLANS_OFFSET * ATMOSPHERIC_PRESSURE;
@@ -372,6 +377,7 @@ function calibrateEngineParts(stock: EngineConfig, parts: EngineParts): Breathin
     engine: { ...base, induction: 'turbo', turbo: turboCfg, torqueCurve: { rpm: grid, torqueNm: curve } },
     steadyBoostBar: grid.map((rpm, i) => ({ rpm, bar: Math.round(boosts[i]! * 100) / 100 })),
     knockLoss,
+    chargeTemperatureAtTargetK: chargeTemperatureK(1 + turboCfg.maxBoostBar * 1e5 / ATMOSPHERIC_PRESSURE),
   };
 }
 

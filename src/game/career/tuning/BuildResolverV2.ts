@@ -286,6 +286,7 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
       car.engine = r.engine;
       steadyBoostBar = r.steadyBoostBar;
       knockLoss = r.knockLoss;
+      chargeTemperatureAtTargetK = r.chargeTemperatureAtTargetK;
       // switchable cam lobes (i-VTEC): a cam kit changes the high lobes; below the switch speed the
       // engine runs on the untouched low lobes, so the low-speed part of the curve is the one
       // without the cam kit
