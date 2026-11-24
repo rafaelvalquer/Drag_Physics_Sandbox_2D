@@ -2,7 +2,7 @@ import { AF } from '../../core/contracts';
 import { CHANNELS, CHANNEL_COUNT, CH, type AcousticQuality, type AcousticVehicleConfig } from '../dsp/AcousticConfig';
 import { VEHICLE_PROCESSOR, type ToWorklet, type VehicleProcessorOptions, type WorkletStats } from '../worklets/protocol';
 import type { AudioEngine } from './AudioEngine';
-import { NitrousLayer } from './NitrousLayer';
+import { NitrousLayer, NitrousVoiceState } from './NitrousLayer';
 
 const SPEED_OF_SOUND = 343;
 const MAX_FRAMES_PER_POST = 64;
@@ -48,6 +48,9 @@ export class VehicleSound {
   private disposed = false;
   private nitrous: NitrousLayer | null = null;
   private nitrousStatus = 'READY';
+  private readonly nitroVoice = new NitrousVoiceState();
+  private nitroShelf: BiquadFilterNode | null = null;
+  private lastSyncT = 0;
   lastStats: WorkletStats | null = null;
   droppedFrames = 0;
 
@@ -82,7 +85,12 @@ export class VehicleSound {
     this.delay = ctx.createDelay(2);
     this.delay.delayTime.value = 0;
     this.distanceGain = ctx.createGain();
-    this.bus.connect(this.panner);
+    this.nitroShelf = ctx.createBiquadFilter();
+    this.nitroShelf.type = 'highshelf';
+    this.nitroShelf.frequency.value = 3200;
+    this.nitroShelf.gain.value = 0;
+    this.bus.connect(this.nitroShelf);
+    this.nitroShelf.connect(this.panner);
     this.panner.connect(this.delay);
     this.delay.connect(this.distanceGain);
     this.distanceGain.connect(engine.master);
@@ -105,6 +113,14 @@ export class VehicleSound {
     if (!active && was) this.nitrous?.click(false);
     if (this.nitrousStatus !== status) this.nitrousStatus = status;
     this.nitrous?.setFlow(active ? flowNorm : 0);
+    // the engine voice: whoosh at the attack, louder and brighter exhaust with the flow, a short apparent-rpm bump
+    const dt = this.lastSyncT === 0 ? 0 : ctx.currentTime - this.lastSyncT;
+    this.lastSyncT = ctx.currentTime;
+    const v = this.nitroVoice;
+    if (v.update(dt, active, flowNorm)) this.nitrous?.whoosh(Math.max(flowNorm, 0.5));
+    const exhaust = this.gains[CH.exhaust];
+    exhaust?.gain.setTargetAtTime(this.mix.exhaust * v.exhaustMul, ctx.currentTime, 0.03);
+    this.nitroShelf?.gain.setTargetAtTime(v.shelfDb, ctx.currentTime, 0.05);
   }
 
   /** Queues one physics audio frame (AF layout). */
@@ -114,6 +130,7 @@ export class VehicleSound {
       this.flush();
     }
     this.batch.set(frame, this.batchCount * AF.length);
+    if (this.nitroVoice.bump > 0) this.batch[this.batchCount * AF.length + AF.omega]! *= 1 + this.nitroVoice.bump;
     this.batchCount++;
   }
 
@@ -130,7 +147,7 @@ export class VehicleSound {
     this.mix = { ...this.mix, ...mix };
     const ctx = this.engine.ctx;
     if (!ctx) return;
-    for (let k = 0; k < CHANNEL_COUNT; k++) this.gains[k]!.gain.setTargetAtTime(this.mix[CHANNELS[k]!], ctx.currentTime, 0.03);
+    for (let k = 0; k < CHANNEL_COUNT; k++) this.gains[k]!.gain.setTargetAtTime(this.mix[CHANNELS[k]!] * (k === CH.exhaust ? this.nitroVoice.exhaustMul : 1), ctx.currentTime, 0.03);
   }
 
   getMix(): ChannelMix {
@@ -199,6 +216,7 @@ export class VehicleSound {
       this.node.disconnect();
       for (const g of this.gains) g.disconnect();
       this.bus.disconnect();
+      this.nitroShelf?.disconnect();
       this.panner.disconnect();
       this.delay.disconnect();
       this.distanceGain.disconnect();

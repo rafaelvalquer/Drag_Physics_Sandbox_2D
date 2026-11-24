@@ -1,6 +1,6 @@
 /** The N₂O sound layer: hiss follows the flow, solenoid clicks at start/end, nothing leaks after dispose. */
 import { describe, expect, it } from 'vitest';
-import { NitrousLayer } from '../../../src/audio/core/NitrousLayer';
+import { NITRO_EXHAUST_GAIN, NITRO_RPM_BUMP, NITRO_SHELF_DB, NitrousLayer, NitrousVoiceState } from '../../../src/audio/core/NitrousLayer';
 
 function fakeCtx() {
   const created = { sources: 0, started: 0, stopped: 0, disconnected: 0, targets: [] as number[] };
@@ -59,5 +59,58 @@ describe('NitrousLayer', () => {
     l.click(true);
     l.setFlow(1);
     expect(created.sources).toBe(after);
+  });
+});
+
+describe('NitrousLayer whoosh', () => {
+  it('is one short jet per injection start, silent after dispose', () => {
+    const { ctx, created } = fakeCtx();
+    const l = new NitrousLayer(ctx, {} as AudioNode);
+    const before = created.sources;
+    l.whoosh(1);
+    l.whoosh(0); // a weak request is still audible (floor), never a no-op
+    expect(created.sources - before).toBe(2);
+    l.dispose();
+    const after = created.sources;
+    l.whoosh(1);
+    expect(created.sources).toBe(after);
+  });
+});
+
+describe('NitrousVoiceState', () => {
+  it('the attack bumps the apparent engine speed and the bump dies away', () => {
+    const v = new NitrousVoiceState();
+    expect(v.update(1 / 60, true, 0.5)).toBe(true); // an injection starts
+    expect(v.bump).toBeCloseTo(NITRO_RPM_BUMP, 5);
+    expect(v.update(1 / 60, true, 0.5)).toBe(false); // only once per injection
+    for (let i = 0; i < 120; i++) v.update(1 / 60, true, 0.5);
+    expect(v.bump).toBeLessThan(NITRO_RPM_BUMP * 0.05);
+    for (let i = 0; i < 300; i++) v.update(1 / 60, true, 0.5);
+    expect(v.bump).toBe(0);
+  });
+
+  it('the exhaust gets louder and brighter with the flow and goes back to neutral without it', () => {
+    const v = new NitrousVoiceState();
+    for (let i = 0; i < 120; i++) v.update(1 / 60, true, 1);
+    expect(v.exhaustMul).toBeCloseTo(1 + NITRO_EXHAUST_GAIN, 2);
+    expect(v.shelfDb).toBeCloseTo(NITRO_SHELF_DB, 1);
+    for (let i = 0; i < 240; i++) v.update(1 / 60, false, 0);
+    expect(v.exhaustMul).toBeCloseTo(1, 2);
+    expect(v.shelfDb).toBeCloseTo(0, 1);
+  });
+
+  it('a new injection (stage 2) bumps again', () => {
+    const v = new NitrousVoiceState();
+    v.update(1 / 60, true, 1);
+    for (let i = 0; i < 400; i++) v.update(1 / 60, true, 1);
+    v.update(1 / 60, false, 0);
+    expect(v.update(1 / 60, true, 1)).toBe(true);
+    expect(v.bump).toBeGreaterThan(0);
+  });
+
+  it('survives bad input', () => {
+    const v = new NitrousVoiceState();
+    v.update(Number.NaN, true, Number.NaN);
+    expect(Number.isFinite(v.bump) && Number.isFinite(v.flow)).toBe(true);
   });
 });
