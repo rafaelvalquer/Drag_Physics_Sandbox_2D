@@ -17,7 +17,8 @@ import {
 import { nitrousKitOf, validateNitrousTune } from './nitrousOverlay';
 import { overrevSpecOf, reliabilityLimits, reliabilityLevel, type ReliabilityLevel, type ReliabilityLimits } from './EngineReliability';
 import type { OverrevSpec } from '../../../physics/engine/EngineOverrevFailure';
-import { findPart, type EcuPart, type PartDef } from './parts';
+import { mappedKit } from './BuildResolverV2';
+import { findPart, type EcuPart, type PartDef, type TurboPart } from './parts';
 
 /**
  * Dyno Lab capabilities: which settings a build can take, from the parts really installed.
@@ -199,7 +200,7 @@ export function tuningCapabilities(base: CarConfig, partIds: readonly string[], 
       boost = { enabled: true, reason: null, min: round(factoryBoost + lo, 0.01), max, step, default: Math.min(max, round(def, 0.01)) };
     }
   } else if (conversion && 'boostRangeBar' in conversion) {
-    const [min, max] = conversion.boostRangeBar;
+    const [min, max] = mappedKit(conversion as TurboPart, ecuPart).boostRangeBar;
     boost = { enabled: true, reason: null, min, max, step: 0.01, default: max };
   } else if (classicRange) {
     const def = e.turbo?.maxBoostBar ?? 0.6;

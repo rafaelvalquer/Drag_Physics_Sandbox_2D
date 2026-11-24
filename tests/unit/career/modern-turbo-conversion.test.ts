@@ -99,3 +99,43 @@ describe('conversões turbo modernas', () => {
     expect((await reloaded.buyPart(kits[1]!.id)).ok).toBe(false);
   }, 60_000);
 });
+
+describe('mapas turbo da conversão', () => {
+  it.each(cars)('%s: cada mapa rende mais que o anterior sobre o mesmo kit e exige o kit do seu Stage', (id) => {
+    const { car, kits, family } = kitFor(id);
+    for (const [index, kit] of kits.entries()) {
+      const tier = index + 1;
+      const ids = [...support(family, tier), kit.id];
+      const alone = resolveBuild(car, ids, {}, 2);
+      if (!alone.ok) throw new Error(alone.errors.join('\n'));
+      let lastCv = alone.peakPowerCv;
+      for (const map of [1, 2, 3]) {
+        const mapped = resolveBuild(car, [...ids, `ecu-conversion-${family}-s${map}`], {}, 2);
+        if (map > tier) {
+          expect(mapped.ok ? [] : mapped.errors).toContainEqual(expect.stringContaining(`conversão turbo Stage ${map} ou superior`));
+          continue;
+        }
+        if (!mapped.ok) throw new Error(`${kit.id} + mapa S${map}: ${mapped.errors.join('\n')}`);
+        expect(mapped.peakPowerCv).toBeGreaterThan(lastCv);
+        expect(mapped.car.engine.turbo!.maxBoostBar).toBeGreaterThan(kit.turbo.maxBoostBar);
+        lastCv = mapped.peakPowerCv;
+      }
+    }
+    const top = [...support(family, 3), kits[2]!.id, `ecu-conversion-${family}-s3`];
+    const boost = tuningCapabilities(car, top, 2).boost;
+    expect(boost.max).toBeCloseTo(kits[2]!.boostRangeBar[1] + 0.22);
+    expect(resolveBuild(car, top, { boostBar: boost.max }, 2).ok).toBe(true);
+  }, 120_000);
+
+  it('o mapa turbo exige a conversão e o remap aspirado fica de fora com o kit', () => {
+    const { car, kits, family } = kitFor('nissan-370z-2014');
+    const noKit = resolveBuild(car, [`ecu-conversion-${family}-s1`], {}, 2);
+    expect(noKit.ok ? [] : noKit.errors).toContainEqual(expect.stringContaining('exige a conversão turbo instalada'));
+    const ids = [...support(family, 1), kits[0]!.id];
+    for (const na of ['ecu-v6-na', `ecu-map-${family}-s1`]) {
+      const r = resolveBuild(car, [...ids, na], {}, 2);
+      expect(r.ok ? [] : r.errors, na).toContainEqual(expect.stringContaining('remova o remap aspirado'));
+    }
+    expect(resolveBuild(car, [...ids, `ecu-conversion-${family}-s1`], {}, 2).ok).toBe(true);
+  });
+});

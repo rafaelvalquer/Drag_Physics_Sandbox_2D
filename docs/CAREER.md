@@ -166,6 +166,15 @@ ter peças só dele: basta cadastrar a família e as peças, sem mexer no resolv
     potência nos carros do Capítulo 2 (320i: 184 → 292 cv, 425 N·m, 1,70 bar). Pede o downpipe, a turbina de maior
     fluxo (≥ 1,4×), intercooler ≥ 80 %, internos forjados ≥ 1,45× e alimentação ≥ 1,32× (a oficina lista o que falta).
   - Cada estágio rende mais que o anterior em todas as 12 famílias turbo; o Stage 3 passa do ECU programável.
+- **Mapas turbo da conversão (Stage 1 a 3):** os motores aspirados com conversão turbo da oficina (Astra, Civic Si,
+  350Z, 370Z) usam mapas próprios (`ecu-conversion-<família>-s1|s2|s3`: Rua, Esportivo e Competição). Os remaps
+  aspirados (`ecu-map-<família>-*`, Remap aspirado V6, Remap aspirado) são recusados com o kit, e o mapa turbo é
+  recusado sem ele. Cada mapa pede a conversão do mesmo Stage ou superior. Sobre o kit, ele soma +0,08/+0,15/+0,22 bar
+  à pressão alvo (e ao teto do ajuste no Dyno Lab), melhora a ignição em 1,2/2,2/3,2 % e corta o atraso por detonação
+  em 8/15/22 %. O torque fica limitado pelo que os internos e a embreagem seguram (gestão de torque do mapa, em vez
+  de recusar o build). A alimentação Stage 1–3 dessas famílias tem vazão para o kit com o mapa do mesmo estágio
+  (1,45×, 1,62× e 1,8×). Medido nos 402 m com o kit S3 e o apoio S3: 370Z 482 → 512 → 540 → 569 cv
+  (12,63 → 12,46 → 12,33 → 12,21 s). Nas quatro famílias, cada mapa ganha do anterior em todos os kits.
 - **Pressão do turbo e corte de giro em toda ECU:** qualquer ECU (mapa, remap ou programável) libera os dois ajustes
   no Dyno Lab, com faixa que cresce com o estágio. Pressão: Stage 1 até +0,25 bar sobre a de fábrica, Stage 2 +0,5,
   Stage 3 e programável +0,8 (sempre limitada pela wastegate, pelo combustível e pelos internos). Corte: Stage 1 até 35 %

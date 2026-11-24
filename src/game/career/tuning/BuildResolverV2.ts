@@ -15,6 +15,7 @@ import {
   type CamPart,
   type PartCategory,
   type PartDef,
+  type EcuPart,
   type TurboPart,
   type TurboUpgradePart,
 } from './parts';
@@ -77,6 +78,20 @@ export const POWERSHIFT_SHIFT_EXPONENT = 2;
 
 export function transmissionKindOf(car: CarConfig): TransmissionKind {
   return car.transmission.kind ?? 'manual';
+}
+
+/**
+ * The turbo kit as the converted engine runs it: a conversion map (`EcuPart.conversionTier`) raises
+ * the kit's target and the top of its dyno range by the map's `boostAddBar`.
+ */
+export function mappedKit(kit: TurboPart, ecu: EcuPart | undefined): TurboPart {
+  if (!kit.conversion || !ecu?.conversionTier || !ecu.boostAddBar) return kit;
+  const add = ecu.boostAddBar;
+  return {
+    ...kit,
+    turbo: { ...kit.turbo, maxBoostBar: Math.round((kit.turbo.maxBoostBar + add) * 100) / 100 },
+    boostRangeBar: [kit.boostRangeBar[0], Math.round((kit.boostRangeBar[1] + add) * 100) / 100],
+  };
 }
 
 /** Why a part does not fit a car (pt-BR), or null when it fits. */
@@ -267,9 +282,14 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   } else {
     // NA engine (or a Chapter 1 engine with a v2 part): breathing model
     if (tune.boostBar !== undefined && !turboKit) return { ok: false, errors: ['ajuste de pressão sem turbo instalado'] };
+    if (ecu?.conversionTier && !conversion) return { ok: false, errors: [`${ecu.name} exige a conversão turbo instalada`] };
     if (turboKit) {
-      if (conversion && ecu?.fuelTargetScale !== undefined && ecu.compat?.induction === 'NA')
-        errors.push('a conversão turbo exige remover o remap aspirado');
+      // a converted engine runs the turbo maps; the NA remaps (family maps, V6 remap) do not know the kit
+      if (conversion && ecu && !ecu.conversionTier)
+        errors.push('com a conversão turbo, use um Mapa turbo (Stage 1–3): remova o remap aspirado');
+      const kitTier = turboKit.progression?.tier ?? 0;
+      if (ecu?.conversionTier && kitTier < ecu.conversionTier)
+        errors.push(`${ecu.name} exige a conversão turbo Stage ${ecu.conversionTier} ou superior`);
       const fuel = engineFuel(base.engine);
       const max = Math.min(TURBO_MAX_COMPRESSION[fuel], conversion?.maxCompressionRatio ?? Infinity);
       const cr = base.engine.compressionRatio + compressionAdd;
@@ -284,8 +304,8 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
         if (!bySlot.has('cooling-oil')) errors.push('a conversão exige arrefecimento de óleo reforçado');
       }
       if (tune.boostBar !== undefined) {
-        const [lo, hi] = turboKit.boostRangeBar;
-        if (!(tune.boostBar >= lo && tune.boostBar <= hi)) return { ok: false, errors: [`pressão fora da faixa do kit (${fmtBar(lo)} a ${fmtBar(hi)} bar)`] };
+        const [lo, hi] = mappedKit(turboKit, ecu).boostRangeBar;
+        if (!(tune.boostBar >= lo && tune.boostBar <= hi + 1e-9)) return { ok: false, errors: [`pressão fora da faixa do kit (${fmtBar(lo)} a ${fmtBar(hi)} bar)`] };
       }
       if (errors.length) return { ok: false, errors };
     }
@@ -303,17 +323,19 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
       manifold: get('intake-manifold'),
       cam,
       exhaust,
-      turbo: turboKit,
+      turbo: turboKit && mappedKit(turboKit, ecu),
       boostBar: tune.boostBar,
       head: get('cylinder-head'),
       compressionAdd: compressionAdd || undefined,
       ignitionGain: ecu?.ignitionGain,
       // New profiles include the spring limit. A remap may use the larger safe range, not add a second spring kit.
       revLimitAddRpm: cam?.progression && ecuRevAdd !== undefined ? Math.max(0, ecuRevAdd - cam.revLimitAddRpm) : ecuRevAdd,
-      mod: sectionParts.length || ignition || pistons?.frictionScale || genericMod.coolingFrictionScale || genericMod.coolingKnockScale
+      mod: sectionParts.length || ignition || ecu?.knockRetardScale || pistons?.frictionScale || genericMod.coolingFrictionScale || genericMod.coolingKnockScale
         ? {
             ...exhaustMod,
             ...ignitionMod,
+            // the conversion map's calibration also spares ignition retard against knock
+            ...(ecu?.knockRetardScale ? { knockRetardScale: (ignitionMod?.knockRetardScale ?? 1) * ecu.knockRetardScale } : {}),
             ...(genericMod.coolingFrictionScale || pistons?.frictionScale ? { coolingFrictionScale: (genericMod.coolingFrictionScale ?? 1) * (pistons?.frictionScale ?? 1) } : {}),
             ...(genericMod.coolingKnockScale ? { coolingKnockScale: genericMod.coolingKnockScale } : {}),
           }
@@ -366,6 +388,18 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   if (fly) car.engine.inertiaKgM2 = Math.round(car.engine.inertiaKgM2 * fly.inertiaScale * 10000) / 10000;
   // lighter reciprocating/rotating parts of a forged set
   if (pistons?.inertiaScale) car.engine.inertiaKgM2 = Math.round(car.engine.inertiaKgM2 * pistons.inertiaScale * 10000) / 10000;
+
+  // a conversion map manages torque at what the rotating assembly and a manual clutch carry,
+  // instead of overloading them
+  if (conversion && ecu?.conversionTier) {
+    const clutchNm = Math.round(Math.round(base.transmission.clutch.maxTorqueNm * (get('clutch')?.capacityScale ?? 1)) * (get('gearbox')?.capacityScale ?? 1));
+    const lim = Math.min(
+      ENGINE_FAMILIES[fam]!.internalsTorqueNm * (pistons?.torqueLimitScale ?? 1),
+      transmissionKindOf(base) === 'manual' ? clutchNm / CLUTCH_TORQUE_MARGIN : Infinity,
+    );
+    mappedTorqueLimitNm = lim;
+    car.engine.torqueCurve = { ...car.engine.torqueCurve, torqueNm: car.engine.torqueCurve.torqueNm.map((t) => Math.min(t, lim)) };
+  }
 
   if (meteredFuel) {
     const original = factoryFuelSupply(base.engine);

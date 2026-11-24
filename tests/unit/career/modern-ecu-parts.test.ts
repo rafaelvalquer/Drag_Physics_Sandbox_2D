@@ -67,6 +67,6 @@ describe('mapas de ECU modernos', () => {
     ];
     expect(resolveBuild(civic, converted, {}, 2).ok).toBe(true);
     const mismatch = resolveBuild(civic, [...converted, 'ecu-map-honda-k20-s1'], {}, 2);
-    expect(mismatch.ok ? [] : mismatch.errors).toContainEqual(expect.stringContaining('remover o remap aspirado'));
+    expect(mismatch.ok ? [] : mismatch.errors).toContainEqual(expect.stringContaining('remova o remap aspirado'));
   }, 60_000);
 });

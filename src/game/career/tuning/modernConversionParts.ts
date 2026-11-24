@@ -1,7 +1,7 @@
 import { CHAPTER2_CARS } from '../../../data/cars/chapter2/index';
 import { CHAPTER3_CARS } from '../../../data/cars/chapter3/index';
 import { modernStageRelease } from './modernStageRelease';
-import type { CompressionPart, ExpandedPart, TurboPart } from './parts';
+import type { CompressionPart, EcuPart, ExpandedPart, TurboPart } from './parts';
 
 interface ConversionProfile {
   pressure: readonly [number, number, number];
@@ -18,7 +18,7 @@ const profiles: Readonly<Record<string, ConversionProfile>> = {
   'nissan-vq37vhr': { pressure: [0.29, 0.42, 0.55], spool: 0.58, chargeVolumeL: 3, compression: 9.9 },
 };
 const tiers = [1, 2, 3] as const;
-const fuelCapacity = [1.32, 1.44, 1.58] as const;
+const fuelCapacity = [1.45, 1.62, 1.8] as const;
 const fmt = (n: number): string => n.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
 
 export function conversionFuelCapacity(family: string, tier: 1 | 2 | 3): number | undefined {
@@ -27,7 +27,7 @@ export function conversionFuelCapacity(family: string, tier: 1 | 2 | 3): number 
 
 export const MODERN_CONVERSION_PARTS = ([2, 3] as const).flatMap((chapter) => {
   const cars = chapter === 2 ? CHAPTER2_CARS : CHAPTER3_CARS;
-  return cars.flatMap((car): (TurboPart | CompressionPart | ExpandedPart)[] => {
+  return cars.flatMap((car): (TurboPart | CompressionPart | ExpandedPart | EcuPart)[] => {
     const family = car.engine.family!;
     const profile = profiles[family];
     if (!profile) return [];
@@ -97,6 +97,33 @@ export const MODERN_CONVERSION_PARTS = ([2, 3] as const).flatMap((chapter) => {
         },
       };
     });
-    return [...(compressionAdd < 0 ? [chamber] : []), oil, ...kits];
+    // turbo maps for the converted engine: more pressure over the kit's target, ignition advance and
+    // knock margin from the calibration, a little more rev limit; each needs the kit of its stage or above
+    const maps = tiers.map((tier): EcuPart => {
+      const boostAddBar = [0.08, 0.15, 0.22][tier - 1]!;
+      const ignitionGain = [0.012, 0.022, 0.032][tier - 1]!;
+      const knockRetardScale = [0.92, 0.85, 0.78][tier - 1]!;
+      const revLimitAddRpm = [0, 120, 240][tier - 1]!;
+      return {
+        id: `ecu-conversion-${family}-s${tier}`,
+        category: 'ecu',
+        level: (['stage1', 'stage2', 'stage3'] as const)[tier - 1]!,
+        name: `Mapa turbo ${['Rua', 'Esportivo', 'Competição'][tier - 1]} Stage ${tier}`,
+        ...modernStageRelease(chapter, tier),
+        price: price([1700, 3000, 4600][tier - 1]!),
+        since: 2,
+        compat,
+        progression: { tier, group: 'modern-conversion-ecu', specialization: 'turbo' },
+        description: 'Calibração de ignição, mistura e pressão para o motor convertido com o kit turbo da oficina.',
+        physics: `Com a conversão turbo Stage ${tier} ou superior: pressão alvo +${fmt(boostAddBar)} bar sobre a do kit, ignição ${fmt(ignitionGain * 100)}% melhor no trabalho indicado e ${fmt((1 - knockRetardScale) * 100)}% menos atraso por detonação${revLimitAddRpm ? `; até ${revLimitAddRpm} rpm a mais de corte onde o trem de válvulas permite` : ''}.`,
+        boostAddBar,
+        torqueLimitFraction: 1,
+        ignitionGain,
+        revLimitAddRpm,
+        conversionTier: tier,
+        knockRetardScale,
+      };
+    });
+    return [...(compressionAdd < 0 ? [chamber] : []), oil, ...kits, ...maps];
   });
 });

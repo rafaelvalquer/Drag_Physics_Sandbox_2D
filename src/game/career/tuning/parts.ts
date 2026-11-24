@@ -394,6 +394,13 @@ export interface EcuPart extends PartBase {
   forgedAboveFraction?: number;
   /** Staged map: torque target at most this multiple of the factory peak torque. */
   stockTorqueGainMax?: number;
+  /**
+   * Turbo map of an NA engine converted with a turbo kit (`conversion-turbo-<family>-sN`): it needs the
+   * kit of this stage or above, raises the kit's target by `boostAddBar` and its slider by as much.
+   */
+  conversionTier?: 1 | 2 | 3;
+  /** Knock retard the map's ignition calibration avoids (multiplies the kit's loss per bar). */
+  knockRetardScale?: number;
 }
 
 /** Larger-flow (hybrid) turbocharger for a factory-turbo engine. */
