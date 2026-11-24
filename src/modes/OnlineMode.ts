@@ -54,6 +54,7 @@ export class OnlineMode implements Mode {
   private driving = false;
   private mounted = false;
   private busy = false;
+  private disposeScreen?: () => void;
   private readonly pendingOperations = new Map<string, string>();
   private readonly cleanups: (() => void)[] = [];
 
@@ -82,6 +83,7 @@ export class OnlineMode implements Mode {
   unmount(): void {
     this.mounted = false;
     this.leaveRoom();
+    this.disposeScreen?.();
     this.reconnectNote?.remove();
     this.root.remove();
     this.cleanups.splice(0).forEach((cleanup) => cleanup());
@@ -137,10 +139,14 @@ export class OnlineMode implements Mode {
 
   private show(title: string, content: HTMLElement, navigation?: HTMLElement): void {
     if (!this.mounted) return;
+    this.disposeScreen?.();
+    this.disposeScreen = undefined;
     this.root.hidden = false;
     this.root.replaceChildren(h('main', { class: 'career-screen' }, h('header', {},
       h('div', { class: 'career-title' }, h('h1', {}, title)),
-      this.garage && h('div', { class: 'career-status' }, h('span', {}, this.garage.profile.nickname),
+      this.garage && h('div', { class: 'career-status' },
+        this.garage.profile.avatar_url && h('img', { class: 'online-avatar', src: this.garage.profile.avatar_url, alt: '', referrerpolicy: 'no-referrer' }),
+        h('span', {}, this.garage.profile.nickname),
         h('span', {}, `${this.garage.profile.cr_balance.toLocaleString('pt-BR')} CR`), h('span', {}, `${this.garage.profile.rp} RP`))),
     navigation, content));
   }
@@ -228,13 +234,19 @@ export class OnlineMode implements Mode {
     const car = garage.cars.find((item) => item.id === this.carId);
     const section = new Map([['tree', 'Preparação'], ['workshop', 'Oficina'], ['dyno', 'Dinamômetro'], ['history', 'Histórico']] as const);
     let content: HTMLElement;
+    let dispose: (() => void) | undefined;
     if (this.screen === 'Classificados') content = market(garage.profile.cr_balance, this.mutate);
     else if (this.screen === 'Ranking' || this.screen === 'Histórico') content = this.records();
     else if (this.screen === 'Preparação' && car) content = preparationTree(car, this.mutate, this.focusNode);
     else if (this.screen === 'Oficina' && car) content = workshop(garage, car, this.mutate, (node) => this.navigate('Preparação', car.id, node));
-    else if (this.screen === 'Dinamômetro' && car) content = onlineDyno(car, (tune) => this.mutate({ kind: 'tune', carId: car.id, buildRevision: car.build_revision, tune }));
+    else if (this.screen === 'Dinamômetro' && car) {
+      const view = onlineDyno(car, (tune) => this.mutate({ kind: 'tune', carId: car.id, buildRevision: car.build_revision, tune }));
+      content = view.element;
+      dispose = view.dispose;
+    }
     else content = garageCards(garage, this.mutate, (chosen, project) => this.navigate(section.get(project)!, chosen.id));
     this.show(this.screen, content, this.navigation());
+    this.disposeScreen = dispose;
     if (this.focusNode) requestAnimationFrame(() => document.getElementById(`online-node-${this.focusNode}`)?.scrollIntoView({ block: 'nearest' }));
   }
 
@@ -404,6 +416,10 @@ export class OnlineMode implements Mode {
     const setup = this.renderer?.loading;
     if (!result || !setup) return;
     const { award, snapshot } = result;
+    if (this.garage && award.crAfter !== undefined && award.rpAfter !== undefined) {
+      this.garage.profile.cr_balance = award.crAfter;
+      this.garage.profile.rp = award.rpAfter;
+    }
     const carId = setup.ownCarId;
     const car = this.garage?.cars.find((item) => item.id === carId);
     const next = car && PREPARATION_TREES.get(car.base_car_id)?.nodes.find((node) => !car.unlocks.includes(node.id) &&

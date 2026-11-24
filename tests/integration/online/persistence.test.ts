@@ -122,10 +122,11 @@ it('protege cadastro, inventário, saldos, PP, histórico e liquidação da corr
 });
 
 it('valida tokens pelo JWKS e completa um lobby competitivo com reconexão', async () => {
-  const users = [randomUUID(), randomUUID()] as const;
-  await sql`insert into auth.users (id) values (${users[0]}), (${users[1]})`;
+  const users = [randomUUID(), randomUUID(), randomUUID()] as const;
+  await sql`insert into auth.users (id) values (${users[0]}), (${users[1]}), (${users[2]})`;
   await garage.create(identity(users[0]), { ...onboarding, nickname: 'Rede A' });
   await garage.create(identity(users[1]), { ...onboarding, nickname: 'Rede B', baseCarId: ONLINE_STARTERS[1] });
+  await garage.create(identity(users[2]), { ...onboarding, nickname: 'Rede C', baseCarId: ONLINE_STARTERS[2] });
   const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
   const kid = randomUUID();
   const jwks = { keys: [{ ...publicKey.export({ format: 'jwk' }), kid, alg: 'ES256', use: 'sig', key_ops: ['verify'] }] };
@@ -172,6 +173,14 @@ it('valida tokens pelo JWKS e completa um lobby competitivo com reconexão', asy
     await expect(networks[0]!.joinOrCreate(COMPETITIVE_ROOM)).rejects.toThrow();
     const right = await networks[1]!.joinOrCreate(COMPETITIVE_ROOM);
     expect(left.roomId).toBe(right.roomId);
+    const waiting = await networks[2]!.joinOrCreate(COMPETITIVE_ROOM);
+    expect(waiting.roomId).not.toBe(left.roomId);
+    const thirdState = await new Promise<OnlineLobbyState>((resolve) => {
+      waiting.onMessage('lobby', resolve);
+      waiting.send('sync');
+    });
+    expect(thirdState.phase).toBe('queue');
+    await waiting.leave();
     const attemptedPurchase = { operationId: randomUUID(), operation: { kind: 'buy', baseCarId: ONLINE_STARTERS[0] } };
     expect((await request('/v1/garage', tokens[0], attemptedPurchase)).status).toBe(409);
     const lanes = new Set<number>();

@@ -1,10 +1,12 @@
 import { randomInt, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { ClientState, ErrorCode, Room, ServerError, type AuthContext, type Client } from '@colyseus/core';
+import { WebSocketClient } from '@colyseus/ws-transport';
 import { z } from 'zod';
 import { TRACKS } from '../../data/tracks';
 import { AuthoritativeRace } from '../../game/online/AuthoritativeRace';
 import { ONLINE_SNAPSHOT_HZ, RaceInputSchema, type OnlineLobbyState, type OnlineLoadingState, type OnlineRaceSnapshot } from '../../game/online/contracts';
+import { inputDelayTicks } from '../../game/online/inputTiming';
 import { PHYSICS_DT } from '../../game/SimulationRunner';
 import type { Authenticate, OnlineIdentity } from './auth';
 import type { OnlineGarage } from './garage';
@@ -31,6 +33,9 @@ interface Driver {
   loaded: boolean;
   connected: boolean;
   renewing: boolean;
+  rttSamples: number[];
+  nextProbeAt: number;
+  delayTicks: number;
 }
 
 const track = TRACKS[0]!;
@@ -92,7 +97,7 @@ export function competitiveRaceRoom(services: Services) {
       });
       this.onMessage('input', RaceInputSchema, (client, input) => {
         const driver = this.drivers.get(client.sessionId);
-        if (this.stage === 'race' && driver?.connected && driver.identity.expiresAtMs > Date.now()) this.simulation?.submit(driver.lane, input);
+        if (this.stage === 'race' && driver?.connected && driver.identity.expiresAtMs > Date.now()) this.simulation?.submit(driver.lane, input, driver.delayTicks);
       });
       this.onMessage('session', z.string().max(8_192), (client, token) => { void this.renewSession(client, token); });
     }
@@ -111,8 +116,9 @@ export function competitiveRaceRoom(services: Services) {
           identity, lane, nickname: garage.profile.nickname, rp: garage.profile.rp,
           cars: garage.cars.map((car) => ({ id: car.id, name: car.config.name, powerCv: car.peakPowerCv, torqueNm: car.peakTorqueNm })),
           carId: garage.cars.some((car) => car.id === garage.profile.active_car_id) ? garage.profile.active_car_id : garage.cars[0]!.id,
-          confirmed: false, loaded: false, connected: true, renewing: false,
+          confirmed: false, loaded: false, connected: true, renewing: false, rttSamples: [], nextProbeAt: 0, delayTicks: 0,
         });
+        this.probeRtt(client, this.drivers.get(client.sessionId)!);
         if (this.drivers.size === 2) {
           this.stage = 'lobby';
           this.deadline = Date.now() + services.lobbySeconds * 1_000;
@@ -193,6 +199,7 @@ export function competitiveRaceRoom(services: Services) {
         for (const client of this.clients) {
           const driver = this.drivers.get(client.sessionId);
           if (driver && driver.identity.expiresAtMs <= now) client.leave(4003, 'Sessão online expirada.');
+          else if (driver && this.stage !== 'race') this.probeRtt(client, driver);
         }
       }
       if (this.deadline === null || now < this.deadline) return;
@@ -200,6 +207,22 @@ export function competitiveRaceRoom(services: Services) {
         if (this.ordered().every((driver) => driver.connected)) void this.prepare();
         else void this.finish(null, 'Seleção encerrada com um piloto desconectado.');
       } else if (this.stage === 'loading') void this.finish(null, 'Tempo limite de carregamento.');
+    }
+
+    private probeRtt(client: Client, driver: Driver): void {
+      if (!(client instanceof WebSocketClient) || client.readyState !== 1 || performance.now() < driver.nextProbeAt) return;
+      const nonce = Buffer.from(randomUUID());
+      const sentAt = performance.now();
+      driver.nextProbeAt = sentAt + 750;
+      const onPong = (payload: Buffer) => {
+        if (!payload.equals(nonce)) return;
+        client.ref.off('pong', onPong);
+        driver.rttSamples.push(performance.now() - sentAt);
+        if (driver.rttSamples.length > 8) driver.rttSamples.shift();
+      };
+      client.ref.on('pong', onPong);
+      this.clock.setTimeout(() => client.ref.off('pong', onPong), 650);
+      client.ref.ping(nonce, false, (error?: Error) => { if (error) client.ref.off('pong', onPong); });
     }
 
     private sendAllStates(): void { for (const client of this.clients) this.sendState(client); }
@@ -245,6 +268,9 @@ export function competitiveRaceRoom(services: Services) {
 
     private maybeStartRace(): void {
       if (this.stage !== 'loading' || !this.simulation || !this.ordered().every((driver) => driver.loaded && driver.connected)) return;
+      const drivers = this.ordered();
+      const rtt = drivers.map((driver) => driver.rttSamples.length > 0 ? Math.min(...driver.rttSamples) : undefined);
+      drivers.forEach((driver) => { driver.delayTicks = inputDelayTicks(rtt[driver.lane], rtt[1 - driver.lane]); });
       this.stage = 'race';
       this.deadline = null;
       this.broadcast('snapshot', { ...this.simulation.snapshot(), sentAt: Date.now() });
@@ -286,7 +312,8 @@ export function competitiveRaceRoom(services: Services) {
         console.error('online-match-settlement', { matchId: this.matchId, code: error instanceof Error ? error.name : 'unknown' });
         this.broadcast('cancelled', { reason: 'Falha ao persistir o resultado da partida.' });
       } finally {
-        if (snapshot?.tick) console.info('online-race-metrics', { matchId: this.matchId, ticks: snapshot.tick, meanStepMs: this.stepCostMs / snapshot.tick, droppedMs: this.droppedMs });
+        if (snapshot?.tick) console.info('online-race-metrics', { matchId: this.matchId, ticks: snapshot.tick, meanStepMs: this.stepCostMs / snapshot.tick,
+          droppedMs: this.droppedMs, inputDelayTicks: this.ordered().map((driver) => driver.delayTicks) });
         this.stage = 'done';
         for (const driver of this.drivers.values()) this.releaseAccount(driver.identity.id);
         this.clock.setTimeout(() => { void this.disconnect(); }, 5_000);

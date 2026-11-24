@@ -16,6 +16,8 @@ export interface OnlineAward {
   pp: number;
   ppBefore: number;
   ppAfter: number;
+  crAfter?: number;
+  rpAfter?: number;
   reason: string | null;
 }
 
@@ -55,12 +57,14 @@ export class OnlineMatches {
       if (!match) return [];
       const players = await tx<{
         user_id: string; car_id: string; lane: 0 | 1; outcome: Outcome | null; cr_reward: number;
-        rp_delta: number; pp_reward: number; reward_reason: string | null; details: { ppBefore?: number; ppAfter?: number } | null;
+        rp_delta: number; pp_reward: number; reward_reason: string | null;
+        details: { ppBefore?: number; ppAfter?: number; crAfter?: number; rpAfter?: number } | null;
       }[]>`select user_id, car_id, lane, outcome, cr_reward, rp_delta, pp_reward, reward_reason, details
         from online_match_players where match_id = ${matchId} order by lane`;
       if (match.status !== 'running') return players.map((player) => ({
         outcome: player.outcome ?? 'cancelled', cr: player.cr_reward, rp: player.rp_delta, pp: player.pp_reward,
-        ppBefore: player.details?.ppBefore ?? 0, ppAfter: player.details?.ppAfter ?? 0, reason: player.reward_reason,
+        ppBefore: player.details?.ppBefore ?? 0, ppAfter: player.details?.ppAfter ?? 0,
+        crAfter: player.details?.crAfter, rpAfter: player.details?.rpAfter, reason: player.reward_reason,
       }));
       if (players.length !== 2) throw new Error(`Partida ${matchId} sem duas faixas persistidas.`);
       if (snapshot && snapshot.matchId !== matchId) throw new Error('Resultado de outra partida.');
@@ -119,14 +123,14 @@ export class OnlineMatches {
         const result = snapshot?.lanes[lane].result;
         await tx`update online_match_players set outcome = ${outcome}, cr_reward = ${cr}, pp_reward = ${pp}, rp_delta = ${rp}, reward_reason = ${reason ?? null},
           reaction_time = ${result?.rt ?? null}, elapsed_time = ${result?.et ?? null}, total_time = ${result?.total ?? null}, trap_speed = ${result?.trapMs ?? null},
-          details = ${tx.json({ ...result, ppBefore, ppAfter })} where match_id = ${matchId} and lane = ${lane}`;
+          details = ${tx.json({ ...result, ppBefore, ppAfter, crAfter: wallet!.cr_balance, rpAfter: stats!.rp })} where match_id = ${matchId} and lane = ${lane}`;
         if (!cancelled) {
           await tx`insert into online_currency_ledger (user_id, car_id, currency, amount, balance_after, reason, reference_id, idempotency_key)
             values (${userId}, ${carId}, 'CR', ${cr}, ${wallet!.cr_balance}, ${outcome}, ${matchId}, ${matchId}),
                    (${userId}, null, 'RP', ${rp}, ${stats!.rp}, ${outcome}, ${matchId}, ${matchId}),
                    (${userId}, ${carId}, 'PP', ${pp}, ${ppAfter}, ${outcome}, ${matchId}, ${matchId})`;
         }
-        awards.push({ outcome, cr, rp, pp, ppBefore, ppAfter, reason: reason ?? null });
+        awards.push({ outcome, cr, rp, pp, ppBefore, ppAfter, crAfter: wallet!.cr_balance, rpAfter: stats!.rp, reason: reason ?? null });
       }
       await tx`update online_matches set status = ${cancelled ? 'cancelled' : 'completed'}, finished_at = now(),
         winner_user_id = ${winner === null ? null : users[winner]!}, cancellation_reason = ${cancellationReason ?? null} where id = ${matchId}`;

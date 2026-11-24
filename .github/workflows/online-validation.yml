@@ -1,0 +1,45 @@
+name: Multiplayer online validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'supabase/**'
+      - 'tests/online-browser/**'
+      - 'package*.json'
+      - 'playwright.online.config.ts'
+      - 'Dockerfile'
+      - '.github/workflows/online-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  online-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e:online
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: online-browser-results
+          path: test-results/
+          if-no-files-found: ignore
+
+  server-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --tag drag-physics-online:test .
+      - run: docker run --rm --entrypoint node drag-physics-online:test --import tsx --input-type=module -e "await import('./src/server/online/server.ts')"

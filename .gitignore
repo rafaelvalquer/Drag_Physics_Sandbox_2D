@@ -1,5 +1,6 @@
 node_modules/
 dist/
+dist-online-test/
 test-results/
 playwright-report/
 *.log

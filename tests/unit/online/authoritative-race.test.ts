@@ -6,6 +6,7 @@ import { careerResolverVersion } from '../../../src/game/career/tuning/resolverV
 import { AuthoritativeRace } from '../../../src/game/online/AuthoritativeRace';
 import { RaceInputSchema, type RaceInput } from '../../../src/game/online/contracts';
 import { ONLINE_STARTERS, stockOnlineBuild } from '../../../src/game/online/demoCatalog';
+import { inputDelayTicks } from '../../../src/game/online/inputTiming';
 
 function newRace() {
   return new AuthoritativeRace(randomUUID(), [
@@ -96,5 +97,25 @@ describe('corrida autoritativa', () => {
     expect(firstLaunchCommand).toBeDefined();
     expect(firstAppliedThrottle).toBeDefined();
     expect(firstAppliedThrottle! - firstLaunchCommand!).toBeLessThanOrEqual(oneWayTicks + 3);
+  });
+
+  it('limita a compensação em recepção, sem aplicar comandos retroativos', () => {
+    expect(inputDelayTicks(undefined, 250)).toBe(0);
+    expect(inputDelayTicks(250, 20)).toBe(0);
+    expect(inputDelayTicks(20, 250)).toBe(12);
+    const race = newRace();
+    const lagA = Math.round(20 * 0.06);
+    const lagB = Math.round(250 * 0.06);
+    const base = { matchId: race.matchId, sequence: 0, observedTick: 0, throttle: 0.6 };
+    for (let tick = 0; tick < lagB; tick++) {
+      if (tick === lagA) expect(race.submit(0, base, inputDelayTicks(20, 250))).toBe(true);
+      if (tick < lagA + 12) expect(race.race.raceLanes[0]!.sim.controls.pedal).toBe(0);
+      race.step();
+    }
+    expect(race.race.raceLanes[0]!.sim.controls.pedal).toBe(0.6);
+    expect(race.submit(1, base, inputDelayTicks(250, 20))).toBe(true);
+    race.step();
+    expect(race.race.raceLanes[1]!.sim.controls.pedal).toBe(0.6);
+    expect(lagB - lagA - 12).toBeLessThanOrEqual(2);
   });
 });

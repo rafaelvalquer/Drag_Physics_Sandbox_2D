@@ -5,14 +5,20 @@ import { PROOF_ROOM } from '../../../src/server/online/ProofRaceRoom';
 import { startProofServer } from '../../../src/server/online/proofServer';
 
 it('dois clientes WebSocket controlam faixas distintas e recebem o mesmo resultado', async () => {
+  const pairCount = Number(process.env.ONLINE_PROOF_PAIRS ?? 1);
+  if (!Number.isInteger(pairCount) || pairCount < 1 || pairCount > 16) throw new Error('ONLINE_PROOF_PAIRS deve ficar entre 1 e 16.');
   const server = await startProofServer(0);
   try {
     const address = server.transport.server?.address();
     if (!address || typeof address === 'string') throw new Error('Servidor sem porta TCP');
     const endpoint = `http://127.0.0.1:${address.port}`;
-    const rooms = await Promise.all([new Client(endpoint), new Client(endpoint)].map((client) => client.joinOrCreate(PROOF_ROOM)));
-    const lanes = new Set<number>();
-    const results = rooms.map((room) => new Promise<OnlineRaceSnapshot>((resolve, reject) => {
+    const pairs = [];
+    for (let pair = 0; pair < pairCount; pair++) {
+      pairs.push(await Promise.all([new Client(endpoint), new Client(endpoint)].map((client) => client.joinOrCreate(PROOF_ROOM))));
+    }
+    expect(pairs.every(([first, second]) => first?.roomId === second?.roomId)).toBe(true);
+    expect(new Set(pairs.map(([room]) => room?.roomId)).size).toBe(pairCount);
+    const results = pairs.map((rooms) => rooms.map((room) => new Promise<{ lane: number | undefined; result: OnlineRaceSnapshot }>((resolve, reject) => {
       let lane: 0 | 1 | undefined;
       let sequence = 0;
       let lastInputMs = 0;
@@ -21,7 +27,6 @@ it('dois clientes WebSocket controlam faixas distintas e recebem o mesmo resulta
       room.onLeave(() => reject(new Error('Conexão encerrada antes do resultado')));
       room.onMessage('assignment', (assignment: { lane: 0 | 1 }) => {
         lane = assignment.lane;
-        lanes.add(lane);
       });
       room.onMessage('snapshot', (snapshot: OnlineRaceSnapshot) => {
         if (lane === undefined) return;
@@ -39,14 +44,15 @@ it('dois clientes WebSocket controlam faixas distintas e recebem o mesmo resulta
       });
       room.onMessage('result', (result: OnlineRaceSnapshot) => {
         console.info('race-proof-client', { lane, snapshots: snapshotIntervals.length + 1, meanIntervalMs: snapshotIntervals.reduce((a, b) => a + b, 0) / snapshotIntervals.length });
-        resolve(result);
+        resolve({ lane, result });
       });
       room.send('ready');
-    }));
-    const [first, second] = await Promise.all(results);
-    expect(lanes).toEqual(new Set([0, 1]));
-    expect(first).toEqual(second);
-    expect(first?.lanes.every((lane) => lane.result.et !== null && !lane.result.redLight)).toBe(true);
+    })));
+    for (const [first, second] of await Promise.all(results.map((pair) => Promise.all(pair)))) {
+      expect(new Set([first?.lane, second?.lane])).toEqual(new Set([0, 1]));
+      expect(first?.result).toEqual(second?.result);
+      expect(first?.result.lanes.every((lane) => lane.result.et !== null && !lane.result.redLight)).toBe(true);
+    }
   } finally {
     await server.gracefullyShutdown(false);
   }

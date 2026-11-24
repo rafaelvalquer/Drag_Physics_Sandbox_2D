@@ -1,4 +1,5 @@
 .online-screen[hidden] { display: none; }
+#overlay:has(> .online-screen) > .audio-gate { display: none; }
 .online-nav { margin-bottom: 1rem; }
 .online-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 245px), 1fr)); gap: 12px; }
 .online-card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
@@ -7,7 +8,9 @@
 .online-card header { display: flex; justify-content: space-between; gap: 1rem; align-items: baseline; }
 .online-card header span { color: var(--accent); white-space: nowrap; }
 .online-card canvas.garage-preview { display: block; margin: 6px auto; max-width: 100%; }
+.online-card canvas.dyno-bay { display: block; width: 100%; height: clamp(130px, 25vw, 250px); margin-bottom: 10px; }
 .online-card canvas[hidden] { display: none; }
+.online-avatar { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; }
 .online-card .row, .online-nav { flex-wrap: wrap; gap: 6px; }
 .online-small { max-width: 520px; }
 .online-small > label, .online-filters label { display: flex; flex-direction: column; gap: 4px; }

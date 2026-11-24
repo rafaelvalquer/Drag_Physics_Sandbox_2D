@@ -6,14 +6,28 @@ import type { Garage } from '../../game/online/OnlineClient';
 import { EngineDyno, type DynoPoint } from '../../physics/engine/EngineDyno';
 import { drawLineChart } from '../charts';
 import { h } from '../dom';
+import { DynoBayView } from '../dyno/DynoBayView';
 
-export function onlineDyno(car: Garage['cars'][number], save: (tune: BuildTune) => Promise<void>): HTMLElement {
+export function onlineDyno(car: Garage['cars'][number], save: (tune: BuildTune) => Promise<void>) {
   const factory = findCampaignCar(car.base_car_id)!;
   const caps = tuningCapabilities(factory, car.parts, car.build_version, { tunersUnlocked: true, exactBoostMax: true });
   const tune = { ...car.tune };
   const kit = nitrousKitOf(car.parts);
   const status = h('p', { role: 'status' });
   const chart = h('canvas', { class: 'online-dyno-chart', 'aria-label': 'Curvas de potência e torque' });
+  const bay = new DynoBayView();
+  const painted = car.paint ? { ...car.config, visual: { ...car.config.visual, color: car.paint } } : car.config;
+  void bay.setCar(painted).catch(() => { bay.canvas.hidden = true; });
+  let visualRpm = 0;
+  let previousFrame = performance.now();
+  let frame = requestAnimationFrame(updateBay);
+  function updateBay(now: number): void {
+    const dt = Math.min(0.1, (now - previousFrame) / 1_000);
+    previousFrame = now;
+    bay.update(dt, { rpm: visualRpm, running: visualRpm > 0, cranking: false });
+    visualRpm = Math.max(0, visualRpm - dt * 4_000);
+    frame = requestAnimationFrame(updateBay);
+  }
   const numerical = (field: keyof BuildTune, control: RangeControl): HTMLElement => {
     const input = h('input', { type: 'number', min: control.min, max: control.max, step: control.step, disabled: !control.enabled,
       value: typeof tune[field] === 'number' ? tune[field] : control.default, onchange: (event) => {
@@ -42,6 +56,7 @@ export function onlineDyno(car: Garage['cars'][number], save: (tune: BuildTune) 
         if (!build.ok) throw new Error(build.errors.join('. '));
         before ??= measure(car.config.engine);
         const after = measure(build.car.engine);
+        visualRpm = after.at(-1)?.rpm ?? 0;
         const peakPower = Math.max(...after.map((point) => point.powerCv));
         const peakTorque = Math.max(...after.map((point) => point.torqueNm));
         drawLineChart(chart, [
@@ -64,7 +79,7 @@ export function onlineDyno(car: Garage['cars'][number], save: (tune: BuildTune) 
       numerical('nitrousRampS', { enabled: true, reason: null, min: 0, max: range.rampMax, step: 0.01, default: defaults.rampS }),
     ];
   })() : [];
-  return h('section', { class: 'online-card' }, h('h2', {}, car.config.name),
+  const element = h('section', { class: 'online-card' }, h('h2', {}, car.config.name), bay.canvas,
     h('form', { onsubmit: (event) => { event.preventDefault(); void save(tune); } },
       h('div', { class: 'online-filters' }, [
         numerical('boostBar', caps.boost), numerical('revLimitRpm', caps.revLimit), numerical('launchRpm', caps.launch),
@@ -73,4 +88,5 @@ export function onlineDyno(car: Garage['cars'][number], save: (tune: BuildTune) 
       ]),
       h('div', { class: 'row' }, h('button', { type: 'submit', class: 'primary' }, 'Salvar acerto'))),
     run, status, chart);
+  return { element, dispose: () => { cancelAnimationFrame(frame); bay.dispose(); } };
 }

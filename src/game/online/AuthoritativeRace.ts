@@ -3,6 +3,7 @@ import type { OverrevSpec } from '../../physics/engine/EngineOverrevFailure';
 import { RaceController } from '../race/RaceController';
 import { PHYSICS_DT, SimulationRunner } from '../SimulationRunner';
 import type { OnlineLaneSnapshot, OnlineRaceSnapshot, RaceInput } from './contracts';
+import { MAX_INPUT_DELAY_TICKS } from './inputTiming';
 
 export interface OfficialBuild {
   car: CarConfig;
@@ -20,6 +21,7 @@ export class AuthoritativeRace {
   private readonly drivers = [0, 1].map(() => ({
     throttle: 0, nitrous: false, sequence: -1, lastInputTick: -INPUT_RELEASE_TICKS,
     shift: undefined as RaceInput['shift'],
+    pending: [] as { tick: number; input: RaceInput }[],
   }));
 
   constructor(readonly matchId: string, builds: readonly [OfficialBuild, OfficialBuild], track: TrackConfig, seed: number) {
@@ -35,20 +37,19 @@ export class AuthoritativeRace {
 
   get tick(): number { return this.runner.stats.steps; }
 
-  submit(lane: 0 | 1, input: RaceInput): boolean {
+  submit(lane: 0 | 1, input: RaceInput, delayTicks = 0): boolean {
     const driver = this.drivers[lane]!;
     if (this.race.phase === 'finished' || input.matchId !== this.matchId || input.sequence <= driver.sequence ||
         input.observedTick > this.tick || this.tick - input.observedTick > MAX_OBSERVATION_AGE_TICKS) return false;
     driver.sequence = input.sequence;
-    driver.lastInputTick = this.tick;
-    driver.throttle = input.throttle;
-    driver.nitrous = input.nitrous ?? false;
-    driver.shift ??= input.shift;
+    const nextTick = this.tick + Math.min(MAX_INPUT_DELAY_TICKS, Math.max(0, delayTicks));
+    driver.pending.push({ tick: Math.max(nextTick, driver.pending.at(-1)?.tick ?? nextTick), input });
     return true;
   }
 
   release(lane: 0 | 1): void {
-    Object.assign(this.drivers[lane]!, { throttle: 0, nitrous: false, shift: undefined });
+    Object.assign(this.drivers[lane]!, { throttle: 0, nitrous: false, shift: undefined, lastInputTick: -INPUT_RELEASE_TICKS });
+    this.drivers[lane]!.pending.length = 0;
     this.race.raceLanes[lane]!.sim.stopNitrous();
   }
 
@@ -56,7 +57,17 @@ export class AuthoritativeRace {
     if (this.race.phase === 'finished') return;
     const results = this.race.results;
     this.drivers.forEach((driver, index) => {
-      if (this.tick - driver.lastInputTick >= INPUT_RELEASE_TICKS) this.release(index as 0 | 1);
+      while (driver.pending[0] && driver.pending[0].tick <= this.tick) {
+        const { input } = driver.pending.shift()!;
+        driver.lastInputTick = this.tick;
+        driver.throttle = input.throttle;
+        driver.nitrous = input.nitrous ?? false;
+        driver.shift ??= input.shift;
+      }
+      if (this.tick - driver.lastInputTick >= INPUT_RELEASE_TICKS) {
+        driver.throttle = 0;
+        driver.nitrous = false;
+      }
       const sim = this.race.raceLanes[index]!.sim;
       const result = results[index]!;
       sim.nitrousHeld = !result.finished && !result.dnf && driver.nitrous;
