@@ -4,7 +4,7 @@ import { findCampaignCar } from '../data/cars/campaign';
 import type { CarConfig, TrackConfig } from '../data/schema';
 import { CAREER_TRACKS, findCareerTrack } from '../data/tracks/career';
 import { AI_PROFILES, DragAI } from '../game/ai/DragAI';
-import { CareerController, buildVersionFor, parseInventoryEntry } from '../game/career/CareerController';
+import { CareerController, buildVersionFor } from '../game/career/CareerController';
 import { REGIONS, eventsOf, findEvent, rivalOf, type CareerEventDef, type RivalDef } from '../game/career/CareerEvents';
 import { availableFreeTiers, FREE_CLASS_GATES } from '../game/career/freeEvents/FreeEventCatalog';
 import { freeEligibility, toFreeRaceOffer } from '../game/career/freeEvents/FreeEventService';
@@ -15,17 +15,11 @@ import {
   eventStatus,
   isChapterComplete,
   isChapterUnlocked,
-  isPartUnlocked,
   nextEvent,
-  partStatus,
-  partChapter,
-  stockStatus,
-  partRequirements,
   unlocksOf,
 } from '../game/career/CareerProgression';
 import { CHAPTER_1_ID, CHAPTER_2_ID, CHAPTER_3_ID, CHAPTERS, chapterOf, nextChapterOf, type ChapterId } from '../game/career/chapters';
 import { CLASSIC_CARS, DEALER_CARS, offerAvailability, resaleValue } from '../game/career/chapter2/dealer';
-import { familyOf, incompatibility } from '../game/career/tuning/BuildResolverV2';
 import { CareerRepository, CareerTabLock } from '../game/career/CareerRepository';
 import { evaluateRace, type Comment } from '../game/career/CareerResultEvaluator';
 import { DEFAULT_SLOT, STARTER_CARS, type CareerRaceResult, type FreeRaceResult, type OutcomeSchema, type OwnedCar, type RunSummary } from '../game/career/CareerState';
@@ -34,17 +28,11 @@ import type { RaceRecord } from '../game/career/CareerController';
 import { TelemetryProbe, runHeadlessRace } from '../game/career/headlessRace';
 import { ownedCarBuild, ownedCarConfig, ownedCarLook, rivalBuild, rivalCar } from '../game/career/RivalBuildFactory';
 import { BUILD_RESOLVER_VERSION, resolveBuild, type BuildResult } from '../game/career/tuning/BuildResolver';
-import { compareTorqueBands } from '../game/career/tuning/breathingModel';
 import type { BuildTune } from '../game/career/tuning/buildCommon';
 import { failureSpecFor, reconcileTune, tuneReliability } from '../game/career/tuning/TuningCapabilities';
-import { ISSUE_LABEL } from '../game/career/tuning/buildIssues';
-import { planInstall, type InstallPlan } from '../game/career/tuning/ProjectRequirements';
 import { playBlownEngine, playRiskWarning } from '../audio/core/blownEngineSound';
-import { ALL_PARTS, CATEGORY_DESCRIPTION, CATEGORY_LABEL, CATEGORY_ORDER_V1, UNLOCK_LABEL, WORKSHOP_TABS, findPart, type NitrousKitPart, type PartCategory, type PartDef } from '../game/career/tuning/parts';
-import { progressionOf } from '../game/career/tuning/partProgression';
-import { factoryFuelSupply } from '../game/career/tuning/fuelDelivery';
+import { UNLOCK_LABEL, findPart, type NitrousKitPart } from '../game/career/tuning/parts';
 import { RACE_DISTANCES, RaceController, type LaneResult, type RaceLane } from '../game/race/RaceController';
-import { runAccelerationTest } from '../game/race/accelerationTest';
 import type { CameraMode, RenderVehicle, TrackMarker, TreeLights } from '../game/scenes/RaceScene';
 import { TREE_X_M } from '../game/scenes/worldScale';
 import { PHYSICS_DT, SimulationRunner } from '../game/SimulationRunner';
@@ -83,6 +71,9 @@ import { buildFreeEvents } from '../ui/career/screens/CareerFreeEventsScreen';
 import { buildGarage, type GarageStats } from '../ui/career/screens/CareerGarageScreen';
 import { buildShell, type NavItem } from '../ui/career/screens/CareerShell';
 import { CareerTransitionManager } from '../ui/career/motion/CareerTransitionManager';
+import { buildWorkshopVisual, type WorkshopVisualView } from '../ui/career/workshop-visual/WorkshopVisualController';
+import { WorkshopVisualState } from '../ui/career/workshop-visual/WorkshopVisualState';
+import '../ui/career/workshop-visual/workshop-visual.css';
 import { menuViewModel } from '../ui/career/menu/CareerMenuProgress';
 
 type Screen = 'menu' | 'choose' | 'garage' | 'workshop' | 'dyno' | 'events' | 'free-events' | 'free-rival' | 'free-result' | 'free-history' | 'rival' | 'race' | 'result' | 'ending' | 'history' | 'market' | 'chapters';
@@ -121,10 +112,6 @@ function resolveOwned(car: OwnedCar, parts: readonly string[], tune = keptTune(c
   return resolveBuild(findCampaignCar(car.baseCarId)!, parts, tune, buildVersionFor(car, parts));
 }
 
-interface Estimate {
-  t100: number | null;
-  t402: number | null;
-}
 
 /**
  * Campaign mode — chapter 1 "Madrugada Zero" and chapter 2 "Liga da Madrugada" (one career, one
@@ -158,9 +145,6 @@ export class CareerMode implements Mode {
   private previews: GarageVehiclePreview[] = [];
   private menuAnim: CareerMenuAnimations | null = null;
   private readonly transition = new CareerTransitionManager();
-  private workshopTab = WORKSHOP_TABS[0]!.id;
-  private selectedPart: string | null = null;
-  private readonly estimates = new Map<string, Estimate>();
   private seed = 1;
   /** Race in progress. */
   private current: ({
@@ -274,6 +258,8 @@ export class CareerMode implements Mode {
     this.menuAnim?.dispose();
     this.menuAnim = null;
     this.transition.cancel();
+    this.workshopView?.dispose();
+    this.workshopView = null;
     clear(this.root);
     this.root.classList.toggle('hidden', screen === 'race');
     this.root.dataset.screen = screen;
@@ -286,7 +272,8 @@ export class CareerMode implements Mode {
     if (screen === 'menu') {
       this.menuAnim = new CareerMenuAnimations(body, reduced);
       this.menuAnim.play();
-    } else this.transition.enter(body, reduced);
+    } else if (screen === 'workshop') (this.workshopView as WorkshopVisualView | null)?.attach(this.transition.enterWorkshop(body, reduced));
+    else this.transition.enter(body, reduced);
   }
 
   private renderScreen(screen: Screen): HTMLElement {
@@ -359,14 +346,6 @@ export class CareerMode implements Mode {
       { id: 'history', label: 'Histórico', icon: 'history', on: () => this.show('history') },
       { id: 'chapters', label: 'Capítulos', icon: 'chapters', locked: ch2 ? null : 'Conclua o capítulo 1 para liberar', on: () => this.show('chapters') },
     ];
-  }
-
-  private nav(...items: [string, string, () => void, boolean?][]): HTMLElement {
-    return h(
-      'nav',
-      { class: 'career-nav' },
-      items.map(([label, testid, on, primary]) => h('button', { class: primary ? 'primary' : '', 'data-testid': testid, onclick: on }, label)),
-    );
   }
 
   private guard(): boolean {
@@ -499,7 +478,6 @@ export class CareerMode implements Mode {
       toast(r.error, 'error');
       return;
     }
-    this.estimates.clear();
     this.playScenes('start', undefined, () => this.show('garage'));
   }
 
@@ -547,7 +525,6 @@ export class CareerMode implements Mode {
       toast(r.error, 'error');
       return;
     }
-    this.estimates.clear();
     this.playScenes('start', undefined, () => this.show('garage'));
   }
 
@@ -747,490 +724,40 @@ export class CareerMode implements Mode {
 
   // ------------------------------------------------------------------ workshop
 
-  private estimate(b: BuildResult): Estimate | null {
-    if (!b.ok) return null;
-    const hit = this.estimates.get(b.key);
-    if (hit) return hit;
-    return null;
-  }
+  /** The visual workshop (src/ui/career/workshop-visual): the UI state survives visits, the view does not. */
+  private readonly workshopState = new WorkshopVisualState();
+  private workshopView: WorkshopVisualView | null = null;
 
-  private computeEstimate(b: BuildResult): Estimate | null {
-    if (!b.ok) return null;
-    const hit = this.estimates.get(b.key);
-    if (hit) return hit;
-    const track = findCareerTrack('avenida-norte');
-    const r = runAccelerationTest(b.car, track, { speedsKmh: [100], distancesM: [402], maxS: 30 });
-    const e = { t100: r.speedTimes.get(100) ?? null, t402: r.distanceTimes.get(402) ?? null };
-    this.estimates.set(b.key, e);
-    return e;
-  }
-
-  /**
-   * Workshop layout: build identity / category rail / grouped subcategory cards / inspector.
-   * All state comes from CareerSave; stock items represent an empty physical slot.
-   */
   private workshopScreen(): HTMLElement {
-    const s = this.controller.save!;
-    const car = this.controller.activeCar!;
-    const family = familyOf(findCampaignCar(car.baseCarId)!);
-    const visible = this.visibleParts(car);
-    // a category is shown when it has parts for this car; a car of resolver version 1 keeps every
-    // chapter 1 slot (its factory part), exactly as the chapter 1 workshop showed it
-    const legacy = buildVersionFor(car, car.installedParts) === 1;
-    const catVisible = (c: PartCategory): boolean => visible.some((p) => p.category === c) || (legacy && CATEGORY_ORDER_V1.includes(c));
-    const tabs = WORKSHOP_TABS.map((t) => ({ ...t, categories: t.categories.filter(catVisible) })).filter((t) => t.categories.length);
-    const tab = tabs.find((t) => t.id === this.workshopTab) ?? tabs[0]!;
-    const before = ownedCarBuild(car);
-    const allInTab = visible.filter((p) => tab.categories.includes(p.category));
-    const stockSel = this.selectedPart?.startsWith('stock:') ? this.selectedPart.slice(6) as PartCategory : null;
-    const sel = stockSel ? undefined : (this.selectedPart ? findPart(this.selectedPart) : allInTab[0]);
-    const equipped = car.installedParts.map((id) => findPart(id)).filter((p): p is PartDef => !!p);
-    const kit = equipped.find((p) => p.category === 'turbo');
-    const highestTier = equipped.reduce((top, p) => Math.max(top, p.chapter ?? 1), 1);
-    const stage = kit ? (highestTier >= 3 ? 'Stage 6 • Turbo preparado' : highestTier === 2 ? 'Stage 5 • Turbo street' : 'Stage 4 • Turbo básico')
-      : equipped.length >= 5 ? 'Stage 3 • Aspirado forte' : equipped.length >= 2 ? 'Stage 2 • Aspirado street' : equipped.length ? 'Stage 1 • Rua leve' : 'Original';
-    const metric = (label: string, value: string): HTMLElement => h('div', { class: 'ws-metric' }, h('small', {}, label), h('b', {}, value));
-    const overview = h(
-      'div', { class: 'ws-overview', 'data-testid': 'ws-overview' },
-      h('div', { class: 'ws-overview-identity' },
-        h('span', { class: 'ws-kicker' }, 'GARAGEM / PREPARAÇÃO'),
-        h('h2', {}, car.nickname),
-        h('div', { class: 'ws-stage' }, stage)),
-      h('div', { class: 'ws-metrics' },
-        metric('POTÊNCIA', before.ok ? `${f1(before.peakPowerCv)} cv` : '—'),
-        metric('TORQUE', before.ok ? `${f1(before.peakTorqueNm)} N·m` : '—'),
-        metric('ASPIRAÇÃO', before.ok && before.car.engine.induction === 'turbo' ? 'Turbo' : 'Aspirado'),
-        metric('SALDO', cr(s.credits)),
-        metric('REPUTAÇÃO', String(s.reputation)),
-        metric('CAPÍTULO', `${String(chapterOf(this.chapter).number).padStart(2, '0')} / ${String(CHAPTERS.length).padStart(2, '0')}`),
-      ),
-    );
-    const rail = h(
-      'aside', { class: 'ws-left' },
-      h('div', { class: 'ws-preview' }, this.preview(ownedCarConfig(car), 320, 168, 'studio', 0.88)),
-      h('span', { class: 'ws-sidebar-title' }, 'SISTEMAS DO VEÍCULO'),
-      h(
-        'nav', { class: 'ws-tabs', 'aria-label': 'Sistemas da oficina' },
-        tabs.map((t) => h('button', {
-          class: t.id === tab.id ? 'tab active' : 'tab',
-          'data-testid': `ws-tab-${t.id}`,
-          'aria-pressed': String(t.id === tab.id),
-          onclick: () => {
-            this.workshopTab = t.id;
-            this.selectedPart = null;
-            this.show('workshop');
-          },
-        },
-          h('span', { class: 'ws-tab-icon', 'aria-hidden': 'true' }, t.icon),
-          h('span', { class: 'ws-tab-copy' }, h('b', {}, t.label), h('small', {}, t.description)),
-          h('span', { class: 'ws-tab-count' }, String(car.installedParts.filter((id) => t.categories.includes(findPart(id)?.category as PartCategory)).length)),
-        )),
-      ),
-      h('div', { class: 'ws-rail-footer' }, `${equipped.length} modificações instaladas · ${s.inventoryPartIds.filter((e) => parseInventoryEntry(e).baseCarId === car.baseCarId).length} no estoque`),
-    );
-    const groups = tab.categories.map((cat, index) => {
-      const inSlot = equipped.find((p) => p.category === cat);
-      const categoryParts = allInTab.filter((p) => p.category === cat);
-      const positionByGroup = new Map<string, number>();
-      const ordered = categoryParts.map((p, index) => {
-        const progression = progressionOf(p, family, car.baseCarId);
-        const group = progression?.group ?? p.id;
-        const position = positionByGroup.get(group) ?? index;
-        positionByGroup.set(group, position);
-        return { p, progression, position };
-      }).sort((a, b) => a.position - b.position || (a.progression?.tier ?? 0) - (b.progression?.tier ?? 0));
-      const entries = ordered.map(({ p, progression }) => {
-        const st = partStatus(s, car, p, family);
-        return h('li', {
-          class: `ws-part-card ${sel?.id === p.id ? 'sel' : ''} ${st.state}`,
-          'data-testid': `ws-part-${p.id}`,
-          'data-state': st.state,
-          'data-tier': progression?.tier,
-          title: st.detail,
-          tabindex: '0', role: 'button',
-          onclick: () => { this.selectedPart = p.id; this.show('workshop'); },
-          onkeydown: (e: Event) => {
-            if (e instanceof KeyboardEvent && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); this.selectedPart = p.id; this.show('workshop'); }
-          },
-        },
-          h('div', { class: 'ws-part-head' },
-            h('span', { class: 'ws-part-name' }, p.name),
-            h('span', { class: `pill ${st.state}`, 'data-testid': `ws-pill-${p.id}` }, st.label)),
-          h('small', { class: 'ws-part-meta' },
-            `CAP. ${partChapter(p)} · ${cr(p.price)} · `,
-            progression ? `Stage ${progression.tier} · ${progression.specialization} · ` : null,
-            st.state === 'locked' ? st.detail : p.physics),
-        );
-      });
-      return h(
-        'section', { class: 'ws-group', 'data-testid': `ws-group-${cat}`, 'aria-label': CATEGORY_LABEL[cat] },
-        h('div', { class: 'ws-group-header' },
-          h('span', { class: 'ws-group-index' }, String(index + 1).padStart(2, '0')),
-          h('div', {}, h('h3', {}, CATEGORY_LABEL[cat]), h('p', {}, CATEGORY_DESCRIPTION[cat])),
-          h('span', { class: 'ws-installed-slot' }, inSlot ? 'EQUIPADO' : 'ORIGINAL')),
-        h('ul', { class: 'ws-parts' },
-          this.stockItem(car, cat, stockSel === cat),
-          ...entries,
-        ),
-      );
-    });
-    const catalog = h(
-      'main', { class: 'ws-center' },
-      h('div', { class: 'ws-section-title' },
-        h('div', {}, h('span', { class: 'ws-kicker' }, 'CATÁLOGO DE COMPONENTES'),
-          h('h2', {}, tab.label), h('p', {}, tab.description)),
-        h('span', { class: 'ws-count' }, `${tab.categories.length} grupos · ${allInTab.length} upgrades`)),
-      ...groups,
-    );
-    const detail = h(
-      'aside', { class: 'ws-right' },
-      h('div', { class: 'ws-inspector-head' },
-        h('span', { class: 'ws-kicker' }, 'INSPEÇÃO DE HARDWARE'),
-        h('span', { class: 'ws-inspector-indicator' }, '● SISTEMA ATIVO')),
-      stockSel ? this.stockDetail(stockSel, car, before) :
-      sel ? this.partDetail(sel, car, before) :
-      h('div', { class: 'hint' }, 'Escolha uma peça para comparar e instalar.'),
-    );
-    return this.frame('Oficina', 'career-workshop',
-      overview,
-      h('div', { class: 'ws' }, rail, catalog, detail),
-      this.nav(
-        ['Dinamômetro', 'ws-dyno', () => this.show('dyno')],
-        ...((car.installedParts.length ? [['Restaurar tudo ao original', 'ws-restore-all', () => void this.restoreAll(car.installedParts.length)]] : []) as [string, string, () => void][]),
-        ['Voltar à garagem', 'ws-back', () => this.show('garage'), true],
-      ),
-    );
-  }
-
-  /**
-   * Show hardware that fits this car even before its event or chapter unlock.
-   */
-  private visibleParts(car: OwnedCar): PartDef[] {
-    const base = findCampaignCar(car.baseCarId)!;
-    const v2 = buildVersionFor(car, car.installedParts) === 2;
-    return ALL_PARTS.filter((p) => {
-      if (car.installedParts.includes(p.id)) return true;
-      // version 2 compatibility rules apply to the cars resolved by version 2 and to v2 parts
-      if ((v2 || p.since === 2 || p.compat?.cars) && incompatibility(base, p)) return false;
-      return true;
-    });
-  }
-
-  private async restoreAll(n: number): Promise<void> {
-    if (!this.guard()) return;
-    if (!confirm(`Voltar o carro ao original? ${n === 1 ? 'A peça vai' : `As ${n} peças vão`} para o estoque e pode${n === 1 ? '' : 'm'} ser reinstalada${n === 1 ? '' : 's'} depois.`)) return;
-    const r = await this.controller.restoreStock();
-    if (!r.ok) toast(r.error, 'error');
-    else toast(r.notice ? `Carro de volta ao original. As peças estão no estoque. ${r.notice}` : 'Carro de volta ao original. As peças estão no estoque.');
-    this.selectedPart = null;
-    this.show('workshop');
-  }
-
-  /** List entry of the factory part of a slot. */
-  private stockItem(car: OwnedCar, cat: PartCategory, selected: boolean): HTMLElement {
-    const st = stockStatus(car, cat, (id) => findPart(id)?.category);
-    return h(
-      'li',
+    this.workshopView?.dispose();
+    const view = buildWorkshopVisual(
       {
-        class: `stock ${selected ? 'sel' : ''} ${st.state}`,
-        'data-testid': `ws-stock-${cat}`,
-        'data-state': st.state,
-        title: st.detail,
-        onclick: () => {
-          this.selectedPart = `stock:${cat}`;
-          this.show('workshop');
-        },
+        controller: this.controller,
+        guard: () => this.guard(),
+        audio: this.ctx.audio,
+        chapterNumber: () => chapterOf(this.chapter).number,
+        openDyno: () => this.show('dyno'),
+        back: () => this.show('garage'),
+        saveChanged: () => this.refreshStatus(),
+        toast,
+        confirm: (m) => confirm(m),
       },
-      h('div', { class: 'ws-part-head' }, h('span', {}, `${CATEGORY_LABEL[cat]} original`), h('span', { class: `pill ${st.state}`, 'data-testid': `ws-stock-pill-${cat}` }, st.label)),
-      h('small', {}, 'De fábrica · grátis'),
+      this.workshopState,
     );
+    this.workshopView = view;
+    return this.frame('Oficina', 'career-workshop', view.root);
   }
 
-  /** Detail of the factory part of a slot: what the car had from the factory, and the way back. */
-  private stockDetail(cat: PartCategory, car: OwnedCar, before: BuildResult): HTMLElement {
-    const base = findCampaignCar(car.baseCarId)!;
-    const inSlot = car.installedParts.filter((id) => findPart(id)?.category === cat);
-    const nextParts = car.installedParts.filter((id) => !inSlot.includes(id));
-    const after = resolveOwned(car, nextParts);
-    const button = inSlot.length
-      ? h(
-          'button',
-          {
-            class: 'primary',
-            'data-testid': 'ws-install-stock',
-            disabled: !after.ok,
-            onclick: () =>
-              void (async () => {
-                if (!this.guard()) return;
-                const r = await this.controller.restoreStock(cat);
-                if (!r.ok) toast(r.error, 'error');
-                else if (r.notice) toast(r.notice, 'error');
-                if (r.ok) toast(`${CATEGORY_LABEL[cat]} original instalado. ${inSlot.map((id) => findPart(id)!.name).join(', ')} foi para o estoque.`);
-                this.show('workshop');
-              })(),
-          },
-          'Instalar original (grátis)',
-        )
-      : h('div', { class: 'hint', 'data-testid': 'ws-stock-in-use' }, 'Em uso: o carro está com a peça de fábrica neste item.');
-    return h(
-      'div',
-      { class: 'ws-detail', 'data-testid': 'ws-detail' },
-      h('h3', {}, `${CATEGORY_LABEL[cat]} original`),
-      h('div', { class: 'price' }, 'Grátis'),
-      h('p', {}, stockSpec(base, cat)),
-      h('p', { class: 'physics' }, h('b', {}, 'Efeito físico: '), 'nenhuma modificação neste item — o resolvedor devolve exatamente a física de fábrica dele. As peças retiradas ficam no estoque deste carro.'),
-      inSlot.length ? this.compareTable(before, after, 'Original') : null,
-      h('div', { class: 'row' }, button),
-    );
-  }
-
-  /** Before/after table with simulated estimates (computed lazily and cached by build key). */
-  private compareTable(before: BuildResult, after: BuildResult, afterLabel: string): HTMLElement {
-    const cmpHost = h('div', { class: 'ws-compare', 'data-testid': 'ws-compare' });
-    const renderCompare = (): void => {
-      clear(cmpHost);
-      if (!before.ok) return;
-      if (!after.ok) {
-        // "Sem a peça" is the preview of REMOVING an installed part: the part is fine, other parts depend on it
-        const removing = afterLabel === 'Sem a peça';
-        cmpHost.append(h('div', { class: 'error', 'data-testid': 'ws-incompatible' }, removing ? `Não dá para remover esta peça: outras peças dependem dela. ${after.errors.join('; ')}` : `Incompatível: ${after.errors.join('; ')}`));
-        return;
-      }
-      const eb = this.estimate(before);
-      const ea = this.estimate(after);
-      /**
-       * Row with a change marker on the "after" cell: green ▲ when the change helps, red ▼ when it
-       * hurts, grey ◆ when it only changes (final drive). `better` says which direction helps.
-       */
-      const row = (label: string, a: string, b: string, va?: number, vb?: number, better: 'higher' | 'lower' | 'neutral' = 'higher', eps = 1e-6): HTMLElement => {
-        const cell = h('td', {}, b);
-        if (va !== undefined && vb !== undefined && Number.isFinite(va) && Number.isFinite(vb) && Math.abs(vb - va) > eps) {
-          const kind = better === 'neutral' ? 'neutral' : (vb > va) === (better === 'higher') ? 'up' : 'down';
-          const mark = kind === 'up' ? '▲' : kind === 'down' ? '▼' : '◆';
-          const aria = kind === 'up' ? 'melhora' : kind === 'down' ? 'piora' : 'muda';
-          cell.append(h('span', { class: `delta delta-${kind}`, 'data-testid': `delta-${kind}`, 'aria-label': aria, title: aria }, ` ${mark}`));
-        }
-        return h('tr', {}, h('td', {}, label), h('td', {}, a), cell);
-      };
-      const band = (x: Extract<BuildResult, { ok: true }>): [number, number] => {
-        const c = x.car.engine.torqueCurve;
-        const peak = Math.max(...c.torqueNm);
-        const r = c.rpm.filter((_, i) => c.torqueNm[i]! >= peak * 0.9);
-        return [r[0]!, r[r.length - 1]!];
-      };
-      const range = (x: Extract<BuildResult, { ok: true }>): string => {
-        const [lo, hi] = band(x);
-        return `${lo}–${hi} rpm`;
-      };
-      const width = (x: Extract<BuildResult, { ok: true }>): number => {
-        const [lo, hi] = band(x);
-        return hi - lo;
-      };
-      const changed = (label: string, a: number | undefined, b: number | undefined, format: (n: number) => string, better: 'higher' | 'lower' | 'neutral') =>
-        a === undefined || b === undefined || Math.abs(b - a) < 1e-6 ? null : row(label, format(a), format(b), a, b, better);
-      const t0 = before.car.transmission;
-      const t1 = after.car.transmission;
-      const torque = (n: number): string => `${f1(n)} N·m`;
-      const ms = (n: number): string => `${f1(n * 1000)} ms`;
-      const rpm = (n: number): string => n.toLocaleString('pt-BR');
-      const bandRows = compareTorqueBands(before.car.engine, after.car.engine)
-        .filter(({ beforeNm, afterNm }) => Math.abs(afterNm - beforeNm) >= 0.1)
-        .map(({ fromRpm, toRpm, beforeNm, afterNm }) =>
-          row(`Torque médio, ${rpm(fromRpm)}–${rpm(toRpm)} rpm`, torque(beforeNm), torque(afterNm), beforeNm, afterNm));
-      const turbo0 = before.car.engine.turbo;
-      const turbo1 = after.car.engine.turbo;
-      const fuel0 = before.car.engine.fueling;
-      const fuel1 = after.car.engine.fueling;
-      const fuelBase = fuel0 || fuel1 ? findCampaignCar(before.car.id) : undefined;
-      const originalFuelRate = fuelBase ? factoryFuelSupply(fuelBase.engine).maxFuelKgS : undefined;
-      cmpHost.append(
-        h(
-          'table',
-          { class: 'results' },
-          h('tr', {}, h('th', {}, ''), h('th', {}, 'Antes'), h('th', {}, afterLabel)),
-          row('Potência', `${f1(before.peakPowerCv)} cv`, `${f1(after.peakPowerCv)} cv`, before.peakPowerCv, after.peakPowerCv, 'higher', 0.05),
-          row('Torque', `${f1(before.peakTorqueNm)} N·m`, `${f1(after.peakTorqueNm)} N·m`, before.peakTorqueNm, after.peakTorqueNm, 'higher', 0.05),
-          ...bandRows,
-          row('Faixa útil (90 % do torque)', range(before), range(after), width(before), width(after), 'higher'),
-          row(t0.powershift ? 'Capacidade do câmbio' : 'Embreagem', torque(t0.clutch.maxTorqueNm), torque(t1.clutch.maxTorqueNm), t0.clutch.maxTorqueNm, t1.clutch.maxTorqueNm),
-          changed('Capacidade dos internos', before.internalTorqueLimitNm, after.internalTorqueLimitNm, torque, 'higher'),
-          changed('Taxa de compressão', before.car.engine.compressionRatio, after.car.engine.compressionRatio, (n) => `${f2(n)}:1`, 'neutral'),
-          changed('Rotação de largada', t0.clutch.launchRpm, t1.clutch.launchRpm, (n) => `${n} rpm`, 'neutral'),
-          changed('Constante de enchimento do turbo', turbo0?.spoolTimeS, turbo1?.spoolTimeS, ms, 'lower'),
-          changed('Temperatura da carga na pressão-alvo', before.chargeTemperatureAtTargetK, after.chargeTemperatureAtTargetK, (n) => `${f1(n - 273.15)} °C`, 'lower'),
-          changed('Pressão sem atraso por detonação', before.knockFreeBoostBar, after.knockFreeBoostBar, (n) => `${f2(n)} bar`, 'higher'),
-          changed('Fase de torque da troca', t0.powershift?.torquePhaseS, t1.powershift?.torquePhaseS, ms, 'lower'),
-          changed('Travamento do conversor', t0.torqueConverter?.lockup.maxTorqueNm, t1.torqueConverter?.lockup.maxTorqueNm, torque, 'higher'),
-          changed('Acoplamento central AWD', before.car.awd?.centerCouplingNm, after.car.awd?.centerCouplingNm, torque, 'higher'),
-          changed('Eficiência da transmissão', t0.efficiency, t1.efficiency, (n) => `${f1(n * 100)} %`, 'higher'),
-          changed('Vazão de combustível', fuel0?.maxFuelKgS ?? originalFuelRate, fuel1?.maxFuelKgS ?? originalFuelRate, (n) => `${f1(n * 1000)} g/s`, 'higher'),
-          changed('Corte', before.car.engine.revLimitRpm, after.car.engine.revLimitRpm, (n) => `${n} rpm`, 'neutral'),
-          changed('Massa', before.car.massKg, after.car.massKg, (n) => `${f1(n)} kg`, 'lower'),
-          row('Aderência (μ pico)', f2(before.car.tires.muPeak), f2(after.car.tires.muPeak), before.car.tires.muPeak, after.car.tires.muPeak, 'higher', 0.005),
-          row('Relação final', f3(before.car.transmission.finalDrive), f3(after.car.transmission.finalDrive), before.car.transmission.finalDrive, after.car.transmission.finalDrive, 'neutral', 0.0005),
-          row('0–100 km/h (estimativa)', eb ? `${f2(eb.t100)} s` : '…', ea ? `${f2(ea.t100)} s` : '…', eb?.t100 ?? undefined, ea?.t100 ?? undefined, 'lower', 0.005),
-          row('402 m (estimativa)', eb ? `${f2(eb.t402)} s` : '…', ea ? `${f2(ea.t402)} s` : '…', eb?.t402 ?? undefined, ea?.t402 ?? undefined, 'lower', 0.005),
-        ),
-        h('div', { class: 'hint' }, 'Estimativas simuladas com a física do jogo e piloto ideal na Avenida Norte; a corrida real depende da sua largada e das trocas.'),
-      );
-      if (!eb || !ea)
-        setTimeout(() => {
-          this.computeEstimate(before);
-          this.computeEstimate(after);
-          if (cmpHost.isConnected) renderCompare();
-        }, 30);
+  /** Updates the shell status (credits, reputation) after the save changed without rebuilding the screen. */
+  private refreshStatus(): void {
+    const s = this.controller.save;
+    if (!s) return;
+    const set = (id: string, text: string): void => {
+      const el = this.root.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+      if (el) el.textContent = text;
     };
-    renderCompare();
-    return cmpHost;
-  }
-
-  private partDetail(p: PartDef, car: OwnedCar, before: BuildResult): HTMLElement {
-    const s = this.controller.save!;
-    const installed = car.installedParts.includes(p.id);
-    const owned = s.inventoryPartIds.includes(`${p.id}@${car.baseCarId}`);
-    const fam = familyOf(findCampaignCar(car.baseCarId)!);
-    const unlocked = isPartUnlocked(s, p, fam);
-    const nextParts = installed ? car.installedParts.filter((x) => x !== p.id) : CareerController.withPart(car.installedParts, p.id).parts;
-    const after = resolveOwned(car, nextParts);
-    const reqs = partRequirements(p, fam).map((u) => `${UNLOCK_LABEL[u]}${unlocksOf(s).has(u) ? ' ✓' : ''}`);
-    const cmpHost = this.compareTable(before, after, installed ? 'Sem a peça' : 'Depois');
-    // what is missing to install it: the parts that fix each reported issue, found with the resolver
-    const plan = !installed && !after.ok ? this.planFor(p, car) : null;
-    const act = async (fn: () => Promise<{ ok: boolean; error?: string; notice?: string }>, okMsg: string): Promise<void> => {
-      if (!this.guard()) return;
-      const r = await fn();
-      if (!r.ok) toast(r.error ?? 'falhou', 'error');
-      else {
-        toast(okMsg);
-        if (r.notice) toast(r.notice, 'error');
-      }
-      this.show('workshop');
-    };
-    const buttons: HTMLElement[] = [];
-    if (installed) buttons.push(h('button', { 'data-testid': 'ws-remove', onclick: () => void act(() => this.controller.removePart(p.id), `${p.name} removida (vai para o estoque).`) }, 'Remover'));
-    else if (owned) buttons.push(h('button', { class: 'primary', 'data-testid': 'ws-install', onclick: () => void act(() => this.controller.installFromInventory(p.id), `${p.name} instalada.`) }, 'Instalar do estoque'));
-    else
-      buttons.push(
-        h(
-          'button',
-          { class: 'primary', 'data-testid': 'ws-buy', disabled: !unlocked || s.credits < p.price || !after.ok, title: !after.ok ? 'Faltam requisitos: veja a lista acima.' : undefined, onclick: () => void act(() => this.controller.buyPart(p.id), `${p.name} comprada e instalada.`) },
-          `Comprar e instalar (${cr(p.price)})`,
-        ),
-      );
-    return h(
-      'div',
-      { class: 'ws-detail', 'data-testid': 'ws-detail' },
-      h('h3', {}, p.name),
-      h('div', { class: 'price' }, cr(p.price)),
-      h('p', {}, p.description),
-      h('p', { class: 'physics' }, h('b', {}, 'Efeito físico: '), p.physics),
-      h('div', { class: 'hint' }, `Requisitos: ${reqs.join(' · ')}`),
-      h('div', { class: 'hint' }, `Compatibilidade: ${installed ? (after.ok ? 'instalada e removível' : 'instalada e compatível; outras peças dependem dela') : after.ok ? 'compatível com este carro' : 'faltam requisitos para instalar (veja abaixo)'}`),
-      plan ? this.requirementsPanel(plan, act) : '',
-      installed && p.category === 'nitrous'
-        ? h(
-            'div',
-            { class: 'nitro-info', 'data-testid': 'nitro-dyno-hint' },
-            h('span', {}, 'Ajuste a vazão e a entrada progressiva na aba Nitro do Dyno Lab e meça o efeito antes de aplicar.'),
-            h('button', { class: 'primary', 'data-testid': 'nitro-open-dyno', onclick: () => this.show('dyno') }, 'Abrir o Dyno Lab'),
-          )
-        : '',
-      cmpHost,
-      h('div', { class: 'row' }, buttons),
-    );
-  }
-
-  /** Install plan of a part on the active car (the part and the parts that make the build valid). */
-  private planFor(p: PartDef, car: OwnedCar): InstallPlan {
-    return planInstall({
-      base: findCampaignCar(car.baseCarId)!,
-      car,
-      save: this.controller.save!,
-      partId: p.id,
-      versionOf: (parts) => buildVersionFor(car, parts),
-    });
-  }
-
-  /**
-   * "What is missing" checklist: every part the build needs besides the selected one, with where it
-   * comes from (stock / price / locked), a shortcut to it and "install with requirements" (one atomic
-   * purchase). Settings the player must change (pressure, knock) are listed as open issues.
-   */
-  private requirementsPanel(plan: InstallPlan, act: (fn: () => Promise<{ ok: boolean; error?: string; notice?: string }>, okMsg: string) => Promise<void>): HTMLElement {
-    const extra = plan.steps.slice(1);
-    const rows = extra.map((st) => {
-      const why = st.resolves ? ISSUE_LABEL[st.resolves.code] : 'Requisito';
-      const where = st.source === 'stock' ? 'no seu estoque (grátis)' : st.state === 'locked' ? st.status.detail : cr(st.price);
-      return h(
-        'div',
-        { class: 'ws-req-row', 'data-testid': `ws-req-${st.partId}`, 'data-state': st.state, 'data-source': st.source },
-        h('span', { class: 'ws-req-mark', 'aria-hidden': 'true' }, st.source === 'stock' ? '✓' : '✗'),
-        h('span', { class: 'ws-req-text' }, h('b', {}, st.name), ` — ${why} · ${where}`),
-        h('button', { class: 'ws-req-go', 'data-testid': `ws-req-go-${st.partId}`, onclick: () => this.goToPart(st.partId) }, 'Ver peça'),
-      );
-    });
-    const open = plan.openIssues.map((i) =>
-      h('div', { class: 'ws-req-row open', 'data-testid': 'ws-req-open' }, h('span', { class: 'ws-req-mark', 'aria-hidden': 'true' }, '!'), h('span', { class: 'ws-req-text' }, i.message)),
-    );
-    const bundleIds = plan.steps.map((s) => s.partId);
-    const bundle = extra.length
-      ? h(
-          'button',
-          {
-            class: 'primary',
-            'data-testid': 'ws-install-bundle',
-            disabled: !plan.ok,
-            title: plan.blockers[0],
-            onclick: () => this.confirmBundle(plan, () => void act(() => this.controller.installBundle(bundleIds), `${bundleIds.length} peças instaladas.`)),
-          },
-          `Instalar com requisitos (${plan.steps.length} peças · ${cr(plan.cost)})`,
-        )
-      : '';
-    return h(
-      'div',
-      { class: 'ws-req', 'data-testid': 'ws-req-list' },
-      h('div', { class: 'ws-req-title' }, 'O que falta para instalar'),
-      ...rows,
-      ...open,
-      plan.blockers.length ? h('div', { class: 'ws-req-blockers', 'data-testid': 'ws-req-blockers' }, plan.blockers.join(' ')) : '',
-      bundle,
-    );
-  }
-
-  /** Selects a part (switching to its system tab) so the player can inspect or buy it. */
-  private goToPart(partId: string): void {
-    const p = findPart(partId);
-    if (!p) return;
-    const tab = WORKSHOP_TABS.find((t) => t.categories.includes(p.category));
-    if (tab) this.workshopTab = tab.id;
-    this.selectedPart = partId;
-    this.show('workshop');
-  }
-
-  /** Confirmation of a multi-part install: lists what comes from the stock and what is bought. */
-  private confirmBundle(plan: InstallPlan, onConfirm: () => void): void {
-    const s = this.controller.save!;
-    const close = (): void => back.remove();
-    const line = (st: InstallPlan['steps'][number]): HTMLElement =>
-      h('li', {}, `${st.name} — ${st.source === 'stock' ? 'do estoque (grátis)' : cr(st.price)}${st.replaces ? ` · ${findPart(st.replaces)?.name ?? st.replaces} vai para o estoque` : ''}`);
-    const back: HTMLElement = h(
-      'div',
-      { class: 'modal-backdrop', 'data-testid': 'ws-bundle-modal', onclick: (e: Event) => { if (e.target === back) close(); } },
-      h(
-        'div',
-        { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Instalar com requisitos' },
-        h('h3', {}, 'Instalar com requisitos'),
-        h('ul', { class: 'ws-bundle-list' }, ...plan.steps.map(line)),
-        h('p', {}, `Total: ${cr(plan.cost)} · saldo ${cr(s.credits)} → ${cr(s.credits - plan.cost)}. Tudo é instalado de uma vez; se algo falhar, nada é cobrado.`),
-        h(
-          'div',
-          { class: 'row' },
-          h('button', { 'data-testid': 'ws-bundle-cancel', onclick: close }, 'Cancelar'),
-          h('button', { class: 'primary', 'data-testid': 'ws-bundle-confirm', onclick: () => { close(); onConfirm(); } }, 'Confirmar'),
-        ),
-      ),
-    );
-    document.body.append(back);
+    set('career-credits', cr(s.credits));
+    set('career-reputation', `Reputação ${s.reputation}`);
   }
 
   // ------------------------------------------------------------------ dyno
@@ -1944,57 +1471,4 @@ function portraitEl(id: Parameters<typeof portraitSvg>[0]): HTMLElement {
   const d = h('div', { class: 'portrait', 'data-portrait': id });
   d.innerHTML = portraitSvg(id);
   return d;
-}
-
-/** What the factory fitted in a slot, from the catalogue car (never mutated). */
-function stockSpec(car: CarConfig, cat: PartCategory): string {
-  const e = car.engine;
-  switch (cat) {
-    case 'intake-filter':
-      return 'Filtro de ar de papel na caixa de ar original de fábrica.';
-    case 'intake-manifold':
-      return 'Coletor de admissão original, com os dutos e o plenum de fábrica.';
-    case 'camshaft':
-      return `Comando de válvulas original; corte de giro de fábrica em ${e.revLimitRpm} rpm.`;
-    case 'exhaust':
-      return 'Escapamento original de fábrica, com os abafadores da época.';
-    case 'turbo':
-      return e.induction === 'turbo' ? 'Turbo original de fábrica.' : 'Motor aspirado, como saiu de fábrica.';
-    case 'clutch':
-      return `Embreagem original: ${car.transmission.clutch.maxTorqueNm} N·m de capacidade.`;
-    case 'differential':
-      return `Relação final original: ${car.transmission.finalDrive.toFixed(3).replace('.', ',')}.`;
-    case 'tires':
-      return `Pneus de rua originais (μ de pico ${car.tires.muPeak.toFixed(2).replace('.', ',')}).`;
-    case 'ecu':
-      return e.turbo
-        ? `ECU original: pressão de fábrica ${e.turbo.maxBoostBar.toFixed(2).replace('.', ',')} bar e o limitador de torque da curva original.`
-        : `ECU original: corte em ${e.revLimitRpm} rpm.`;
-    case 'intercooler':
-      return 'Intercooler original de fábrica (≈ 60 % de eficiência).';
-    case 'boost-control':
-      return 'Solenoide original de controle da pressão.';
-    case 'turbo-wastegate':
-      return e.induction === 'turbo'
-        ? 'Atuador original: sustenta até 0,35 bar acima do alvo de fábrica.'
-        : 'Sem atuador separado na configuração original.';
-    case 'cylinder-head':
-      return 'Cabeçote original, dutos de fundição.';
-    case 'engine-compression':
-      return `Taxa de compressão original: ${e.compressionRatio.toFixed(2).replace('.', ',')}:1.`;
-    case 'pistons':
-      return `Pistões e bielas originais; taxa ${e.compressionRatio.toFixed(1).replace('.', ',')}:1.`;
-    case 'flywheel':
-      return `Volante original (inércia do motor ${e.inertiaKgM2.toFixed(3).replace('.', ',')} kg·m²).`;
-    case 'gearbox':
-      return car.transmission.kind === 'dual-clutch'
-        ? `Embreagens da dupla embreagem originais: ${car.transmission.clutch.maxTorqueNm} N·m.`
-        : `Elementos e conversor originais: ${car.transmission.clutch.maxTorqueNm} N·m.`;
-    case 'awd':
-      return car.awd ? `Diferencial central original: ${car.awd.centerCouplingNm} N·m de acoplamento.` : 'Sem tração integral.';
-    case 'suspension':
-      return 'Suspensão original de rua.';
-    default:
-      return `${CATEGORY_LABEL[cat]} original de fábrica: sem alteração de componentes.`;
-  }
 }

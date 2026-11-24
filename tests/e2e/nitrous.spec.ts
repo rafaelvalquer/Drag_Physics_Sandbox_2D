@@ -78,7 +78,7 @@ test('Dyno Lab: a aba Nitro regula o kit, mede o rascunho e aplica; a oficina sÃ
   await expect.poll(() => mode<string[]>(page, 'm.controller.activeCar.installedParts')).toContain('nitrous-street');
 
   // the Workshop no longer has the sliders, only the way to the Dyno Lab
-  await mode(page, `(m.selectedPart = 'nitrous-street', m.workshopTab = 'nitrous', m.show('workshop'))`);
+  await mode(page, `(m.workshopState.patch({ selected: 'nitrous-street', tab: 'nitrous' }), m.show('workshop'))`);
   await expect(page.getByTestId('nitro-dyno-hint')).toBeVisible();
   await expect(page.getByTestId('nitro-flow')).toHaveCount(0);
   await page.getByTestId('nitro-open-dyno').click();

@@ -142,7 +142,7 @@ test('campanha: escolha do carro, introdução, corrida visível, oficina, dinam
   await expect(page.getByTestId('ws-compare')).toContainText('402 m (estimativa)');
   await expect(page.getByTestId('ws-compare')).not.toContainText('…', { timeout: 30_000 });
   // change markers: the freer exhaust raises power (green ▲) and nothing it changes gets worse
-  const powerRow = page.getByTestId('ws-compare').locator('tr', { hasText: 'Potência' });
+  const powerRow = page.getByTestId('ws-compare').locator('tr', { hasText: 'Potência' }).first(); // the summary row (the advanced list repeats it)
   await expect(powerRow.getByTestId('delta-up')).toBeVisible();
   await expect(page.getByTestId('ws-compare').getByTestId('delta-down')).toHaveCount(0);
   // the shop text and the physical effect are two different texts

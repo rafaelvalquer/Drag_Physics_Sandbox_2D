@@ -9,7 +9,7 @@ import { buildVersionFor } from './CareerController';
  * Cars of the career, built by the same resolver for rivals and for the player: the rival's
  * advantage is its parts (bought by the same rules), never a hidden factor.
  */
-function painted(car: CarConfig, paint: { color: string; accent: string }, nickname?: string): CarConfig {
+export function painted(car: CarConfig, paint: { color: string; accent: string }, nickname?: string): CarConfig {
   return Object.freeze({ ...car, name: nickname ? `${nickname} — ${car.name}`.slice(0, 64) : car.name, visual: { ...car.visual, color: paint.color, accent: paint.accent } });
 }
 
