@@ -111,35 +111,37 @@ export function buildFxAtlas(): FxAtlas {
     ctx.ellipse(f.x + f.w * 0.52, f.y + f.h / 2, f.w * 0.48, f.h * 0.36, 0, 0, Math.PI * 2);
     ctx.fill();
   }
-  // nflame (N₂O): long blue-white tongue from the pipe (right edge) to the left, with shock diamonds
+  // nflame (N₂O): a slim jet from the pipe (right edge) to the left: faint blue envelope, cyan body, thin white core
   {
     const f = frames.nflame;
     const cy = f.y + f.h / 2;
-    const g = ctx.createLinearGradient(f.x + f.w, 0, f.x, 0);
-    g.addColorStop(0, 'rgba(255,255,255,1)');
-    g.addColorStop(0.2, 'rgba(190,230,255,0.95)');
-    g.addColorStop(0.55, 'rgba(70,150,255,0.6)');
-    g.addColorStop(1, 'rgba(30,80,255,0)');
     ctx.save();
     ctx.beginPath();
     ctx.rect(f.x, f.y, f.w, f.h);
     ctx.clip();
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.moveTo(f.x + f.w, cy - f.h * 0.16);
-    ctx.quadraticCurveTo(f.x + f.w * 0.55, cy - f.h * 0.46, f.x + 2, cy);
-    ctx.quadraticCurveTo(f.x + f.w * 0.55, cy + f.h * 0.46, f.x + f.w, cy + f.h * 0.16);
-    ctx.closePath();
-    ctx.fill();
-    for (let i = 0; i < 4; i++) {
-      const x = f.x + f.w * (0.8 - i * 0.17);
-      const r = f.h * (0.2 - i * 0.03);
-      const d = ctx.createRadialGradient(x, cy, 0, x, cy, r * 2);
-      d.addColorStop(0, 'rgba(255,255,255,0.9)');
-      d.addColorStop(1, 'rgba(120,190,255,0)');
+    const layer = (halfH: number, len: number, stops: [number, string][]): void => {
+      const g = ctx.createLinearGradient(f.x + f.w, 0, f.x + f.w - len, 0);
+      for (const [t, c] of stops) g.addColorStop(t, c);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(f.x + f.w, cy - halfH * 0.7);
+      ctx.quadraticCurveTo(f.x + f.w - len * 0.45, cy - halfH, f.x + f.w - len, cy);
+      ctx.quadraticCurveTo(f.x + f.w - len * 0.45, cy + halfH, f.x + f.w, cy + halfH * 0.7);
+      ctx.closePath();
+      ctx.fill();
+    };
+    layer(f.h * 0.46, f.w * 0.98, [[0, 'rgba(120,180,255,0.32)'], [0.5, 'rgba(60,120,255,0.14)'], [1, 'rgba(30,80,255,0)']]);
+    layer(f.h * 0.3, f.w * 0.8, [[0, 'rgba(190,235,255,0.75)'], [0.55, 'rgba(90,170,255,0.4)'], [1, 'rgba(60,130,255,0)']]);
+    layer(f.h * 0.12, f.w * 0.5, [[0, 'rgba(255,255,255,1)'], [0.6, 'rgba(200,235,255,0.7)'], [1, 'rgba(180,225,255,0)']]);
+    for (let i = 0; i < 3; i++) {
+      const x = f.x + f.w * (0.78 - i * 0.2);
+      const r = f.h * (0.1 - i * 0.025);
+      const d = ctx.createRadialGradient(x, cy, 0, x, cy, r * 2.2);
+      d.addColorStop(0, 'rgba(255,255,255,0.85)');
+      d.addColorStop(1, 'rgba(150,210,255,0)');
       ctx.fillStyle = d;
       ctx.beginPath();
-      ctx.ellipse(x, cy, r * 1.8, r, 0, 0, Math.PI * 2);
+      ctx.ellipse(x, cy, r * 2.2, r, 0, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();

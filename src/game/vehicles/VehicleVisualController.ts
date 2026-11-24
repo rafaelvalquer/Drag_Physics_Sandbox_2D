@@ -304,12 +304,12 @@ export class VehicleVisualController {
       p.nflame
         .setPosition(ex.x * PPM_BASE, -ex.y * PPM_BASE)
         .setRotation(rot)
-        .setScale((0.5 + 0.9 * ng) * (PPM_BASE / 40) * flick, (0.5 + 0.5 * ng) * (0.9 + 0.2 * Math.random()))
-        .setAlpha(Math.min(1, 0.55 + 0.45 * ng));
+        .setScale((0.2 + 0.45 * ng) * (PPM_BASE / 40) * flick, (0.35 + 0.25 * ng) * (0.9 + 0.2 * Math.random()))
+        .setAlpha(Math.min(0.95, 0.5 + 0.45 * ng));
       p.nglow
         .setPosition(ex.x * PPM_BASE - 0.15 * PPM_BASE, -ex.y * PPM_BASE)
-        .setScale((0.35 + 0.5 * ng) * (PPM_BASE / 40))
-        .setAlpha(0.8 * ng);
+        .setScale((0.12 + 0.14 * ng) * (PPM_BASE / 40))
+        .setAlpha(0.55 * ng);
     }
 
     this.last = { pitch: st.pitch, heave: st.heave, layers: { rear: lr, front: lf }, lights: lampsOn };
