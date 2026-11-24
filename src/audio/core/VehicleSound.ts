@@ -10,6 +10,9 @@ const MAX_FRAMES_PER_POST = 64;
 /** Per-channel mixer levels set by the user (Sandbox acoustic editor / settings). */
 export type ChannelMix = Record<(typeof CHANNELS)[number], number>;
 
+/** Level the voices fade to under the result of a race (not silence: a hint of the engine cooling down). */
+export const END_FADE_LEVEL = 0.05;
+
 export const DEFAULT_MIX: ChannelMix = {
   intake: 0.8,
   block: 0.7,
@@ -42,6 +45,9 @@ export class VehicleSound {
   private readonly panner: StereoPannerNode;
   private readonly delay: DelayNode;
   private readonly distanceGain: GainNode;
+  /** Overall level of the voice (the end of a race lowers it); independent of the distance and the mixer. */
+  private readonly fadeGain: GainNode;
+  private fadeTarget = 1;
   private batch = new Float64Array(MAX_FRAMES_PER_POST * AF.length);
   private batchCount = 0;
   private mix: ChannelMix = { ...DEFAULT_MIX };
@@ -93,7 +99,9 @@ export class VehicleSound {
     this.nitroShelf.connect(this.panner);
     this.panner.connect(this.delay);
     this.delay.connect(this.distanceGain);
-    this.distanceGain.connect(engine.master);
+    this.fadeGain = ctx.createGain();
+    this.distanceGain.connect(this.fadeGain);
+    this.fadeGain.connect(engine.master);
     VehicleSound.live++;
   }
 
@@ -121,6 +129,20 @@ export class VehicleSound {
     const exhaust = this.gains[CH.exhaust];
     exhaust?.gain.setTargetAtTime(this.mix.exhaust * v.exhaustMul, ctx.currentTime, 0.03);
     this.nitroShelf?.gain.setTargetAtTime(v.shelfDb, ctx.currentTime, 0.05);
+  }
+
+  /**
+   * Lowers (or restores) the whole voice smoothly: after the finish line the engine idles on, but the result screen should not
+   * sit on top of it. Cheap to call every frame: it only schedules when the target changes.
+   */
+  setFade(level: number, tauS = 0.6): void {
+    if (this.disposed) return;
+    const ctx = this.engine.ctx;
+    if (!ctx) return;
+    const l = Math.min(1, Math.max(0, Number.isFinite(level) ? level : 1));
+    if (l === this.fadeTarget) return;
+    this.fadeTarget = l;
+    this.fadeGain.gain.setTargetAtTime(l, ctx.currentTime, Math.max(0.02, tauS));
   }
 
   /** Queues one physics audio frame (AF layout). */
@@ -220,6 +242,7 @@ export class VehicleSound {
       this.panner.disconnect();
       this.delay.disconnect();
       this.distanceGain.disconnect();
+      this.fadeGain.disconnect();
     } catch {
       // already disconnected
     }

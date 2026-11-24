@@ -1,4 +1,4 @@
-import { VehicleSound } from '../audio/core/VehicleSound';
+import { END_FADE_LEVEL, VehicleSound } from '../audio/core/VehicleSound';
 import { carToAcousticConfig } from '../audio/dsp/AcousticConfig';
 import { CAR_GROUPS, CARS, LAB_CARS, cloneCar } from '../data/cars/index';
 import type { CarConfig, TrackConfig } from '../data/schema';
@@ -439,6 +439,9 @@ export class RaceMode implements Mode {
     this.runner.advance(dtS);
     this.renderList = this.views.render(this.runner.vehicles, dtS);
     this.views.spatialize(this.runner.vehicles, dtS);
+    // the race is over: the idling engines fade out under the result card, and come back with the next race
+    const over = this.race?.phase === 'finished';
+    for (const v of this.runner.vehicles) v.sound?.setFade(over ? END_FADE_LEVEL : 1);
     const race = this.race;
     const p = this.runner.player;
     if (this.messageT > 0) this.messageT -= dtS;
