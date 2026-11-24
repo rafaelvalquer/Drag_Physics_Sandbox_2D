@@ -17,7 +17,14 @@ const configSchema = z.object({
   SUPABASE_JWT_ISSUER: z.url().optional(),
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
   PORT: z.coerce.number().int().min(0).max(65_535).default(2567),
-  ALLOWED_ORIGINS: z.string().transform((value) => value.split(',').map((origin) => z.url().parse(origin.trim()).replace(/\/$/, ''))),
+  ALLOWED_ORIGINS: z.string().transform((value, ctx) => {
+    const origins = value.split(',').map((origin) => origin.trim().replace(/\/$/, ''));
+    if (origins.some((origin) => !z.url({ protocol: /^https?$/ }).safeParse(origin).success)) {
+      ctx.addIssue({ code: 'custom', message: 'Informe origens HTTP ou HTTPS separadas por vírgulas.' });
+      return z.NEVER;
+    }
+    return origins;
+  }),
   ONLINE_START_CREDITS: z.coerce.number().int().min(0).max(1_000_000).default(ONLINE_START_CREDITS),
   ONLINE_START_RP: z.coerce.number().int().min(0).max(100_000).default(ONLINE_START_RP),
   LOBBY_SELECTION_SECONDS: z.coerce.number().int().min(5).max(120).default(30),
