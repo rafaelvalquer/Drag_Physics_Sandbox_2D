@@ -84,7 +84,7 @@ test('capítulo 2: liberação, Caio, cenários, rivais, revenda, oficina compat
   // reload: the save is versioned, chapter 2 unlocked, chapter 1 progress kept
   await boot(page); // navigates again: a fresh load of the app and of the save
   await openCareer(page);
-  expect(await mode<number>(page, 'm.controller.save.version')).toBe(4);
+  expect(await mode<number>(page, 'm.controller.save.version')).toBe(5);
   expect(await mode<string[]>(page, 'm.controller.save.unlockedChapters')).toEqual(['chapter-1', 'chapter-2']);
   expect(await mode<number>(page, 'm.controller.save.completedEventIds.length')).toBe(7);
   await page.getByTestId('career-continue').click();
