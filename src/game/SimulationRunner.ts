@@ -94,13 +94,24 @@ export interface RunnerStats {
 export class SimulationRunner {
   readonly vehicles: RunnerVehicle[] = [];
   private accumulator = 0;
-  paused = false;
+  private isPaused = false;
+  get paused(): boolean { return this.isPaused; }
+  set paused(value: boolean) {
+    if (value === this.isPaused) return;
+    this.isPaused = value;
+    this.releaseNitrous?.();
+    if (!value) return;
+    for (const v of this.vehicles) {
+      v.sim.stopNitrous();
+      if (v.sim.nitrous) v.sound?.syncNitrous('READY', 0);
+    }
+  }
   /** Hooks run once per physics step after all vehicles stepped (race timing). */
   readonly afterStep: ((h: number, simTime: number) => void)[] = [];
   readonly stats: RunnerStats = { steps: 0, droppedRealTimeS: 0, stepMs: 0, lastFrameSteps: 0 };
   simTime = 0;
 
-  constructor(public track: TrackConfig) {}
+  constructor(public track: TrackConfig, private readonly releaseNitrous?: () => void) {}
 
   add(car: CarConfig, opts: { id: string; lane: number; isPlayer: boolean; sound?: VehicleSound | null; x?: number }): RunnerVehicle {
     const sim = new VehicleSimulation(car, this.track);
@@ -219,7 +230,11 @@ export class SimulationRunner {
   }
 
   dispose(): void {
-    for (const v of this.vehicles) v.sound?.dispose();
+    this.releaseNitrous?.();
+    for (const v of this.vehicles) {
+      v.sim.stopNitrous(true);
+      v.sound?.dispose();
+    }
     this.vehicles.length = 0;
     this.afterStep.length = 0;
   }

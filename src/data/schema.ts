@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { migrateNitrousConfig } from './nitrousMigration';
 
 /**
  * Validated configuration schema. Every preset (built-in, edited in the Sandbox, imported JSON
@@ -434,21 +435,17 @@ export const VisualSchema = z.object({
 export type VisualConfig = z.infer<typeof VisualSchema>;
 
 /** Nitrous kit + tune of a resolved car (set by the build resolver; see NitrousController). */
-export const NitrousSchema = z.object({
+export const NitrousSchema = z.preprocess(migrateNitrousConfig, z.object({
   kitId: z.string().min(1).max(64),
   capacityKg: finite(0.001, 5),
   maxFlowKgS: finite(0.0001, 0.2),
   fuelNeed: finite(0.5, 3),
   minRpm: finite(500, 9000),
-  mode: z.enum(['single', 'dual']),
-  stage1Share: finite(0.2, 1),
-  stage1Flow: finite(0.1, 1),
-  stage1RampS: finite(0, 3),
-  stage2Flow: finite(0.1, 1),
-  stage2RampS: finite(0, 3),
+  flow: finite(0.25, 1),
+  rampS: finite(0, 3),
   fuelSupply: finite(0, 4),
   torqueLimitNm: finite(0, 5000),
-});
+}));
 export type NitrousConfig = z.infer<typeof NitrousSchema>;
 
 export const CarSchema = z

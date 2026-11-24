@@ -10,12 +10,8 @@ export const NITROUS_ENERGY_J_PER_KG = 12.3e6;
 /** Lowest / highest flow fraction a tune may ask for (of the kit's maximum). */
 export const NITROUS_FLOW_MIN = 0.25;
 export const NITROUS_FLOW_MAX = 1;
-/** Ramp-in range of a stage (s). */
+/** Maximum entry ramp (s) before applying the kit limit. */
 export const NITROUS_RAMP_MAX_S = 3;
-/** Share of the cylinder that stage 1 may take in the dual mode (stage 2 gets the rest). */
-export const NITROUS_SHARE_MIN = 0.2;
-export const NITROUS_SHARE_MAX = 0.8;
-export const NITROUS_SHARE_STEP = 0.05;
 
 const hp = (cv: number): number => cv * 735.5;
 
@@ -34,7 +30,7 @@ export const NITROUS_KITS: readonly NitrousKitPart[] = [
     price: 2500,
     unlock: 'nitrous-street',
     description: 'Kit de N₂O básico: um injetor seco e um cilindro pequeno, para um empurrão curto.',
-    physics: 'Até +45 cv no pico de vazão, cilindro de 0,02 kg (≈ 7 s a plena vazão), 6 kg a mais no carro. Uma descarga ou duas.',
+    physics: 'Até +45 cv no pico de vazão, cilindro de 0,02 kg (≈ 7 s a plena vazão), 6 kg a mais no carro.',
     chapter: 1,
     kit: { level: 1, maxPowerCvRef: 45, capacityKg: 0.02, maxFlowKgS: flowFor(45), massKg: 6, fuelNeed: 1, minRpm: 3200, rampControl: 0.5 },
   },
@@ -55,7 +51,7 @@ export const NITROUS_KITS: readonly NitrousKitPart[] = [
     name: 'Progressive Race',
     price: 15000,
     unlock: 'nitrous-progressive',
-    description: 'Controlador progressivo: a vazão sobe em rampa, sem chicotear a tração, e cada estágio é regulado.',
+    description: 'Controlador progressivo com vazão e rampa de entrada reguláveis.',
     physics: 'Até +160 cv no pico de vazão, cilindro de 0,075 kg (≈ 7,8 s a plena vazão), 12 kg a mais. Rampas precisas de 0 a 3 s.',
     chapter: 2,
     kit: { level: 3, maxPowerCvRef: 160, capacityKg: 0.075, maxFlowKgS: flowFor(160), massKg: 12, fuelNeed: 1.25, minRpm: 2800, rampControl: 1 },

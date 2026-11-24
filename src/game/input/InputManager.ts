@@ -91,7 +91,12 @@ export class InputManager {
   pedal = 0;
   pedalRiseS = 0.09;
   pedalFallS = 0.07;
-  enabled = true;
+  private controlsEnabled = true;
+  get enabled(): boolean { return this.controlsEnabled; }
+  set enabled(value: boolean) {
+    this.controlsEnabled = value;
+    if (!value) this.release('nitrous');
+  }
   /** While capturing a key for remapping, all keys go to this callback. */
   private capture: ((code: string) => void) | null = null;
   private readonly target: Window;
@@ -114,6 +119,7 @@ export class InputManager {
     const errors = validateBindings(b);
     if (errors.length === 0) {
       this.bindings = structuredClone(b);
+      this.release('nitrous');
       this.rebuild();
     }
     return errors;
@@ -126,6 +132,7 @@ export class InputManager {
 
   /** Next key press is delivered to `cb` instead of being an action (remapping UI). */
   captureNextKey(cb: (code: string) => void): void {
+    this.release('nitrous');
     this.capture = cb;
   }
 
@@ -179,6 +186,7 @@ export class InputManager {
    * throttle stay down until release(); repeated presses while held are ignored.
    */
   press(a: ActionId): void {
+    if (a === 'nitrous' && (!this.enabled || this.capture)) return;
     if (this.down.has(a)) return;
     this.down.add(a);
     if (!this.enabled && DRIVE_ACTIONS.includes(a as DriveAction)) return;

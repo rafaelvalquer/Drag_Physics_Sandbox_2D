@@ -188,7 +188,7 @@ export class CareerMode implements Mode {
 
   mount(ctx: AppContext): void {
     this.ctx = ctx;
-    this.runner = new SimulationRunner(this.trackCfg);
+    this.runner = new SimulationRunner(this.trackCfg, () => ctx.input.release('nitrous'));
     this.root = h('div', { class: 'career', 'data-testid': 'career' });
     ctx.overlay.append(this.root);
     clear(ctx.panel);
@@ -196,7 +196,6 @@ export class CareerMode implements Mode {
     this.offs.push(
       inp.on('upshift', () => this.shift(1)),
       inp.on('downshift', () => this.shift(-1)),
-      inp.on('nitrous', () => this.nitrous()),
       inp.on('pause', () => (this.runner.paused = !this.runner.paused)),
       inp.on('camera', () => (this.cameraMode = CAMERAS[(CAMERAS.indexOf(this.cameraMode) + 1) % CAMERAS.length]!)),
     );
@@ -241,14 +240,6 @@ export class CareerMode implements Mode {
     this.warn?.remove();
     this.warn = h('div', { class: 'career-warning', 'data-testid': 'career-warning' }, text);
     this.ctx.overlay.append(this.warn);
-  }
-
-  /** The nitrous key: starts the next discharge of the player's car (only in a running race). */
-  private nitrous(): void {
-    if (this.screen !== 'race' || this.autopilot || this.runner.paused) return;
-    const p = this.runner.player;
-    if (!p || this.race?.phase === 'finished') return;
-    p.sim.requestNitrous();
   }
 
   private shift(dir: 1 | -1): void {
@@ -1136,12 +1127,11 @@ export class CareerMode implements Mode {
       h('div', { class: 'hint' }, `Requisitos: ${reqs.join(' · ')}`),
       h('div', { class: 'hint' }, `Compatibilidade: ${installed ? (after.ok ? 'instalada e removível' : 'instalada e compatível; outras peças dependem dela') : after.ok ? 'compatível com este carro' : 'faltam requisitos para instalar (veja abaixo)'}`),
       plan ? this.requirementsPanel(plan, act) : '',
-      // the installed nitrous kit: mode, flow and ramp of each discharge, with a live preview
       installed && p.category === 'nitrous'
         ? h(
             'div',
             { class: 'nitro-info', 'data-testid': 'nitro-dyno-hint' },
-            h('span', {}, 'A regulagem do nitro (modo, vazão e entrada de cada estágio) fica no Dyno Lab, aba Nitro, onde dá para medir o efeito antes de aplicar.'),
+            h('span', {}, 'Ajuste a vazão e a entrada progressiva na aba Nitro do Dyno Lab e meça o efeito antes de aplicar.'),
             h('button', { class: 'primary', 'data-testid': 'nitro-open-dyno', onclick: () => this.show('dyno') }, 'Abrir o Dyno Lab'),
           )
         : '',
@@ -1247,7 +1237,7 @@ export class CareerMode implements Mode {
 
   private dynoLab: DynoLabView | null = null;
   /** How the Dyno Lab test run uses the N₂O kit (a car without one ignores it). */
-  private dynoNitro: 'off' | 'stage1' | 'all' = 'off';
+  private dynoNitro: 'off' | 'continuous' | 'strategic' = 'off';
 
   /**
    * Dyno Lab 3.0: editing a setting changes only the draft (measured after a debounce, with the A/B
@@ -1271,13 +1261,13 @@ export class CareerMode implements Mode {
         {
           'data-testid': 'dyno-nitro-mode',
           onchange: (e: Event) => {
-            this.dynoNitro = (e.target as HTMLSelectElement).value as 'off' | 'stage1' | 'all';
+            this.dynoNitro = (e.target as HTMLSelectElement).value as typeof this.dynoNitro;
             this.show('dyno');
           },
         },
         h('option', { value: 'off', selected: this.dynoNitro === 'off' }, 'sem nitro'),
-        h('option', { value: 'stage1', selected: this.dynoNitro === 'stage1' }, 'só estágio 1'),
-        h('option', { value: 'all', selected: this.dynoNitro === 'all' }, 'todos os estágios'),
+        h('option', { value: 'continuous', selected: this.dynoNitro === 'continuous' }, 'uso contínuo'),
+        h('option', { value: 'strategic', selected: this.dynoNitro === 'strategic' }, 'uso estratégico'),
       ),
     );
     const nitroKit = car.installedParts.map((id) => findPart(id)).find((p): p is NitrousKitPart => !!p && p.category === 'nitrous');
@@ -1298,7 +1288,7 @@ export class CareerMode implements Mode {
         const m = await measureLab(r.car, track, () => stale() || !view.el.isConnected, prog, { nitrous: this.dynoNitro });
         const nz = m?.nitrous;
         nitroNote.textContent = nz
-          ? `N₂O: estágio 1 chega a ${Math.round(nz.peakCvStage1)} cv na bancada${nz.peakCvStage2 !== null ? `, estágio 2 a ${Math.round(nz.peakCvStage2)} cv` : ''}; na pista ${nz.usedKg > 0 ? `gastou ${(nz.usedKg * 1000).toFixed(0)} g de ${(nz.capacityKg * 1000).toFixed(0)} g em ${nz.activeS.toFixed(1)} s` : 'sem nitro'}.`
+          ? `N₂O: ${Math.round(nz.peakCv)} cv na bancada. Na pista, ${nz.usedKg > 0 ? `+${Math.round(nz.observedExtraCv)} cv de pico e ${(nz.usedKg * 1000).toFixed(1)} de ${(nz.capacityKg * 1000).toFixed(0)} g usados em ${nz.activeS.toFixed(1)} s` : 'sem injeção'}.`
           : '';
         return m ?? (stale() || !view.el.isConnected ? null : { error: 'o motor não pegou no banco' });
       },
@@ -1482,6 +1472,7 @@ export class CareerMode implements Mode {
   }
 
   startRace(ev: CareerEventDef, free?: { offer: FreeRaceOffer; attempt: FreeAttempt }): void {
+    this.ctx.input.release('nitrous');
     if (!this.guard()) return;
     const owned = this.controller.activeCar;
     if (!owned) return;
@@ -1535,7 +1526,10 @@ export class CareerMode implements Mode {
       playerCarId: owned.id,
       ...(free ? { kind: 'free' as const, freeOffer: free.offer } : { kind: 'campaign' as const }),
     };
-    p.control = (hh) => race.beforeStep(hh);
+    p.control = (hh) => {
+      p.sim.nitrousHeld = !this.autopilot && race.phase !== 'finished' && this.ctx.input.isDown('nitrous');
+      race.beforeStep(hh);
+    };
     this.runner.afterStep.push((hh) => {
       race.afterStep(hh);
       this.views.latch(this.runner.vehicles);

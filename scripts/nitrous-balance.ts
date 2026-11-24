@@ -3,9 +3,7 @@
  *
  *   npx tsx scripts/nitrous-balance.ts [car-id]
  *
- * Per car and kit: time and trap speed at 201 / 402 / 1000 m with no nitro and with it (every stage),
- * the gain, the cylinder spent and the injection time. A kit that does not pay, or one that makes a
- * weak-grip car slower, shows up here.
+ * Compare the same kit and cylinder at four flows with continuous and strategic use.
  */
 import { CAREER_CARS, findCampaignCar } from '../src/data/cars/campaign';
 import { TRACKS } from '../src/data/tracks/index';
@@ -13,6 +11,7 @@ import { runAccelerationTest } from '../src/game/race/accelerationTest';
 import { resolveBuild } from '../src/game/career/tuning/BuildResolver';
 import { NITROUS_KITS } from '../src/game/career/tuning/nitrousParts';
 import { careerResolverVersion } from '../src/game/career/tuning/resolverVersion';
+import { failureSpecFor } from '../src/game/career/tuning/TuningCapabilities';
 
 const REFERENCE: Record<number, string[]> = {
   1: ['fiat-uno-mille-1995', 'gm-chevette-sl-1988', 'vw-gol-gts-1988', 'vw-saveiro-gl-1994'],
@@ -35,23 +34,33 @@ for (const [ch, ids] of Object.entries(REFERENCE)) {
       continue;
     }
     const version = careerResolverVersion(base.id);
-    const run = (car: typeof base, nitrous: 'off' | 'all') => runAccelerationTest(car, track, { distancesM: D, speedsKmh: [100], maxS: 90, nitrous });
+    const run = (car: typeof base, nitrous: 'off' | 'continuous' | 'strategic', parts: string[] = []) =>
+      runAccelerationTest(car, track, {
+        distancesM: D, speedsKmh: [], maxS: 90, stopAtLastSplit: true, nitrous,
+        failureSpec: failureSpecFor(base, parts, version) ?? undefined,
+      });
     const plain = run(base, 'off');
     console.log(`\n== Capítulo ${ch}: ${base.name} (${base.id}) — 201 m / 402 m / 1000 m (s)`);
     console.log(row('sem kit', D.map((d) => plain.distanceTimes.get(d) ?? null)));
     for (const kit of NITROUS_KITS) {
-      for (const mode of ['single', 'dual'] as const) {
-        const r = resolveBuild(base, [kit.id], mode === 'dual' ? { nitrousMode: 'dual', nitrousShare: 0.4 } : {}, version);
-        if (!r.ok) {
-          console.log(`${kit.id.padEnd(30)}inválido: ${r.errors[0]}`);
-          continue;
+      const parts = [kit.id];
+      const reference = resolveBuild(base, parts, {}, version);
+      if (!reference.ok) {
+        console.log(`${kit.id.padEnd(30)}inválido: ${reference.errors[0]}`);
+        continue;
+      }
+      const report = (label: string, result: ReturnType<typeof run>): void => {
+        const times = D.map((d) => result.distanceTimes.get(d) ?? null);
+        const traps = D.map((d) => fmt(result.distanceSpeedsKmh.get(d))).join(' / ');
+        console.log(`${row(label, times)} · km/h ${traps} · ${(result.nitrousUsedKg * 1000).toFixed(1)} g / ${result.nitrousActiveS.toFixed(2)} s · +${result.nitrousPeakPowerCv.toFixed(1)} cv / +${result.nitrousPeakTorqueNm.toFixed(1)} N·m · patinação ${result.wheelspinS.toFixed(2)} s · ${result.engineFailed ? 'quebra' : 'sem quebra'}`);
+      };
+      report(`${kit.id} desligado`, run(reference.car, 'off', parts));
+      for (const flow of [0.25, 0.5, 0.75, 1]) {
+        const build = resolveBuild(base, parts, { nitrousFlow: flow }, version);
+        if (!build.ok) throw new Error(build.errors.join(', '));
+        for (const mode of ['continuous', 'strategic'] as const) {
+          report(`${kit.id} ${flow * 100}% ${mode}`, run(build.car, mode, parts));
         }
-        const res = run(r.car, 'all');
-        const t = D.map((d) => res.distanceTimes.get(d) ?? null);
-        const gain = plain.distanceTimes.get(D[1]!)! - (t[1] ?? NaN);
-        console.log(
-          `${row(`${kit.id} ${mode}`, t)}   402 m: ${gain >= 0 ? '-' : '+'}${Math.abs(gain).toFixed(2)} s · gastou ${(res.nitrousUsedKg * 1000).toFixed(0)}/${((r.car.nitrous?.capacityKg ?? 0) * 1000).toFixed(0)} g em ${res.nitrousActiveS.toFixed(1)} s · patinação ${res.wheelspinS.toFixed(1)} s`,
-        );
       }
     }
   }

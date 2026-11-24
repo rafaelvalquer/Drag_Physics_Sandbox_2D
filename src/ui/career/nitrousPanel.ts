@@ -1,10 +1,9 @@
 import type { CarConfig } from '../../data/schema';
-import { NITROUS_SHARE_STEP } from '../../game/career/tuning/nitrousParts';
 import { nitrousLimits, nitrousTuneOf } from '../../game/career/tuning/nitrousOverlay';
 import type { BuildResult, BuildTune } from '../../game/career/tuning/buildCommon';
 import { NITROUS_TUNE_FIELDS } from '../../game/career/tuning/buildCommon';
 import type { NitrousKitPart } from '../../game/career/tuning/parts';
-import { nitrousStagePreview, type NitrousSetup } from '../../physics/engine/NitrousController';
+import { nitrousPreview } from '../../physics/engine/NitrousController';
 import { h } from '../dom';
 
 export interface NitrousPanelDeps {
@@ -58,7 +57,7 @@ export interface NitrousTabDeps {
 type NitrousField = (typeof NITROUS_TUNE_FIELDS)[number];
 
 /**
- * "Nitro" tab of the Dyno Lab: mode, flow and ramp of each stage, with a live preview of power, torque, duration, risk and
+ * "Nitro" tab of the Dyno Lab: flow and entry ramp, with a live preview of power, torque, duration, risk and
  * traction. The settings live in the Dyno Lab draft, so the A/B comparison, "Aplicar" and "Descartar" are the Dyno's own.
  */
 export function buildNitrousTab(d: NitrousTabDeps): HTMLElement {
@@ -72,50 +71,29 @@ export function buildNitrousTab(d: NitrousTabDeps): HTMLElement {
     h('b', {}, `${kit.name} · nível ${kit.kit.level}`),
     h('span', {}, `Potência nominal: até +${kit.kit.maxPowerCvRef} cv · cilindro ${pt(kit.kit.capacityKg * 1000, 0)} g de N₂O · ${kit.kit.massKg} kg a mais · vazão máx. ${pt(kit.kit.maxFlowKgS * 1000, 1)} g/s`),
   );
-  const preview1 = h('div', { class: 'nitro-prev', 'data-testid': 'nitro-prev-1' });
-  const preview2 = h('div', { class: 'nitro-prev', 'data-testid': 'nitro-prev-2' });
+  const preview = h('div', { class: 'nitro-prev', 'data-testid': 'nitro-preview' });
   const risk = h('div', { class: 'nitro-risk', 'data-testid': 'nitro-risk' });
   const grip = h('div', { class: 'nitro-grip', 'data-testid': 'nitro-grip' });
-
-  const modeSel = h(
-    'select',
-    { 'data-testid': 'nitro-mode', 'aria-label': 'Modo de acionamento' },
-    h('option', { value: 'single' }, 'Descarga única'),
-    h('option', { value: 'dual' }, 'Dois estágios'),
-  ) as HTMLSelectElement;
-  modeSel.value = values().mode;
 
   const row = (label: string, id: string, field: NitrousField, min: number, max: number, step: number, get: () => number, fmt: (v: number) => string): HTMLElement => {
     const out = h('output', { 'data-testid': `${id}-out` }, fmt(get()));
     const input = h('input', { type: 'range', min: String(min), max: String(max), step: String(step), value: String(get()), 'data-testid': id, 'aria-label': label }) as HTMLInputElement;
     input.addEventListener('input', () => {
       const v = Number(input.value);
-      d.set(field, v as never);
+      d.set(field, v);
       out.textContent = fmt(v);
       update();
       d.changed();
     });
     return h('label', { class: 'nitro-row' }, h('span', {}, label), input, out);
   };
-  const flow1 = row('Vazão do estágio 1', 'nitro-flow1', 'nitrousFlow1', lim.flowMin, lim.flowMax, 0.05, () => values().flow1, (v) => `${Math.round(v * 100)} %`);
-  const ramp1 = row('Entrada progressiva do estágio 1', 'nitro-ramp1', 'nitrousRamp1', 0, lim.rampMax, 0.1, () => values().ramp1, (v) => `${pt(v)} s`);
-  const share = row('Divisão da carga (estágio 1)', 'nitro-share', 'nitrousShare', lim.shareMin, lim.shareMax, NITROUS_SHARE_STEP, () => values().share, (v) => `${Math.round(v * 100)} / ${Math.round((1 - v) * 100)} %`);
-  const flow2 = row('Vazão do estágio 2', 'nitro-flow2', 'nitrousFlow2', lim.flowMin, lim.flowMax, 0.05, () => values().flow2, (v) => `${Math.round(v * 100)} %`);
-  const ramp2 = row('Entrada progressiva do estágio 2', 'nitro-ramp2', 'nitrousRamp2', 0, lim.rampMax, 0.1, () => values().ramp2, (v) => `${pt(v)} s`);
-  const dualOnly = [share, flow2, ramp2, preview2];
-
-  const stageText = (setup: NitrousSetup, stage: 1 | 2, rpm: number): string => {
-    const p = nitrousStagePreview(setup, stage, rpm);
-    return `Estágio ${stage}: +${pt(p.powerCv, 0)} cv · +${pt(p.torqueNm, 0)} N·m a ${Math.round(rpm).toLocaleString('pt-BR')} rpm · ${pt(p.durationS)} s · ${Math.round((p.reserveKg / setup.capacityKg) * 100)} % do cilindro`;
-  };
+  const flow = row('Vazão do nitro', 'nitro-flow', 'nitrousFlow', lim.flowMin, lim.flowMax, 0.05, () => values().flow, (v) => `${Math.round(v * 100)} %`);
+  const ramp = row('Entrada progressiva', 'nitro-ramp', 'nitrousRampS', 0, lim.rampMax, 0.05, () => values().rampS, (v) => `${pt(v, 2)} s`);
 
   function update(): void {
-    const dual = values().mode === 'dual';
-    for (const el of dualOnly) el.style.display = dual ? '' : 'none';
     const r0 = d.resolve(d.draft());
     if (!r0.ok || !r0.car.nitrous) {
-      preview1.textContent = r0.ok ? 'o kit não está instalado' : r0.errors.join('; ');
-      preview2.textContent = '';
+      preview.textContent = r0.ok ? 'o kit não está instalado' : r0.errors.join('; ');
       risk.textContent = '';
       grip.textContent = '';
       return;
@@ -124,36 +102,24 @@ export function buildNitrousTab(d: NitrousTabDeps): HTMLElement {
     const setup = car.nitrous!;
     const torqueRpm = car.engine.torqueCurve.rpm[car.engine.torqueCurve.torqueNm.indexOf(Math.max(...car.engine.torqueCurve.torqueNm))] ?? car.engine.redlineRpm * 0.6;
     const rpm = Math.max(setup.minRpm, torqueRpm);
-    preview1.textContent = stageText(setup, 1, rpm);
-    preview2.textContent = dual ? stageText(setup, 2, rpm) : '';
-    const strongest = Math.max(nitrousStagePreview(setup, 1, rpm).torqueNm, dual ? nitrousStagePreview(setup, 2, rpm).torqueNm : 0);
-    const r = nitrousRisk(car, strongest);
+    const p = nitrousPreview(setup, rpm);
+    preview.textContent = `Autonomia contínua ${pt(p.durationS)} s · potência nominal +${pt(kit.kit.maxPowerCvRef * setup.flow)} cv · torque estimado +${pt(p.torqueNm, 0)} N·m a ${Math.round(rpm).toLocaleString('pt-BR')} rpm`;
+    const r = nitrousRisk(car, p.torqueNm);
     risk.dataset.level = r.risk;
     risk.textContent = `Risco mecânico: ${NITROUS_RISK_LABEL[r.risk]}${r.risk === 'safe' || r.risk === 'sport' ? '' : ' — esta regulagem exige alimentação e internos mais resistentes.'}`;
-    const g = nitrousGripRatio(car, strongest);
+    const g = nitrousGripRatio(car, p.torqueNm);
     grip.dataset.level = g < 0.9 ? 'good' : g < 1.1 ? 'limit' : 'spin';
     grip.textContent = `Tração em 2ª: ${g < 0.9 ? 'segura' : g < 1.1 ? 'no limite do pneu' : 'o pneu patina'}`;
   }
 
-  modeSel.addEventListener('change', () => {
-    d.set('nitrousMode', modeSel.value === 'dual' ? 'dual' : undefined);
-    update();
-    d.changed();
-  });
-
   root.append(
     info,
-    h('label', { class: 'nitro-row' }, h('span', {}, 'Modo de acionamento'), modeSel),
-    flow1,
-    ramp1,
-    share,
-    flow2,
-    ramp2,
-    preview1,
-    preview2,
+    flow,
+    ramp,
+    preview,
     risk,
     grip,
-    h('p', { class: 'nitro-hint' }, 'Shift aciona o estágio seguinte. A descarga corre sozinha até acabar e o cilindro volta a 100 % a cada corrida, sem custo. O gráfico e os tempos acima medem este rascunho (use "Nitro no teste" para escolher o uso).'),
+    h('p', { class: 'nitro-hint' }, 'Segure Shift para injetar e solte para preservar a carga. O cilindro recarrega em cada corrida. Uma vazão maior aumenta a potência e reduz a autonomia.'),
   );
   update();
   return root;

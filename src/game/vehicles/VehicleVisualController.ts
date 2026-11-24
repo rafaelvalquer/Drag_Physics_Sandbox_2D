@@ -292,7 +292,8 @@ export class VehicleVisualController {
     const ex = m.exhausts[0] ?? { x: m.rearX, y: 0.3 };
     p.flame.setVisible(v.afterfire);
     if (v.afterfire) {
-      p.flame.setPosition(ex.x * PPM_BASE, -ex.y * PPM_BASE).setScale((0.45 + Math.random() * 0.35) * (PPM_BASE / 40), 0.4 + Math.random() * 0.3);
+      const jet = 1 + 0.25 * nitroNow;
+      p.flame.setPosition(ex.x * PPM_BASE, -ex.y * PPM_BASE).setScale((0.45 + Math.random() * 0.35) * (PPM_BASE / 40) * jet, 0.4 + Math.random() * 0.3);
     }
 
     // ---- N₂O flame at the pipe (blue-white, longer and brighter with the flow) and the glow behind it

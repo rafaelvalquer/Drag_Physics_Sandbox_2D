@@ -66,6 +66,8 @@ export class NitrousLayer {
   private readonly filters: BiquadFilterNode[] = [];
   private readonly clickBuf: AudioBuffer;
   private readonly whooshBuf: AudioBuffer;
+  private opening: { source: AudioBufferSourceNode; gain: GainNode } | null = null;
+  private readonly clicks = new Set<AudioBufferSourceNode>();
   private disposed = false;
 
   constructor(
@@ -100,6 +102,8 @@ export class NitrousLayer {
   /** Solenoid click: a short filtered burst (stronger when it opens). */
   click(open: boolean): void {
     if (this.disposed) return;
+    if (!open) this.releaseWhoosh();
+    if (this.clicks.size >= 2) return;
     const src = this.ctx.createBufferSource();
     src.buffer = this.clickBuf;
     const bp = this.ctx.createBiquadFilter();
@@ -111,6 +115,13 @@ export class NitrousLayer {
     g.gain.setValueAtTime(CLICK_GAIN * (open ? 1 : 0.7), t);
     g.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
     src.connect(bp).connect(g).connect(this.destination);
+    this.clicks.add(src);
+    src.onended = () => {
+      this.clicks.delete(src);
+      src.disconnect();
+      bp.disconnect();
+      g.disconnect();
+    };
     src.start(t);
     src.stop(t + 0.04);
   }
@@ -120,7 +131,7 @@ export class NitrousLayer {
    * and a soft decay: the "pssshh" of the solenoid letting the oxidiser go. `strength` 0..1 scales its level.
    */
   whoosh(strength: number): void {
-    if (this.disposed) return;
+    if (this.disposed || this.opening) return;
     const k = Math.min(1, Math.max(0.2, strength));
     const t = this.ctx.currentTime;
     const src = this.ctx.createBufferSource();
@@ -135,13 +146,30 @@ export class NitrousLayer {
     g.gain.exponentialRampToValueAtTime(WHOOSH_GAIN * k, t + 0.025);
     g.gain.exponentialRampToValueAtTime(0.001, t + 0.38);
     src.connect(bp).connect(g).connect(this.destination);
+    this.opening = { source: src, gain: g };
+    src.onended = () => {
+      if (this.opening?.source === src) this.opening = null;
+      src.disconnect();
+      bp.disconnect();
+      g.disconnect();
+    };
     src.start(t);
     src.stop(t + 0.42);
+  }
+
+  private releaseWhoosh(): void {
+    if (!this.opening) return;
+    const { source, gain } = this.opening;
+    const now = this.ctx.currentTime;
+    gain.gain.cancelAndHoldAtTime(now);
+    gain.gain.setTargetAtTime(0, now, 0.012);
+    source.stop(now + 0.06);
   }
 
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.releaseWhoosh();
     try {
       this.hiss.stop();
     } catch {

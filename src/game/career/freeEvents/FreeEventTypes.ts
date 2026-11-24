@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { migrateNitrousTune } from '../../../data/nitrousMigration';
 import { CHAPTER_IDS } from '../chapters';
 import type { CareerEventDef, RivalDef } from '../CareerEvents';
 
@@ -17,7 +18,7 @@ export const paintSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   accent: z.string().regex(/^#[0-9a-fA-F]{6}$/),
 });
-export const buildTuneSchema = z.object({
+export const buildTuneSchema = z.preprocess((value) => migrateNitrousTune(value), z.object({
   boostBar: z.number().min(0.3).max(2.2).optional(),
   revLimitRpm: z.number().int().min(2000).max(13000).optional(),
   launchRpm: z.number().int().min(800).max(12000).optional(),
@@ -25,13 +26,9 @@ export const buildTuneSchema = z.object({
   finalDrive: z.enum(['short', 'standard', 'long']).optional(),
   shiftRpm: z.number().int().min(1500).max(13000).optional(),
   tirePressureKpa: z.number().int().min(100).max(320).optional(),
-  nitrousMode: z.enum(['single', 'dual']).optional(),
-  nitrousShare: z.number().min(0.2).max(0.8).optional(),
-  nitrousFlow1: z.number().min(0.25).max(1).optional(),
-  nitrousRamp1: z.number().min(0).max(3).optional(),
-  nitrousFlow2: z.number().min(0.25).max(1).optional(),
-  nitrousRamp2: z.number().min(0).max(3).optional(),
-});
+  nitrousFlow: z.number().min(0.25).max(1).optional(),
+  nitrousRampS: z.number().min(0).max(3).optional(),
+}));
 
 const id = z.string().min(1).max(64);
 const version = z.union([z.literal(1), z.literal(2)]);

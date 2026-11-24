@@ -47,13 +47,13 @@ describe('nitrous in a race', () => {
   }, 60_000);
 
   it('the finish line shuts the injection and a new attempt starts with a full cylinder', () => {
-    const car = build('nitrous-progressive', { nitrousFlow1: 0.25 }); // slow flow: still injecting at the line
+    const car = build('nitrous-progressive', { nitrousFlow: 0.25 }); // slow flow: still injecting at the line
     const sim = new VehicleSimulation(car, track);
     const rival = new VehicleSimulation(gol, track);
     const race = runRace(sim, rival);
     expect(race.results[0]!.finished).toBe(true);
     expect(['DISABLED', 'DEPLETED']).toContain(sim.nitrous!.status);
-    expect(sim.nitrous!.startableStage).toBe(0); // no stage can start any more
+    expect(sim.nitrous!.active).toBe(false);
     // a restart: the cylinder is full again, with nothing carried over
     sim.reset();
     expect(sim.nitrous!.status).toBe('READY');

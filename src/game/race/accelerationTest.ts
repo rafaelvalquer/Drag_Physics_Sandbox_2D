@@ -1,6 +1,7 @@
 import type { CarConfig, TrackConfig } from '../../data/schema';
 import { VehicleSimulation } from '../../physics/vehicle/VehicleSimulation';
 import { DragAI, type AiLevel } from '../ai/DragAI';
+import type { OverrevSpec } from '../../physics/engine/EngineOverrevFailure';
 
 /**
  * Standing-start acceleration test as a manufacturer runs it: engine running, first gear, flat
@@ -23,8 +24,8 @@ export interface AccelerationOptions {
    * sheets are tested with that payload; the Gol's manual figures are tested without it.
    */
   payloadKg?: number;
-  /** N₂O use of the driver: none, only stage 1, or every stage the setup has (default: all). */
-  nitrous?: 'off' | 'stage1' | 'all';
+  nitrous?: DragAI['nitrousMode'];
+  failureSpec?: OverrevSpec;
 }
 
 export interface AccelerationResult {
@@ -32,6 +33,7 @@ export interface AccelerationResult {
   speedTimes: Map<number, number | null>;
   /** Time to cover each distance (s), null if never reached. */
   distanceTimes: Map<number, number | null>;
+  distanceSpeedsKmh: Map<number, number>;
   topSpeedKmh: number;
   /** Engine speed and gear when the top speed was reached. */
   topSpeedRpm: number;
@@ -47,6 +49,9 @@ export interface AccelerationResult {
   /** N₂O spent and injection time in the run (0 without a kit). */
   nitrousUsedKg: number;
   nitrousActiveS: number;
+  nitrousPeakPowerCv: number;
+  nitrousPeakTorqueNm: number;
+  engineFailed: boolean;
 }
 
 const H = 1 / 120;
@@ -59,7 +64,8 @@ export function runAccelerationTest(car: CarConfig, track: TrackConfig, opts: Ac
   const maxS = opts.maxS ?? 120;
   const sim = new VehicleSimulation(opts.payloadKg ? { ...car, massKg: car.massKg + opts.payloadKg } : car, track);
   const ai = new DragAI(car, opts.level ?? 'advanced', opts.seed ?? 7);
-  ai.maxNitrousStage = opts.nitrous === 'off' ? 0 : opts.nitrous === 'stage1' ? 1 : 2;
+  ai.nitrousMode = opts.nitrous ?? 'strategic';
+  if (opts.failureSpec) sim.enableEngineFailure(opts.failureSpec);
 
   // ---- start the engine, select first gear, let everything settle
   let guard = 0;
@@ -76,6 +82,7 @@ export function runAccelerationTest(car: CarConfig, track: TrackConfig, opts: Ac
   const green = sim.simTime;
   const speedTimes = new Map<number, number | null>(speeds.map((s) => [s, null]));
   const distanceTimes = new Map<number, number | null>(distances.map((d) => [d, null]));
+  const distanceSpeedsKmh = new Map<number, number>();
   const shifts: { from: number; rpm: number; t: number }[] = [];
   const loadShare = (): number => {
     const t = sim.telemetry;
@@ -88,6 +95,8 @@ export function runAccelerationTest(car: CarConfig, track: TrackConfig, opts: Ac
   let topGear = 0;
   let maxSlip = 0;
   let spin = 0;
+  let nitrousPeakPowerCv = 0;
+  let nitrousPeakTorqueNm = 0;
   let prevV = 0;
   let prevX = 0;
   let prevT = 0;
@@ -98,6 +107,12 @@ export function runAccelerationTest(car: CarConfig, track: TrackConfig, opts: Ac
     ai.update(H, sim, { timeSinceGreen: sim.simTime - green, staged: true, finished: false });
     const xBefore = sim.x;
     sim.step(H);
+    const nitrous = sim.nitrous?.telemetry();
+    if (nitrous) {
+      nitrousPeakPowerCv = Math.max(nitrousPeakPowerCv, nitrous.additionalPowerW / 735.5);
+      nitrousPeakTorqueNm = Math.max(nitrousPeakTorqueNm, nitrous.additionalTorqueNm);
+    }
+    if (sim.engine.runState === 'BROKEN') break;
     const v = sim.speed;
     if (t0 === null) {
       // the stopwatch starts with the first movement of the car (the step before it moved)
@@ -112,7 +127,11 @@ export function runAccelerationTest(car: CarConfig, track: TrackConfig, opts: Ac
       if (speedTimes.get(s) === null && v >= target) speedTimes.set(s, prevT + ((target - prevV) / Math.max(v - prevV, 1e-9)) * (t - prevT));
     }
     for (const d of distances) {
-      if (distanceTimes.get(d) === null && x >= d) distanceTimes.set(d, prevT + ((d - prevX) / Math.max(x - prevX, 1e-9)) * (t - prevT));
+      if (distanceTimes.get(d) === null && x >= d) {
+        const fraction = (d - prevX) / Math.max(x - prevX, 1e-9);
+        distanceTimes.set(d, prevT + fraction * (t - prevT));
+        distanceSpeedsKmh.set(d, (prevV + fraction * (v - prevV)) * 3.6);
+      }
     }
     if (sim.shift.active && !wasShifting) shifts.push({ from: sim.gear, rpm: sim.engine.rpm, t });
     wasShifting = sim.shift.active;
@@ -137,6 +156,7 @@ export function runAccelerationTest(car: CarConfig, track: TrackConfig, opts: Ac
   return {
     speedTimes,
     distanceTimes,
+    distanceSpeedsKmh,
     topSpeedKmh: top * 3.6,
     topSpeedRpm: topRpm,
     topSpeedGear: topGear,
@@ -146,5 +166,8 @@ export function runAccelerationTest(car: CarConfig, track: TrackConfig, opts: Ac
     drivenLoadShare: share,
     nitrousUsedKg: sim.nitrous?.telemetry().consumedKg ?? 0,
     nitrousActiveS: sim.nitrous?.telemetry().activeTimeS ?? 0,
+    nitrousPeakPowerCv,
+    nitrousPeakTorqueNm,
+    engineFailed: sim.engine.runState === 'BROKEN',
   };
 }

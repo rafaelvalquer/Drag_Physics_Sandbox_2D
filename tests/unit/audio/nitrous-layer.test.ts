@@ -8,6 +8,7 @@ function fakeCtx() {
     value: 0,
     setTargetAtTime: (v: number) => created.targets.push(v),
     setValueAtTime: () => undefined,
+    cancelAndHoldAtTime: () => undefined,
     exponentialRampToValueAtTime: () => undefined,
   });
   const node = (): Record<string, unknown> => {
@@ -63,13 +64,15 @@ describe('NitrousLayer', () => {
 });
 
 describe('NitrousLayer whoosh', () => {
-  it('is one short jet per injection start, silent after dispose', () => {
+  it('keeps at most one jet alive and releases it when the solenoid closes', () => {
     const { ctx, created } = fakeCtx();
     const l = new NitrousLayer(ctx, {} as AudioNode);
     const before = created.sources;
     l.whoosh(1);
-    l.whoosh(0); // a weak request is still audible (floor), never a no-op
-    expect(created.sources - before).toBe(2);
+    l.whoosh(0);
+    expect(created.sources - before).toBe(1);
+    l.click(false);
+    expect(created.targets.at(-1)).toBe(0);
     l.dispose();
     const after = created.sources;
     l.whoosh(1);
@@ -99,7 +102,7 @@ describe('NitrousVoiceState', () => {
     expect(v.shelfDb).toBeCloseTo(0, 1);
   });
 
-  it('a new injection (stage 2) bumps again', () => {
+  it('a new injection bumps again', () => {
     const v = new NitrousVoiceState();
     v.update(1 / 60, true, 1);
     for (let i = 0; i < 400; i++) v.update(1 / 60, true, 1);

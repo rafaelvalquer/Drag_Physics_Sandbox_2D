@@ -114,12 +114,12 @@ export class VehicleSound {
     if (this.disposed) return;
     const ctx = this.engine.ctx;
     if (!ctx) return;
-    const active = status === 'STAGE_1_ACTIVE' || status === 'STAGE_2_ACTIVE';
-    const was = this.nitrousStatus === 'STAGE_1_ACTIVE' || this.nitrousStatus === 'STAGE_2_ACTIVE';
+    const active = status === 'INJECTING' && flowNorm > 0;
+    const was = this.nitrousStatus === 'INJECTING';
     if (!this.nitrous && active) this.nitrous = new NitrousLayer(ctx, this.bus);
     if (active && !was) this.nitrous?.click(true);
     if (!active && was) this.nitrous?.click(false);
-    if (this.nitrousStatus !== status) this.nitrousStatus = status;
+    this.nitrousStatus = active ? 'INJECTING' : 'READY';
     this.nitrous?.setFlow(active ? flowNorm : 0);
     // the engine voice: whoosh at the attack, louder and brighter exhaust with the flow, a short apparent-rpm bump
     const dt = this.lastSyncT === 0 ? 0 : ctx.currentTime - this.lastSyncT;

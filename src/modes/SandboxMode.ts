@@ -75,7 +75,7 @@ export class SandboxMode implements Mode {
 
   mount(ctx: AppContext): void {
     this.ctx = ctx;
-    this.runner = new SimulationRunner(this.trackCfg);
+    this.runner = new SimulationRunner(this.trackCfg, () => ctx.input.release('nitrous'));
     this.lab = new DevLab(
       () => this.runner,
       ctx.audio,
@@ -94,7 +94,6 @@ export class SandboxMode implements Mode {
     this.offs.push(
       inp.on('upshift', () => this.shift(1)),
       inp.on('downshift', () => this.shift(-1)),
-      inp.on('nitrous', () => this.nitrous()),
       inp.on('restart', () => this.restart()),
       inp.on('pause', () => this.lab?.togglePause()),
       inp.on('camera', () => (this.cameraMode = CAMERAS[(CAMERAS.indexOf(this.cameraMode) + 1) % CAMERAS.length]!)),
@@ -132,6 +131,7 @@ export class SandboxMode implements Mode {
     p.sim.controls.autoStart = this.engineOn; // ignition is automatic on entering the track
     this.applyFailures(p.sim);
     p.control = (h) => {
+      p.sim.nitrousHeld = !this.runner.paused && this.ctx.input.isDown('nitrous');
       const pedal = this.ctx.input.updatePedal(h);
       const c = p.sim.controls;
       const shutdown = p.sim.x > this.trackCfg.lengthM - SHUTDOWN_M;
@@ -157,6 +157,7 @@ export class SandboxMode implements Mode {
   }
 
   private controlCompare(h: number, b: RunnerVehicle, p: RunnerVehicle): void {
+    b.sim.nitrousHeld = false;
     const c = b.sim.controls;
     const shutdown = b.sim.x > this.trackCfg.lengthM - SHUTDOWN_M;
     c.autoBrake = shutdown;
@@ -174,13 +175,8 @@ export class SandboxMode implements Mode {
       });
     } else {
       c.pedal = p.sim.controls.pedal;
+      b.sim.nitrousHeld = p.sim.nitrousHeld;
     }
-  }
-
-  private nitrous(): void {
-    const p = this.runner.player;
-    if (!p || this.runner.paused) return;
-    p.sim.requestNitrous();
   }
 
   private shift(dir: 1 | -1): void {
@@ -193,6 +189,7 @@ export class SandboxMode implements Mode {
   }
 
   private restart(): void {
+    this.ctx.input.release('nitrous');
     this.runner.resetAll();
     for (const v of this.runner.vehicles) v.sim.controls.autoStart = this.engineOn;
     this.compareAi?.newRace();

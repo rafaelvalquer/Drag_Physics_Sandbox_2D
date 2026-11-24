@@ -9,8 +9,8 @@ import { VehicleSimulation } from '../../../src/physics/vehicle/VehicleSimulatio
 const H = 1 / 120;
 const track = TRACKS.find((t) => t.id === 'test-track')!;
 const nitro = (o: Partial<NitrousConfig> = {}): NitrousConfig => ({
-  kitId: 'test', capacityKg: 0.04, maxFlowKgS: 0.0075, fuelNeed: 1, minRpm: 3000, mode: 'single', stage1Share: 1,
-  stage1Flow: 1, stage1RampS: 0.3, stage2Flow: 1, stage2RampS: 0.3, fuelSupply: 1.2, torqueLimitNm: 0, ...o,
+  kitId: 'test', capacityKg: 0.04, maxFlowKgS: 0.0075, fuelNeed: 1, minRpm: 3000,
+  flow: 1, rampS: 0.3, fuelSupply: 1.2, torqueLimitNm: 0, ...o,
 });
 const withNitro = (base: CarConfig, o: Partial<NitrousConfig> = {}): CarConfig => ({ ...structuredClone(base), nitrous: nitro(o) });
 const gol = findCampaignCar('vw-gol-gts-1988')!;
@@ -20,7 +20,7 @@ function race(car: CarConfig, gear: number | null): { et: number; maxSpeed: numb
   const sim = new VehicleSimulation(car, track);
   sim.controls.autoStart = true;
   const ai = new DragAI(car, 'advanced', 7);
-  ai.maxNitrousStage = 0; // the test presses the key itself (or never)
+  ai.nitrousMode = 'off'; // the test presses the key itself (or never)
   for (let i = 0; i < 120 * 6; i++) {
     ai.update(H, sim, { timeSinceGreen: null, staged: true, finished: false });
     sim.controls.holdBrake = sim.gear === 0 || sim.controls.pedal < 0.02;
@@ -29,12 +29,11 @@ function race(car: CarConfig, gear: number | null): { et: number; maxSpeed: numb
   sim.controls.holdBrake = false;
   const green = sim.simTime;
   let t0: number | null = null;
-  let pressed = false;
   let et = NaN;
   for (let i = 0; i < 120 * 40; i++) {
     ai.update(H, sim, { timeSinceGreen: sim.simTime - green, staged: true, finished: false });
     sim.controls.holdBrake = false;
-    if (gear !== null && !pressed && sim.gear >= gear) pressed = sim.requestNitrous();
+    sim.nitrousHeld = gear !== null && sim.gear >= gear;
     sim.step(H);
     if (t0 === null && sim.x > 0.29) t0 = sim.simTime;
     if (sim.x >= 402.336) {
@@ -49,7 +48,8 @@ describe('nitrous in the simulation', () => {
   it('a car without a kit has no nitrous system and the key does nothing', () => {
     const sim = new VehicleSimulation(gol, track);
     expect(sim.nitrous).toBeNull();
-    expect(sim.requestNitrous()).toBe(false);
+    sim.nitrousHeld = true;
+    sim.step(H);
     expect(sim.telemetry.nitrous).toBeUndefined();
   });
 
@@ -64,7 +64,7 @@ describe('nitrous in the simulation', () => {
     }
     expect(Math.abs(base.engine.rpm - nit.engine.rpm)).toBeLessThan(1);
     expect(nit.engine.torqueCombustion).toBeCloseTo(base.engine.torqueCombustion, 3); // no injection: same engine
-    expect(nit.requestNitrous()).toBe(true);
+    nit.nitrousHeld = true;
     let baseMax = 0;
     let nitMax = 0;
     let addMax = 0;
@@ -94,7 +94,7 @@ describe('nitrous in the simulation', () => {
     for (let i = 0; i < 480; i++) sim.step(H);
     sim.controls.pedal = 0.3;
     for (let i = 0; i < 120; i++) sim.step(H);
-    expect(sim.requestNitrous()).toBe(true);
+    sim.nitrousHeld = true;
     for (let i = 0; i < 60; i++) sim.step(H);
     const left = sim.nitrous!.remainingFraction;
     expect(left).toBeLessThan(1);
@@ -105,7 +105,7 @@ describe('nitrous in the simulation', () => {
     expect(sim.nitrous!.status).toBe('READY');
   });
 
-  it('on the rev limiter the injection goes on: it keeps spending and is never refused or paused', () => {
+  it('on the rev limiter injection stops until combustion returns', () => {
     const sim = new VehicleSimulation(withNitro(gol), track);
     sim.controls.autoStart = true;
     for (let i = 0; i < 480; i++) sim.step(H);
@@ -114,18 +114,20 @@ describe('nitrous in the simulation', () => {
     let onLimiter = 0;
     let spentOnLimiter = 0;
     for (let i = 0; i < 120 * 4; i++) {
-      if (!started && sim.engine.rpm > 3500) started = sim.requestNitrous();
+      if (sim.engine.rpm > 3500) sim.nitrousHeld = true;
+      const onCutAtStart = sim.engine.ignition.limiterActive;
       const before = sim.nitrous!.telemetry().consumedKg;
       sim.step(H);
-      if (started && sim.engine.ignition.limiterActive) {
+      started ||= sim.nitrous!.telemetry().consumedKg > 0;
+      if (started && onCutAtStart) {
         onLimiter++;
         spentOnLimiter += sim.nitrous!.telemetry().consumedKg - before;
-        expect(sim.nitrous!.status).toBe('STAGE_1_ACTIVE');
+        expect(sim.nitrous!.additionalTorqueNm).toBe(0);
       }
     }
     expect(started).toBe(true);
     expect(onLimiter).toBeGreaterThan(20);
-    expect(spentOnLimiter).toBeGreaterThan(0);
+    expect(spentOnLimiter).toBe(0);
   });
 
   it('the injected torque makes the car faster through the driveline (402 m)', () => {
@@ -141,8 +143,8 @@ describe('nitrous in the simulation', () => {
   }, 60_000);
 
   it('a stronger flow gains more while the tyres hold, and the gain is bounded by what the cylinder holds', () => {
-    const weak = race(withNitro(gol, { stage1Flow: 0.25 }), 2);
-    const strong = race(withNitro(gol, { stage1Flow: 0.5 }), 2);
+    const weak = race(withNitro(gol, { flow: 0.25 }), 2);
+    const strong = race(withNitro(gol, { flow: 0.5 }), 2);
     expect(strong.et).toBeLessThan(weak.et);
     expect(strong.sim.nitrous!.telemetry().consumedKg).toBeLessThanOrEqual(0.04 + 1e-9);
   }, 60_000);

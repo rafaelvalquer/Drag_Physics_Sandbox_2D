@@ -77,26 +77,23 @@ describe('resolver', () => {
     }
   }, 120_000);
 
-  it('the cache tells the settings apart (one or two stages, the split, flow and ramp)', () => {
+  it('the cache distinguishes flow and ramp', () => {
     const kit = 'nitrous-progressive';
-    const single = ok(gol, [kit], { nitrousMode: 'single', nitrousFlow1: 0.6 }).car.nitrous!;
-    const dual40 = ok(gol, [kit], { nitrousMode: 'dual', nitrousShare: 0.4, nitrousFlow1: 0.8, nitrousFlow2: 0.5 }).car.nitrous!;
-    const dual60 = ok(gol, [kit], { nitrousMode: 'dual', nitrousShare: 0.6, nitrousFlow1: 0.8, nitrousFlow2: 0.5 }).car.nitrous!;
-    expect(single.mode).toBe('single');
-    expect(single.stage1Share).toBe(1);
-    expect(dual40.stage1Share).toBeCloseTo(0.4, 6);
-    expect(dual60.stage1Share).toBeCloseTo(0.6, 6);
-    expect(dual40.stage1Flow).toBe(0.8);
-    expect(dual40.stage2Flow).toBe(0.5);
-    expect(ok(gol, [kit], { nitrousRamp1: 2 }).car.nitrous!.stage1RampS).toBe(2);
+    const a = ok(gol, [kit], { nitrousFlow: 0.6, nitrousRampS: 0.3 });
+    const b = ok(gol, [kit], { nitrousFlow: 0.8, nitrousRampS: 0.3 });
+    const c = ok(gol, [kit], { nitrousFlow: 0.8, nitrousRampS: 2 });
+    expect(a.car.nitrous!.flow).toBe(0.6);
+    expect(b.car.nitrous!.flow).toBe(0.8);
+    expect(c.car.nitrous!.rampS).toBe(2);
+    expect(new Set([a.key, b.key, c.key]).size).toBe(3);
   });
 
   it('settings outside what the kit allows are refused; without a kit they are refused too', () => {
-    expect(resolveBuild(gol, ['nitrous-street'], { nitrousFlow1: 1.4 }, 1).ok).toBe(false);
-    expect(resolveBuild(gol, ['nitrous-street'], { nitrousRamp1: 3 }, 1).ok).toBe(false); // coarse controller: shorter ramp range
-    expect(resolveBuild(gol, ['nitrous-progressive'], { nitrousRamp1: 3 }, 1).ok).toBe(true);
-    expect(validateTune(gol, [], 1, { nitrousFlow1: 0.5 }).join()).toMatch(/exige um kit de nitro/);
-    expect(nitrousTuneOf(findNitrousKit('nitrous-street')!, {}).flow1).toBe(0.7);
+    expect(resolveBuild(gol, ['nitrous-street'], { nitrousFlow: 1.4 }, 1).ok).toBe(false);
+    expect(resolveBuild(gol, ['nitrous-street'], { nitrousRampS: 3 }, 1).ok).toBe(false); // coarse controller: shorter ramp range
+    expect(resolveBuild(gol, ['nitrous-progressive'], { nitrousRampS: 3 }, 1).ok).toBe(true);
+    expect(validateTune(gol, [], 1, { nitrousFlow: 0.5 }).join()).toMatch(/exige um kit de nitro/);
+    expect(nitrousTuneOf(findNitrousKit('nitrous-street')!, {}).flow).toBe(0.7);
   });
 
   it('a better fuel system and forged internals are read from the build (the nitro asks for them)', () => {
@@ -129,7 +126,7 @@ describe('unlocks and save', () => {
 
   it('the settings are saved, exported and imported; the cylinder and the stage are not part of the save', () => {
     const s = newCareerSave();
-    const tune = { nitrousMode: 'dual' as const, nitrousShare: 0.4, nitrousFlow1: 0.8, nitrousRamp1: 0.5, nitrousFlow2: 0.5, nitrousRamp2: 1.5 };
+    const tune = { nitrousFlow: 0.8, nitrousRampS: 0.5 };
     s.ownedCars = [{ id: 'c1', baseCarId: 'vw-gol-gts-1988', nickname: 'Gol', paint: { color: '#ffffff', accent: '#000000' }, installedParts: ['nitrous-street'], tune, buildVersion: 1, acquiredAt: new Date(0).toISOString() }];
     s.activeCarId = 'c1';
     const p = parseCareerSave(JSON.parse(JSON.stringify(s)));
@@ -143,16 +140,16 @@ describe('unlocks and save', () => {
   });
 
   it('removing the kit drops its settings; swapping the kit keeps only what the new one allows', () => {
-    const tune = { nitrousMode: 'dual' as const, nitrousShare: 0.4, nitrousFlow1: 0.8, nitrousRamp1: 2.5 };
+    const tune = { nitrousFlow: 0.8, nitrousRampS: 2.5 };
     const none = reconcileTune(gol, [], 1, tune);
     expect(none.tune).toEqual({});
-    expect(none.dropped).toContain('nitrousMode');
+    expect(none.dropped).toContain('nitrousFlow');
     const street = reconcileTune(gol, ['nitrous-street'], 1, tune); // coarse controller: 2.5 s ramp is out
-    expect(street.tune.nitrousMode).toBe('dual');
-    expect(street.tune.nitrousRamp1).toBeUndefined();
-    expect(street.dropped).toContain('nitrousRamp1');
+    expect(street.tune.nitrousFlow).toBe(0.8);
+    expect(street.tune.nitrousRampS).toBeUndefined();
+    expect(street.dropped).toContain('nitrousRampS');
     const prog = reconcileTune(gol, ['nitrous-progressive'], 1, tune);
-    expect(prog.tune.nitrousRamp1).toBe(2.5);
+    expect(prog.tune.nitrousRampS).toBe(2.5);
   });
 
   it('buying and installing a kit charges once and never charges to use it', async () => {

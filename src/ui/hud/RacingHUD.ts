@@ -248,7 +248,7 @@ export class RacingHUD {
     this.heatAlert.hidden = sim.engine.thermal.torqueFraction >= 1;
   }
 
-  /** N₂O gauge: what is left of the cylinder, the mode, the stage and the state — all read from the simulation. */
+  /** N₂O gauge driven by cylinder mass and actual injection flow. */
   private updateNitrous(sim: VehicleSimulation): void {
     const n = sim.nitrous;
     this.nitroRow.style.display = n ? '' : 'none';
@@ -257,22 +257,18 @@ export class RacingHUD {
       return;
     }
     const t = n.telemetry();
-    const injecting = t.status === 'STAGE_1_ACTIVE' || t.status === 'STAGE_2_ACTIVE';
+    const injecting = t.status === 'INJECTING';
     const flow = injecting && n.setup.maxFlowKgS > 0 ? Math.min(1, t.flowKgPerS / n.setup.maxFlowKgS) : 0;
     const act = injecting ? '1' : '0';
     if (this.nitroEdge.dataset.active !== act) this.nitroEdge.dataset.active = act;
     this.nitroEdge.style.setProperty('--nitro-flow', flow.toFixed(2));
     const pct = Math.round(t.remainingFraction * 100);
-    const dual = n.setup.mode === 'dual';
-    const split = dual ? ` · E1 ${Math.round(n.setup.stage1Share * 100)} % | E2 ${Math.round((1 - n.setup.stage1Share) * 100)} %` : ' · descarga única';
-    this.nitroTitle.textContent = `N₂O — ${pct} %${split}`;
-    this.nitroBar.style.width = `${pct}%`;
+    this.nitroTitle.textContent = `N₂O — ${pct} %`;
+    this.nitroBar.style.width = `${t.remainingFraction * 100}%`;
     const left = t.estimatedRemainingS !== null ? ` · ${t.estimatedRemainingS.toFixed(1)} s` : '';
     const state: Record<string, string> = {
-      READY: 'Pronto: Shift',
-      STAGE_1_ACTIVE: `INJETANDO${dual ? ' (E1)' : ''}${left}`,
-      STAGE_2_READY: 'ESTÁGIO 2 PRONTO: Shift',
-      STAGE_2_ACTIVE: `INJETANDO (E2)${left}`,
+      READY: `PRONTO${left}`,
+      INJECTING: `INJETANDO ${Math.round(flow * 100)} %${left}`,
       DEPLETED: 'ESGOTADO',
       DISABLED: 'desativado',
       UNAVAILABLE: '',

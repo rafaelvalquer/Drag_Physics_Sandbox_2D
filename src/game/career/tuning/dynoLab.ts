@@ -38,22 +38,20 @@ export interface LabMeasurement {
   nitrous?: LabNitrous;
 }
 
-/** N₂O on the Dyno Lab: the bench curves of each stage (measured, not drawn from the preview) and the run. */
+/** N₂O bench curve at the configured flow and the observed injection in the track run. */
 export interface LabNitrous {
   /** How the driver used the kit in the test run. */
   mode: LabNitrousMode;
-  stage1Points: LabPoint[];
-  /** Null for a single discharge. */
-  stage2Points: LabPoint[] | null;
-  peakCvStage1: number;
-  peakCvStage2: number | null;
+  points: LabPoint[];
+  peakCv: number;
+  observedExtraCv: number;
   /** Cylinder spent and injection time in the test run. */
   usedKg: number;
   activeS: number;
   capacityKg: number;
 }
 
-export type LabNitrousMode = 'off' | 'stage1' | 'all';
+export type LabNitrousMode = 'off' | 'continuous' | 'strategic';
 
 /**
  * Best upshift speed of each gear: wheel torque ∝ T(rpm)·ratio. Shifting at rpm lands the engine at
@@ -142,11 +140,12 @@ export async function measureLab(
       }
       return out;
     };
-    const dual = nz.mode === 'dual';
-    const s1 = curve(nz.maxFlowKgS * nz.stage1Flow);
-    const s2 = dual ? curve(nz.maxFlowKgS * nz.stage2Flow) : null;
-    const peak = (pts: LabPoint[]): number => pts.reduce((a, p) => Math.max(a, p.powerCv), 0);
-    nitrous = { mode, stage1Points: s1, stage2Points: s2, peakCvStage1: peak(s1), peakCvStage2: s2 ? peak(s2) : null, usedKg: acc.nitrousUsedKg, activeS: acc.nitrousActiveS, capacityKg: nz.capacityKg };
+    const injectedPoints = curve(nz.maxFlowKgS * nz.flow);
+    nitrous = {
+      mode, points: injectedPoints, peakCv: injectedPoints.reduce((peak, p) => Math.max(peak, p.powerCv), 0),
+      observedExtraCv: acc.nitrousPeakPowerCv, usedKg: acc.nitrousUsedKg,
+      activeS: acc.nitrousActiveS, capacityKg: nz.capacityKg,
+    };
   }
   progress(1);
   if (isStale()) return null;

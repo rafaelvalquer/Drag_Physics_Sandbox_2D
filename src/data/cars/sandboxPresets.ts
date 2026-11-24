@@ -24,7 +24,7 @@ const RECIPES = [
   { id: 'gm-kadett-preparado-sandbox', label: 'Kadett — Paula', rival: 'paula' },
   { id: 'vw-gol-ap-turbo-sandbox', label: 'Gol GTS AP — Turbo de teste', baseCarId: 'vw-gol-gts-1988', parts: ['turbo-basic', 'clutch-reinforced', 'exhaust-sport', 'tires-sport'], tune: { boostBar: 0.5 } },
   { id: 'vw-gol-nitro-street-sandbox', label: 'Gol GTS AP — Street Shot (N₂O)', baseCarId: 'vw-gol-gts-1988', parts: ['nitrous-street'], tune: {} as BuildTune },
-  { id: 'gm-chevette-nitro-wet-sandbox', label: 'Chevette — Wet Performance (2 estágios)', baseCarId: 'gm-chevette-sl-1988', parts: ['nitrous-wet'], tune: { nitrousMode: 'dual', nitrousShare: 0.4 } as BuildTune },
+  { id: 'gm-chevette-nitro-wet-sandbox', label: 'Chevette — Wet Performance', baseCarId: 'gm-chevette-sl-1988', parts: ['nitrous-wet'], tune: { nitrousFlow: 0.58, nitrousRampS: 0.72 } as BuildTune },
 ] as const;
 
 const valid: SandboxPreparedPreset[] = [];

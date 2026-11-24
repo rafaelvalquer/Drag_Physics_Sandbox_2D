@@ -570,7 +570,7 @@ export class EngineModel {
    * Computes explicit torques, configures the crank constraint rows and returns the explicit
    * torque to apply to the crank DOF during this step.
    */
-  preStep(h: number, input: EngineInputs): number {
+  preStep(h: number, input: EngineInputs, injectNitrous?: (h: number, rpm: number, injectable: boolean) => number): number {
     const cfg = this.cfg;
     const omega = this.crank.v;
     const rpm = radSToRpm(omega);
@@ -632,6 +632,7 @@ export class EngineModel {
     const willans = this.willansFactor(this.manifoldPressure);
     this.torqueCombustion = omega > 0 ? indicated * willans * burn * this.fueledFraction(this.airMassFlow) * this.thermal.torqueFraction : 0;
     // N₂O: extra combustion torque from the injected oxidiser (NitrousController), only while the engine burns
+    if (injectNitrous) this.nitrousTorqueNm = injectNitrous(h, rpm, omega > 0 && burn > 0 && input.ignitionOn && input.sparkCut <= 0 && this.runState === 'RUNNING');
     if (omega > 0 && burn > 0) this.torqueCombustion += this.nitrousTorqueNm;
 
     // ----- losses -----
@@ -770,13 +771,9 @@ export class EngineModel {
   /** Extra crank torque from the nitrous system this step (N·m); written by the simulation before preStep. */
   nitrousTorqueNm = 0;
 
-  /**
-   * A nitrous injection can start and run while the engine is running with the fuel on. The rev limiter and the spark cut of a
-   * shift do NOT stop it: the solenoid stays open and the cylinder keeps emptying; the extra torque is only added on the steps
-   * the engine really burns (see the combustion torque), so on the limiter the nitro is spent but cannot push past the cut.
-   */
+  /** Preliminary check for drivers. The combustion step makes the final decision. */
   get nitrousInjectable(): boolean {
-    return this.runState === 'RUNNING' && !this.fuelCut;
+    return this.runState === 'RUNNING' && !this.fuelCut && !this.ignition.limiterActive;
   }
 
   /** Can the engine produce combustion right now (used by the acoustic model). */

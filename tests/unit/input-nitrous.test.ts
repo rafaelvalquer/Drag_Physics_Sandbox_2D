@@ -1,4 +1,4 @@
-/** The nitrous key: Shift by default, one press = one request, repeat and held keys do nothing more. */
+/** The nitrous request tracks the held action, rather than counting presses. */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_BINDINGS, InputManager, validateBindings } from '../../src/game/input/InputManager';
 
@@ -36,23 +36,50 @@ describe('nitrous key', () => {
     expect(validateBindings(DEFAULT_BINDINGS)).toEqual([]);
   });
 
-  it('a press is one request; auto-repeat and holding the key add nothing; releasing does not cancel', () => {
+  it('tracks press and release while ignoring key repeat', () => {
     key('keydown', 'ShiftLeft');
     for (let i = 0; i < 10; i++) key('keydown', 'ShiftLeft', true);
     expect(presses).toBe(1);
-    key('keyup', 'ShiftLeft'); // nothing to cancel: the discharge runs by itself
+    expect(input.isDown('nitrous')).toBe(true);
+    key('keyup', 'ShiftLeft');
     expect(presses).toBe(1);
+    expect(input.isDown('nitrous')).toBe(false);
     key('keydown', 'ShiftLeft');
-    expect(presses).toBe(2); // a new press is a new request (stage 2)
+    expect(presses).toBe(2);
+    expect(input.isDown('nitrous')).toBe(true);
   });
 
   it('is ignored while typing and after the window loses focus', () => {
     key('keydown', 'ShiftLeft', false, { tagName: 'INPUT' });
     expect(presses).toBe(0);
+    expect(input.isDown('nitrous')).toBe(false);
     key('keydown', 'ShiftLeft');
     win.dispatchEvent(new Event('blur'));
+    expect(input.isDown('nitrous')).toBe(false);
     key('keydown', 'ShiftLeft'); // released by the blur: a press again
     expect(presses).toBe(2);
+  });
+
+  it('clears virtual and physical requests when hidden, disabled or remapping', () => {
+    input.press('nitrous');
+    expect(input.isDown('nitrous')).toBe(true);
+    Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(input.isDown('nitrous')).toBe(false);
+    input.press('nitrous');
+    input.enabled = false;
+    input.press('nitrous');
+    expect(input.isDown('nitrous')).toBe(false);
+    input.enabled = true;
+    input.press('nitrous');
+    input.release('nitrous');
+    expect(input.isDown('nitrous')).toBe(false);
+    input.press('nitrous');
+    let captured = '';
+    input.captureNextKey((code) => { captured = code; });
+    key('keydown', 'ShiftLeft');
+    expect(captured).toBe('ShiftLeft');
+    expect(input.isDown('nitrous')).toBe(false);
   });
 
   it('can be remapped to ShiftRight, but not onto a key another action uses', () => {

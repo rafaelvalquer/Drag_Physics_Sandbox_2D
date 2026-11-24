@@ -150,7 +150,7 @@ export const CATEGORY_DESCRIPTION: Record<PartCategory, string> = {
   suspension: 'Altura efetiva do centro de gravidade na transferência de carga.',
   'engine-valvetrain': 'Rotação em que as válvulas deixam de seguir o comando (flutuação).',
   'electronics-launch': 'Rotação mantida na linha de largada (two-step).',
-  nitrous: 'Kit de N₂O: uma ou duas descargas, acionadas com Shift.',
+  nitrous: 'Kit de N₂O com injeção enquanto Shift estiver pressionado.',
 };
 
 /** Numeric mechanical changes use SI units or the documented suffix (Bar, KPa, Mm, Rpm).

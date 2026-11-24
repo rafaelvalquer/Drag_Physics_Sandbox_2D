@@ -154,7 +154,7 @@ describe('persistent free offers and results', () => {
     const m = parseCareerSave(old);
     expect(m.ok).toBe(true);
     if (!m.ok) return;
-    expect(m.save).toMatchObject({ version: 4, credits: 2710, reputation: 13, ownedCars: old.ownedCars });
+    expect(m.save).toMatchObject({ version: 5, credits: 2710, reputation: 13, ownedCars: old.ownedCars });
     expect(m.save.results[0]!.eventId).toBe('story-race');
     expect(m.save.freeEvents.results[0]!.eventId).toBe('free-1-91-bairro');
     expect(m.save.freeEvents.stats[SECTION]).toMatchObject({ races: 1, wins: 1, creditsEarned: 250 });

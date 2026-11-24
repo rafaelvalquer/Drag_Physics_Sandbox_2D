@@ -1,10 +1,12 @@
 import { z } from 'zod';
+import { migrateNitrousTune } from '../../data/nitrousMigration';
 import { CHAPTER_1_ID, CHAPTER_2_ID, CHAPTER_IDS, type ChapterId } from './chapters';
 import {
   buildTuneSchema, freeEventDetailsSchema, freeOfferSchema, freeStatsSchema, MAX_FREE_OFFERS,
   MAX_FREE_RESULTS, paintSchema, RECENT_FREE_OPPONENTS,
 } from './freeEvents/FreeEventTypes';
-import { addFreeStats, freeChapterOf, newFreeStats } from './freeEvents/FreeEventHistory';
+import { addFreeStats, freeChapterOf, newFreeStats, opponentFingerprint } from './freeEvents/FreeEventHistory';
+import { findNitrousKit, NITROUS_RAMP_MAX_S } from './tuning/nitrousParts';
 
 /**
  * Career save (one document per slot, so every operation is a single atomic write).
@@ -18,8 +20,9 @@ import { addFreeStats, freeChapterOf, newFreeStats } from './freeEvents/FreeEven
  *    speed, tyre pressure next to the boost). A v2 save is migrated as it is: its boost setting
  *    (the only v2 setting) is kept and the new settings are absent (= hardware default).
  *  - v4: persistent free race boards, dedicated results and cumulative statistics.
+ *  - v5: continuous nitrous flow and entry ramp.
  */
-export const CAREER_SAVE_VERSION = 4;
+export const CAREER_SAVE_VERSION = 5;
 export const DEFAULT_SLOT = 'slot-1';
 /** Budget the player has to buy the first car. */
 export const START_CREDITS = 4500;
@@ -227,7 +230,21 @@ export type ParseResult = { ok: true; save: CareerSave } | { ok: false; errors: 
 export function parseCareerSave(input: unknown): ParseResult {
   const migrated = migrateCareerSave(input);
   const r = CareerSaveSchema.safeParse(migrated);
-  if (r.success) return { ok: true, save: r.data };
+  if (r.success) {
+    if (migrated !== input) {
+      const free = r.data.freeEvents;
+      for (const offer of Object.values(free.offersByChapter).flat()) {
+        const previous = offer.opponent.fingerprint;
+        const fingerprint = opponentFingerprint(offer.opponent, offer);
+        if (previous === fingerprint) continue;
+        offer.opponent.fingerprint = fingerprint;
+        for (const recent of free.recentFingerprints) {
+          if (recent.fingerprint === previous) recent.fingerprint = fingerprint;
+        }
+      }
+    }
+    return { ok: true, save: r.data };
+  }
   return { ok: false, errors: r.error.issues.map((i) => `${i.path.join('.') || '(raiz)'}: ${i.message}`) };
 }
 
@@ -241,7 +258,19 @@ export function migrateCareerSave(input: unknown): unknown {
   if (doc.version === 1) doc = migrateV1toV2(doc);
   if (doc.version === 2) doc = migrateV2toV3(doc);
   if (doc.version === 3) doc = migrateV3toV4(doc);
+  if (doc.version === 4) doc = migrateV4toV5(doc);
   return doc;
+}
+
+function migrateV4toV5(v4: Record<string, unknown>): Record<string, unknown> {
+  const cars = Array.isArray(v4.ownedCars) ? v4.ownedCars.map((entry: unknown) => {
+    if (!entry || typeof entry !== 'object' || !('tune' in entry)) return entry;
+    const ids = 'installedParts' in entry && Array.isArray(entry.installedParts) ? entry.installedParts : [];
+    const kit = ids.flatMap((id: unknown) => typeof id === 'string' ? [findNitrousKit(id)] : []).find(Boolean);
+    const rampMax = NITROUS_RAMP_MAX_S * (kit?.kit.rampControl ?? 1);
+    return { ...entry, tune: migrateNitrousTune(entry.tune, rampMax) };
+  }) : v4.ownedCars;
+  return { ...v4, version: 5, ownedCars: cars };
 }
 
 /**

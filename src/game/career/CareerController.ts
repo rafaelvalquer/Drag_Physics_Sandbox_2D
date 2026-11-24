@@ -48,12 +48,8 @@ export function normalizeTune(t: BuildTune): BuildTune {
   if (t.finalDrive !== undefined) o.finalDrive = t.finalDrive;
   if (t.shiftRpm !== undefined) o.shiftRpm = Math.round(t.shiftRpm);
   if (t.tirePressureKpa !== undefined) o.tirePressureKpa = Math.round(t.tirePressureKpa);
-  if (t.nitrousMode !== undefined) o.nitrousMode = t.nitrousMode;
-  if (t.nitrousShare !== undefined) o.nitrousShare = Math.round(t.nitrousShare * 100) / 100;
-  if (t.nitrousFlow1 !== undefined) o.nitrousFlow1 = Math.round(t.nitrousFlow1 * 100) / 100;
-  if (t.nitrousRamp1 !== undefined) o.nitrousRamp1 = Math.round(t.nitrousRamp1 * 10) / 10;
-  if (t.nitrousFlow2 !== undefined) o.nitrousFlow2 = Math.round(t.nitrousFlow2 * 100) / 100;
-  if (t.nitrousRamp2 !== undefined) o.nitrousRamp2 = Math.round(t.nitrousRamp2 * 10) / 10;
+  if (t.nitrousFlow !== undefined) o.nitrousFlow = t.nitrousFlow;
+  if (t.nitrousRampS !== undefined) o.nitrousRampS = t.nitrousRampS;
   return o;
 }
 

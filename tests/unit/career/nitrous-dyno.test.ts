@@ -1,4 +1,4 @@
-/** N₂O on the Dyno Lab: measured bench curves per stage, run modes (none / stage 1 / all), nothing without a kit. */
+/** N₂O on the Dyno Lab: measured bench curve and continuous or strategic use, nothing without a kit. */
 import { describe, expect, it } from 'vitest';
 import { findCampaignCar } from '../../../src/data/cars/campaign';
 import { TRACKS } from '../../../src/data/tracks/index';
@@ -20,25 +20,25 @@ describe('Dyno Lab with N₂O', () => {
     expect(m!.nitrous).toBeUndefined();
   }, 60_000);
 
-  it('the stage curves are measured on the bench and sit above the engine without nitro', async () => {
-    const car = build('nitrous-progressive', { nitrousMode: 'dual' });
-    const m = (await measureLab(car, track, () => false, () => {}, { ...opts, nitrous: 'all' }))!;
+  it('the injected curve is measured on the bench and sit above the engine without nitro', async () => {
+    const car = build('nitrous-progressive', { nitrousFlow: 0.7 });
+    const m = (await measureLab(car, track, () => false, () => {}, { ...opts, nitrous: 'strategic' }))!;
     const n = m.nitrous!;
-    expect(n.stage1Points.length).toBeGreaterThanOrEqual(3);
-    expect(n.peakCvStage1).toBeGreaterThan(m.peakCv + 10);
-    expect(n.stage2Points).not.toBeNull();
+    expect(n.points.length).toBeGreaterThanOrEqual(3);
+    expect(n.peakCv).toBeGreaterThan(m.peakCv + 10);
+    expect(n.observedExtraCv).toBeGreaterThan(0);
     expect(n.capacityKg).toBeGreaterThan(0);
   }, 90_000);
 
-  it('run modes: none uses nothing, stage 1 uses part of the cylinder, all uses more and is quicker than none', async () => {
-    const car = build('nitrous-progressive', { nitrousMode: 'dual' });
-    const run = async (mode: 'off' | 'stage1' | 'all') => (await measureLab(car, track, () => false, () => {}, { ...opts, nitrous: mode }))!;
+  it('run modes: both active modes consume nitrous and strategic use improves the run', async () => {
+    const car = build('nitrous-progressive', { nitrousFlow: 0.7 });
+    const run = async (mode: 'off' | 'continuous' | 'strategic') => (await measureLab(car, track, () => false, () => {}, { ...opts, nitrous: mode }))!;
     const off = await run('off');
-    const s1 = await run('stage1');
-    const all = await run('all');
+    const s1 = await run('continuous');
+    const all = await run('strategic');
     expect(off.nitrous!.usedKg).toBe(0);
     expect(s1.nitrous!.usedKg).toBeGreaterThan(0);
-    expect(all.nitrous!.usedKg).toBeGreaterThan(s1.nitrous!.usedKg);
+    expect(all.nitrous!.usedKg).toBeGreaterThan(0);
     expect(all.t402!).toBeLessThan(off.t402!);
   }, 180_000);
 

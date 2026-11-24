@@ -84,12 +84,8 @@ export const TUNE_LABEL: Record<TuneField, string> = {
   finalDrive: 'Relação final',
   shiftRpm: 'Ponto de troca',
   tirePressureKpa: 'Pressão dos pneus',
-  nitrousMode: 'Modo do nitro',
-  nitrousShare: 'Divisão do nitro',
-  nitrousFlow1: 'Vazão do estágio 1',
-  nitrousRamp1: 'Rampa do estágio 1',
-  nitrousFlow2: 'Vazão do estágio 2',
-  nitrousRamp2: 'Rampa do estágio 2',
+  nitrousFlow: 'Vazão do nitro',
+  nitrousRampS: 'Entrada progressiva do nitro',
 };
 
 export const THROTTLE_OPTIONS: readonly { value: ThrottlePreset; label: string }[] = [

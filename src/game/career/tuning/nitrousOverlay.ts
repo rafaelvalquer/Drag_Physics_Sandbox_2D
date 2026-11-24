@@ -1,19 +1,14 @@
 import { validateCar, type CarConfig, type NitrousConfig } from '../../../data/schema';
 import type { BuildResult, BuildTune } from './buildCommon';
 import { deepFreeze } from './buildCommon';
-import { findNitrousKit, NITROUS_FLOW_MAX, NITROUS_FLOW_MIN, NITROUS_RAMP_MAX_S, NITROUS_SHARE_MAX, NITROUS_SHARE_MIN } from './nitrousParts';
+import { findNitrousKit, NITROUS_FLOW_MAX, NITROUS_FLOW_MIN, NITROUS_RAMP_MAX_S } from './nitrousParts';
 import { findPart, type NitrousKitPart } from './parts';
 
-/** Defaults of a freshly installed kit: one discharge at 70 % of the flow with a short ramp. */
-export const NITROUS_DEFAULTS = { mode: 'single' as const, share: 0.5, flow1: 0.7, ramp1: 0.3, flow2: 0.5, ramp2: 1 };
+export const NITROUS_DEFAULTS = { flow: 0.7, rampS: 0.3 };
 
 export interface NitrousTuneValues {
-  mode: 'single' | 'dual';
-  share: number;
-  flow1: number;
-  ramp1: number;
-  flow2: number;
-  ramp2: number;
+  flow: number;
+  rampS: number;
 }
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
@@ -32,27 +27,19 @@ export function nitrousTuneOf(kit: NitrousKitPart, tune: BuildTune): NitrousTune
   const d = NITROUS_DEFAULTS;
   const rampMax = NITROUS_RAMP_MAX_S * kit.kit.rampControl;
   return {
-    mode: tune.nitrousMode ?? d.mode,
-    share: clamp(tune.nitrousShare ?? d.share, NITROUS_SHARE_MIN, NITROUS_SHARE_MAX),
-    flow1: clamp(tune.nitrousFlow1 ?? d.flow1, NITROUS_FLOW_MIN, NITROUS_FLOW_MAX),
-    ramp1: clamp(tune.nitrousRamp1 ?? d.ramp1, 0, rampMax),
-    flow2: clamp(tune.nitrousFlow2 ?? d.flow2, NITROUS_FLOW_MIN, NITROUS_FLOW_MAX),
-    ramp2: clamp(tune.nitrousRamp2 ?? d.ramp2, 0, rampMax),
+    flow: clamp(tune.nitrousFlow ?? d.flow, NITROUS_FLOW_MIN, NITROUS_FLOW_MAX),
+    rampS: clamp(tune.nitrousRampS ?? d.rampS, 0, rampMax),
   };
 }
 
 /** Ranges the Workshop shows for a kit. */
-export function nitrousLimits(kit: NitrousKitPart): { flowMin: number; flowMax: number; rampMax: number; shareMin: number; shareMax: number } {
-  return { flowMin: NITROUS_FLOW_MIN, flowMax: NITROUS_FLOW_MAX, rampMax: NITROUS_RAMP_MAX_S * kit.kit.rampControl, shareMin: NITROUS_SHARE_MIN, shareMax: NITROUS_SHARE_MAX };
+export function nitrousLimits(kit: NitrousKitPart): { flowMin: number; flowMax: number; rampMax: number } {
+  return { flowMin: NITROUS_FLOW_MIN, flowMax: NITROUS_FLOW_MAX, rampMax: NITROUS_RAMP_MAX_S * kit.kit.rampControl };
 }
 
 const NITROUS_LABEL: Record<string, string> = {
-  nitrousMode: 'Modo do nitro',
-  nitrousShare: 'Divisão do nitro',
-  nitrousFlow1: 'Vazão do estágio 1',
-  nitrousRamp1: 'Rampa do estágio 1',
-  nitrousFlow2: 'Vazão do estágio 2',
-  nitrousRamp2: 'Rampa do estágio 2',
+  nitrousFlow: 'Vazão do nitro',
+  nitrousRampS: 'Entrada progressiva do nitro',
 };
 
 /** Errors (pt-BR) of the nitrous settings of a tune against the installed kit. */
@@ -66,12 +53,8 @@ export function validateNitrousTune(kit: NitrousKitPart | undefined, tune: Build
     if (v === undefined) return;
     if (!Number.isFinite(v) || v < lo - 1e-6 || v > hi + 1e-6) errs.push(`${NITROUS_LABEL[k]} fora da faixa (${lo.toFixed(2).replace('.', ',')} a ${hi.toFixed(2).replace('.', ',')})`);
   };
-  if (tune.nitrousMode !== undefined && tune.nitrousMode !== 'single' && tune.nitrousMode !== 'dual') errs.push('modo do nitro desconhecido');
-  inRange('nitrousShare', tune.nitrousShare, lim.shareMin, lim.shareMax);
-  inRange('nitrousFlow1', tune.nitrousFlow1, lim.flowMin, lim.flowMax);
-  inRange('nitrousFlow2', tune.nitrousFlow2, lim.flowMin, lim.flowMax);
-  inRange('nitrousRamp1', tune.nitrousRamp1, 0, lim.rampMax);
-  inRange('nitrousRamp2', tune.nitrousRamp2, 0, lim.rampMax);
+  inRange('nitrousFlow', tune.nitrousFlow, lim.flowMin, lim.flowMax);
+  inRange('nitrousRampS', tune.nitrousRampS, 0, lim.rampMax);
   return errs;
 }
 
@@ -106,19 +89,13 @@ export function applyNitrousOverlay(base: CarConfig, partIds: readonly string[],
   const t = nitrousTuneOf(kit, tune);
   const car = structuredClone(hw.car) as CarConfig;
   car.massKg = Math.round((car.massKg + kit.kit.massKg) * 100) / 100;
-  const dual = t.mode === 'dual';
   const setup: NitrousConfig = {
     kitId: kit.id,
     capacityKg: kit.kit.capacityKg,
     maxFlowKgS: kit.kit.maxFlowKgS,
     fuelNeed: kit.kit.fuelNeed,
     minRpm: Math.max(kit.kit.minRpm, car.engine.idleRpm * 2),
-    mode: t.mode,
-    stage1Share: dual ? t.share : 1,
-    stage1Flow: t.flow1,
-    stage1RampS: t.ramp1,
-    stage2Flow: dual ? t.flow2 : t.flow1,
-    stage2RampS: dual ? t.ramp2 : t.ramp1,
+    ...t,
     fuelSupply: fuelSupplyOf(partIds),
     torqueLimitNm: Math.round(internalsTorqueLimitOf(base, partIds, hw)),
   };
