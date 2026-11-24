@@ -4,7 +4,7 @@ import { CHAPTER1_CARS, CAREER_CARS } from '../../../src/data/cars/campaign';
 import { TRACKS } from '../../../src/data/tracks';
 import { careerResolverVersion } from '../../../src/game/career/tuning/resolverVersion';
 import { AuthoritativeRace } from '../../../src/game/online/AuthoritativeRace';
-import { RaceInputSchema } from '../../../src/game/online/contracts';
+import { RaceInputSchema, type RaceInput } from '../../../src/game/online/contracts';
 import { ONLINE_STARTERS, stockOnlineBuild } from '../../../src/game/online/demoCatalog';
 
 function newRace() {
@@ -59,5 +59,42 @@ describe('corrida autoritativa', () => {
     expect(result.lanes.every((lane) => lane.result.et !== null && !lane.result.redLight)).toBe(true);
     expect(result.lanes[0].result.rt).not.toBe(result.lanes[1].result.rt);
     expect(result.winner).toBe(result.lanes[0].result.total! < result.lanes[1].result.total! ? 0 : 1);
+  });
+
+  it.each([20, 80, 150, 250])('termina com %i ms de RTT, jitter e descarte de comandos', (rttMs) => {
+    const race = newRace();
+    const pending: { at: number; lane: 0 | 1; input: RaceInput }[] = [];
+    const oneWayTicks = Math.round(rttMs * 0.06);
+    let sequence = 0;
+    let firstLaunchCommand: number | undefined;
+    let firstAppliedThrottle: number | undefined;
+    while (race.race.phase !== 'finished' && race.tick < 6_000) {
+      if (race.tick % 4 === 0) {
+        sequence++;
+        if (sequence % 17 !== 0) for (const lane of [0, 1] as const) {
+          const observedTick = Math.max(0, race.tick - oneWayTicks);
+          const sim = race.race.raceLanes[lane]!.sim;
+          const launch = race.race.greenAt !== null && observedTick / 120 >= race.race.greenAt + lane * 0.15;
+          if (lane === 0 && launch) firstLaunchCommand ??= race.tick;
+          pending.push({ at: race.tick + Math.max(0, oneWayTicks + sequence % 5 - 2), lane,
+            input: { matchId: race.matchId, sequence, observedTick, throttle: launch ? 1 : 0,
+              shift: launch && (sim.gear === 0 || sim.engine.rpm >= 5_750) ? 1 : undefined } });
+        }
+      }
+      for (let index = pending.length - 1; index >= 0; index--) {
+        const packet = pending[index]!;
+        if (packet.at > race.tick) continue;
+        race.submit(packet.lane, packet.input);
+        pending.splice(index, 1);
+      }
+      race.step();
+      if (race.race.raceLanes[0]!.sim.controls.pedal > 0) firstAppliedThrottle ??= race.tick;
+    }
+    const snapshot = race.snapshot();
+    expect(snapshot.phase).toBe('finished');
+    expect(snapshot.lanes.every((lane) => lane.result.finished && !lane.result.redLight)).toBe(true);
+    expect(firstLaunchCommand).toBeDefined();
+    expect(firstAppliedThrottle).toBeDefined();
+    expect(firstAppliedThrottle! - firstLaunchCommand!).toBeLessThanOrEqual(oneWayTicks + 3);
   });
 });

@@ -29,7 +29,7 @@ export class AuthoritativeRace {
       sim.enableEngineFailure(build.failureSpec);
       return { sim, ai: null, name: build.name, pedal: () => this.drivers[index]!.throttle };
     });
-    this.race = new RaceController(lanes, 'quarter', 'pro', seed);
+    this.race = new RaceController(lanes, 'quarter', 'pro', seed, true);
     this.runner.afterStep.push((step) => this.race.afterStep(step));
   }
 
@@ -71,10 +71,17 @@ export class AuthoritativeRace {
     const results = this.race.results;
     const lane = (index: 0 | 1): OnlineLaneSnapshot => {
       const { sim } = this.race.raceLanes[index]!;
+      const nitrous = sim.nitrous;
       return {
         x: sim.x, speed: sim.speed, rpm: sim.engine.rpm, gear: sim.gear, pitch: sim.pitch,
         wheelAngleDriven: sim.wheelAngleDriven, wheelAngleFree: sim.wheelAngleFree,
         boostBar: (sim.engine.turbo?.boostPa ?? 0) / 100_000,
+        audioFrame: Array.from(sim.audioFrame), runState: sim.engine.runState, pedal: sim.controls.pedal,
+        braking: sim.controls.autoBrake || sim.controls.holdBrake,
+        shifting: sim.shift.active, targetGear: sim.shift.targetGear,
+        wheelOmegaDriven: sim.telemetry.wheelOmegaDriven, wheelOmegaFree: sim.telemetry.wheelOmegaFree,
+        slipRatio: sim.telemetry.slipRatio, accel: sim.telemetry.acceleration,
+        nitrous: nitrous && nitrous.setup.maxFlowKgS > 0 ? nitrous.telemetry().flowKgPerS / nitrous.setup.maxFlowKgS : 0,
         result: structuredClone(results[index]!),
       };
     };

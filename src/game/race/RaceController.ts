@@ -126,6 +126,7 @@ export class RaceController {
     readonly distanceId: RaceDistanceId,
     readonly treeType: TreeType = 'pro',
     seed = 1,
+    private readonly allowTies = false,
   ) {
     this.distanceM = RACE_DISTANCES[distanceId].m;
     this.dnfTimeoutS = DNF_TIMEOUT_S[distanceId];
@@ -347,7 +348,8 @@ export class RaceController {
         // both fouled: the one who fouled later (smaller |RT|) wins
         const rts = this.lanes.map((l) => l.result.rt ?? -99);
         this.winner = rts[0]! > rts[1]! ? 0 : 1;
-      } else this.winner = s[0]! <= s[1]! ? 0 : 1;
+      } else if (this.allowTies && Math.abs(s[0]! - s[1]!) < 1e-6) this.winner = null;
+      else this.winner = s[0]! <= s[1]! ? 0 : 1;
     }
     this.status = this.winner === null ? 'Sem vencedor' : `Vencedor: ${this.raceLanes[this.winner]!.name}`;
   }

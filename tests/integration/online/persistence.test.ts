@@ -1,0 +1,229 @@
+import { generateKeyPairSync, randomUUID, sign } from 'node:crypto';
+import { createServer } from 'node:http';
+import { Client } from '@colyseus/sdk';
+import { readFile } from 'node:fs/promises';
+import { PGlite } from '@electric-sql/pglite';
+import { PGLiteSocketServer } from '@electric-sql/pglite-socket';
+import postgres from 'postgres';
+import { afterAll, beforeAll, expect, it } from 'vitest';
+import { TRACKS } from '../../../src/data/tracks';
+import { AuthoritativeRace } from '../../../src/game/online/AuthoritativeRace';
+import { COMPETITIVE_ROOM, type OnlineLoadingState, type OnlineLobbyState, type OnlineRaceSnapshot } from '../../../src/game/online/contracts';
+import { ONLINE_STARTERS } from '../../../src/game/online/demoCatalog';
+import { PREPARATION_TREES } from '../../../src/game/online/preparation';
+import { OnlineGarage, savePreparationCatalog } from '../../../src/server/online/garage';
+import { OnlineMatches, type OnlineAward } from '../../../src/server/online/matches';
+import { startOnlineServer } from '../../../src/server/online/server';
+
+let db: PGlite;
+let socket: PGLiteSocketServer;
+let sql: postgres.Sql;
+let garage: OnlineGarage;
+let matches: OnlineMatches;
+const users: [string, string] = [randomUUID(), randomUUID()];
+const identity = (id: string) => ({ id, sessionId: randomUUID(), expiresAtMs: Date.now() + 60_000, avatarUrl: null });
+const onboarding = { nickname: 'Piloto A', baseCarId: ONLINE_STARTERS[0], termsAccepted: true, useGoogleAvatar: false } as const;
+const apply = (user: string, operation: Parameters<OnlineGarage['apply']>[1]['operation'], operationId = randomUUID()) =>
+  garage.apply(user, { operation, operationId }, () => false);
+
+beforeAll(async () => {
+  db = await PGlite.create();
+  await db.exec(`create role anon; create role authenticated; create schema auth;
+    create table auth.users(id uuid primary key);
+    create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+    grant usage on schema auth to authenticated; grant execute on function auth.uid() to authenticated;`);
+  await db.exec(await readFile(new URL('../../../supabase/migrations/20261124000100_online.sql', import.meta.url), 'utf8'));
+  await db.query('insert into auth.users values ($1), ($2)', users);
+  socket = new PGLiteSocketServer({ db, port: 0, maxConnections: 12 });
+  await socket.start();
+  sql = postgres(`postgresql://postgres@${socket.getServerConn()}/postgres`, { max: 1, prepare: false });
+  garage = new OnlineGarage(sql, { startCredits: 4500, startRp: 1000 });
+  matches = new OnlineMatches(garage);
+  await savePreparationCatalog(sql);
+});
+
+afterAll(async () => {
+  await sql?.end({ timeout: 1 });
+  await socket?.stop();
+  await db?.close();
+});
+
+it('protege cadastro, inventário, saldos, PP, histórico e liquidação da corrida no PostgreSQL', async () => {
+  await Promise.all([garage.create(identity(users[0]), onboarding), garage.create(identity(users[0]), onboarding)]);
+  await expect(garage.create(identity(users[1]), { ...onboarding, nickname: 'piloto a' })).rejects.toThrow('nickname');
+  await garage.create(identity(users[1]), { ...onboarding, nickname: 'Piloto B', baseCarId: ONLINE_STARTERS[1] });
+  const before = (await garage.get(users[0]))!;
+  const [first] = before.cars;
+  expect(before.profile.cr_balance).toBe(4500);
+  expect(before.cars).toHaveLength(1);
+  const operationId = randomUUID();
+  const purchase = { kind: 'buy', baseCarId: ONLINE_STARTERS[0] } as const;
+  const [bought, retried] = await Promise.all([apply(users[0], purchase, operationId), apply(users[0], purchase, operationId)]);
+  expect(bought).toEqual(retried);
+  expect((await garage.get(users[0]))?.profile.cr_balance).toBe(3700);
+  await expect(apply(users[0], { kind: 'buy', baseCarId: 'nissan-gtr-r35-2017' })).rejects.toThrow();
+  await expect(apply(users[1], { kind: 'select', carId: first!.id })).rejects.toThrow('indisponível');
+  const tree = PREPARATION_TREES.get(first!.base_car_id)!;
+  const node = tree.nodes.find((entry) => entry.id === 'aderencia-1')!;
+  const partId = node.unlocksPartIds[0]!;
+  await expect(apply(users[0], { kind: 'buyPart', carId: first!.id, partId })).rejects.toThrow('bloqueada');
+  await expect(apply(users[0], { kind: 'unlock', carId: first!.id, nodeId: node.id })).rejects.toThrow('insuficientes');
+
+  const matchId = randomUUID();
+  const builds = await matches.start(matchId, TRACKS[0]!.id, 1, users, [first!.id, undefined]);
+  await apply(users[0], { kind: 'select', carId: bought.carId });
+  const race = new AuthoritativeRace(matchId, builds, TRACKS[0]!, 1);
+  const snapshot = race.snapshot();
+  snapshot.phase = 'finished';
+  snapshot.winner = 0;
+  snapshot.lanes[0].result.rt = 0.1;
+  snapshot.lanes[1].result.rt = 0.2;
+  const rewards = await matches.finish(matchId, snapshot, null);
+  expect(rewards.map(({ cr, rp, pp }) => [cr, rp, pp])).toEqual([[600, 16, 5], [300, -16, 3]]);
+  expect(await matches.finish(matchId, snapshot, null)).toEqual(rewards);
+  const after = (await garage.get(users[0]))!;
+  expect(after.profile.cr_balance).toBe(4300);
+  expect(after.profile.rp).toBe(1016);
+  expect(after.cars.find((car) => car.id === first!.id)?.pp_balance).toBe(5);
+  expect(after.cars.find((car) => car.id === bought.carId)?.pp_balance).toBe(0);
+  expect((await matches.history(users[0], 0, first!.id)).length).toBe(1);
+  expect((await matches.ranking(users[0], 0)).ownPosition).toBe(1);
+
+  await sql`update online_car_progression set pp_balance = ${node.costPP}, pp_earned_total = ${node.costPP} where car_id = ${first!.id}`;
+  await expect(apply(users[0], { kind: 'unlock', carId: first!.id, nodeId: 'aderencia-2' })).rejects.toThrow('pré-requisitos');
+  await Promise.all([apply(users[0], { kind: 'unlock', carId: first!.id, nodeId: node.id }), apply(users[0], { kind: 'unlock', carId: first!.id, nodeId: node.id })]);
+  const unlocked = (await garage.get(users[0]))!.cars.find((car) => car.id === first!.id)!;
+  expect(unlocked.pp_balance).toBe(0);
+  expect(unlocked.pp_spent_total).toBe(node.costPP);
+  await expect(apply(users[0], { kind: 'buyPart', carId: bought.carId, partId })).rejects.toThrow('bloqueada');
+  await expect(apply(users[0], { kind: 'install', carId: first!.id, partId, buildRevision: 0 })).rejects.toThrow('Compre');
+  await apply(users[0], { kind: 'buyPart', carId: first!.id, partId });
+  await apply(users[0], { kind: 'install', carId: first!.id, partId, buildRevision: 0 });
+  await expect(apply(users[0], { kind: 'tune', carId: first!.id, buildRevision: 1, tune: { revLimitRpm: 100_000 } })).rejects.toThrow();
+  await apply(users[0], { kind: 'remove', carId: first!.id, partId, buildRevision: 1 });
+  await apply(users[0], { kind: 'sell', carId: first!.id, confirmed: true });
+  await expect(apply(users[0], { kind: 'sell', carId: bought.carId, confirmed: true })).rejects.toThrow('Mantenha');
+  expect((await matches.history(users[0], 0, first!.id)).length).toBe(1);
+
+  const interrupted = randomUUID();
+  await matches.start(interrupted, TRACKS[0]!.id, 1, users, [undefined, undefined]);
+  await matches.recoverInterrupted();
+  expect((await matches.finish(interrupted, null, null)).map((award) => award.rp)).toEqual([0, 0]);
+  await sql.begin(async (tx) => {
+    await tx`select set_config('request.jwt.claim.sub', ${users[0]}, true)`;
+    await tx`set local role authenticated`;
+    expect(await tx`select user_id from online_wallets`).toEqual([{ user_id: users[0] }]);
+  });
+  await expect(sql.begin(async (tx) => {
+    await tx`select set_config('request.jwt.claim.sub', ${users[0]}, true)`;
+    await tx`set local role authenticated`;
+    await tx`update online_wallets set cr_balance = 999999`;
+  })).rejects.toThrow('permission denied');
+});
+
+it('valida tokens pelo JWKS e completa um lobby competitivo com reconexão', async () => {
+  const users = [randomUUID(), randomUUID()] as const;
+  await sql`insert into auth.users (id) values (${users[0]}), (${users[1]})`;
+  await garage.create(identity(users[0]), { ...onboarding, nickname: 'Rede A' });
+  await garage.create(identity(users[1]), { ...onboarding, nickname: 'Rede B', baseCarId: ONLINE_STARTERS[1] });
+  const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+  const kid = randomUUID();
+  const jwks = { keys: [{ ...publicKey.export({ format: 'jwk' }), kid, alg: 'ES256', use: 'sig', key_ops: ['verify'] }] };
+  const provider = createServer((request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+    if (request.url === '/auth/v1/.well-known/jwks.json') response.end(JSON.stringify(jwks));
+    else { response.statusCode = 404; response.end('{}'); }
+  });
+  await new Promise<void>((resolve) => provider.listen(0, '127.0.0.1', resolve));
+  const address = provider.address();
+  if (!address || typeof address === 'string') throw new Error('Provedor sem endereço TCP');
+  const providerUrl = `http://127.0.0.1:${address.port}`;
+  const token = (id: string, override = {}) => {
+    const now = Math.floor(Date.now() / 1000);
+    const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url');
+    const claims = { sub: id, iss: `${providerUrl}/auth/v1`, aud: 'authenticated', role: 'authenticated',
+      session_id: randomUUID(), exp: now + 300, iat: now, app_metadata: { provider: 'google' }, ...override };
+    const data = `${encode({ alg: 'ES256', typ: 'JWT', kid })}.${encode(claims)}`;
+    return `${data}.${sign('sha256', Buffer.from(data), { key: privateKey, dsaEncoding: 'ieee-p1363' }).toString('base64url')}`;
+  };
+  let server: Awaited<ReturnType<typeof startOnlineServer>> | undefined;
+  try {
+    server = await startOnlineServer({
+      SUPABASE_URL: providerUrl, SUPABASE_SECRET_KEY: 'test-secret-only-for-jwks', PORT: '0',
+      ALLOWED_ORIGINS: 'http://localhost:5173', DATABASE_URL: `postgresql://postgres@${socket.getServerConn()}/postgres`,
+    });
+    const httpAddress = server.transport.server?.address();
+    if (!httpAddress || typeof httpAddress === 'string') throw new Error('Backend sem endereço TCP');
+    const endpoint = `http://127.0.0.1:${httpAddress.port}`;
+    const tokens = users.map((id) => token(id));
+    const request = (path: string, bearer?: string, body?: unknown) => fetch(`${endpoint}${path}`, {
+      method: body ? 'POST' : 'GET', headers: { ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
+        ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined,
+    });
+    expect((await request('/health')).status).toBe(200);
+    expect((await request('/v1/garage', token(users[0], { aud: 'other' }))).status).toBe(401);
+    expect((await request('/v1/garage', token(users[0], { exp: 1 }))).status).toBe(401);
+    expect((await request('/v1/garage', token(users[0], { app_metadata: { provider: 'email' } }))).status).toBe(401);
+    expect((await request('/v1/garage', `${tokens[0]!.slice(0, -6)}_bad__`)).status).toBe(401);
+    expect((await request('/v1/garage', tokens[0])).status).toBe(200);
+
+    const networks = tokens.map((bearer) => { const client = new Client(endpoint); client.auth.token = bearer; return client; });
+    const left = await networks[0]!.joinOrCreate(COMPETITIVE_ROOM);
+    await expect(networks[0]!.joinOrCreate(COMPETITIVE_ROOM)).rejects.toThrow();
+    const right = await networks[1]!.joinOrCreate(COMPETITIVE_ROOM);
+    expect(left.roomId).toBe(right.roomId);
+    const attemptedPurchase = { operationId: randomUUID(), operation: { kind: 'buy', baseCarId: ONLINE_STARTERS[0] } };
+    expect((await request('/v1/garage', tokens[0], attemptedPurchase)).status).toBe(409);
+    const lanes = new Set<number>();
+    let reconnected = false;
+    let foreignCarId: string | undefined;
+    const setup = await Promise.all([garage.get(users[0]), garage.get(users[1])]);
+    const results = [left, right].map((room, index) => new Promise<{ snapshot: OnlineRaceSnapshot; award: OnlineAward }>((resolve, reject) => {
+      room.reconnection.minUptime = 0;
+      room.reconnection.minDelay = room.reconnection.delay = 100;
+      let confirmed = false;
+      let sequence = 0;
+      let dropped = false;
+      room.onLeave(() => reject(new Error('Conexão encerrada antes da liquidação')));
+      room.onMessage('lobby', (state: OnlineLobbyState) => {
+        if (state.phase !== 'lobby' || confirmed) return;
+        confirmed = true;
+        lanes.add(state.lane);
+        expect(state.deadline! - state.serverTime).toBeGreaterThan(20_000);
+        if (index === 0) room.send('select', setup[1]!.cars[0]!.id);
+        else room.send('confirm');
+      });
+      room.onMessage('notice', () => { foreignCarId = setup[1]!.cars[0]!.id; room.send('confirm'); });
+      room.onMessage('loading', (state: OnlineLoadingState) => {
+        expect(state.ownCarId).toBe(setup[index]!.profile.active_car_id);
+        room.send('loaded', state.matchId);
+      });
+      room.onReconnect(() => { reconnected = true; room.send('sync'); });
+      room.onMessage('snapshot', (snapshot: OnlineRaceSnapshot) => {
+        if (index === 1 && snapshot.tick >= 120 && !dropped) {
+          dropped = true;
+          void room.leave(false);
+          return;
+        }
+        const lane = snapshot.lanes[index]!;
+        const launch = snapshot.scheduledGreenTick !== null && snapshot.tick >= snapshot.scheduledGreenTick + index * 24;
+        room.send('input', { matchId: snapshot.matchId, sequence: sequence++, observedTick: snapshot.tick,
+          throttle: launch ? 1 : 0, shift: launch && (lane.gear === 0 || lane.rpm > 5_750) ? 1 : undefined });
+      });
+      room.onMessage('cancelled', (notice: { reason: string }) => reject(new Error(notice.reason)));
+      room.onMessage('result', resolve);
+      room.send('sync');
+    }));
+    const [a, b] = await Promise.all(results);
+    expect(foreignCarId).toBeDefined();
+    expect(lanes).toEqual(new Set([0, 1]));
+    expect(reconnected).toBe(true);
+    expect(a!.snapshot).toEqual(b!.snapshot);
+    expect(a!.snapshot.lanes.every((lane) => lane.result.finished)).toBe(true);
+    expect([a!.award.cr, b!.award.cr].sort()).toEqual([300, 600]);
+    expect((await request('/v1/history', tokens[0])).status).toBe(200);
+  } finally {
+    await server?.gracefullyShutdown(false);
+    await new Promise<void>((resolve) => provider.close(() => resolve()));
+  }
+}, 55_000);

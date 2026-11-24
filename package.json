@@ -6,6 +6,7 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
+    "online:server": "tsx src/server/online/start.ts",
     "online:proof": "tsx src/server/online/startProof.ts",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -25,17 +26,20 @@
     "@colyseus/sdk": "0.18.10",
     "@colyseus/ws-transport": "0.18.5",
     "@supabase/supabase-js": "2.119.2",
+    "express": "5.3.0",
     "gsap": "3.13.0",
     "phaser": "4.2.1",
     "postgres": "4.1.1",
+    "tsx": "4.23.15",
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.6.0",
+    "@electric-sql/pglite-socket": "0.3.0",
     "@playwright/test": "^1.65.0",
     "@types/express": "5.0.6",
     "@types/node": "^22.10.0",
     "fake-indexeddb": "^6.2.8",
-    "tsx": "^4.23.15",
     "typescript": "5.9.3",
     "vite": "^8.3.8",
     "vitest": "^5.1.0"
