@@ -5,7 +5,7 @@ import { WebSocketClient } from '@colyseus/ws-transport';
 import { z } from 'zod';
 import { TRACKS } from '../../data/tracks';
 import { AuthoritativeRace } from '../../game/online/AuthoritativeRace';
-import { ONLINE_SNAPSHOT_HZ, RaceInputSchema, type OnlineLobbyState, type OnlineLoadingState, type OnlineRaceSnapshot } from '../../game/online/contracts';
+import { ONLINE_SNAPSHOT_HZ, RaceInputSchema, type OnlineGearUpdate, type OnlineLobbyState, type OnlineLoadingState, type OnlineRaceSnapshot } from '../../game/online/contracts';
 import { inputDelayTicks } from '../../game/online/inputTiming';
 import { PHYSICS_DT } from '../../game/SimulationRunner';
 import type { Authenticate, OnlineIdentity } from './auth';
@@ -36,6 +36,7 @@ interface Driver {
   rttSamples: number[];
   nextProbeAt: number;
   delayTicks: number;
+  lastGearUpdate?: OnlineGearUpdate;
 }
 
 const track = TRACKS[0]!;
@@ -53,9 +54,11 @@ export function competitiveRaceRoom(services: Services) {
     private builds?: [RaceBuild, RaceBuild];
     private simulation?: AuthoritativeRace;
     private started?: Promise<[RaceBuild, RaceBuild]>;
+    private lastFrameAt = 0;
     private pendingMs = 0;
     private stepCostMs = 0;
     private droppedMs = 0;
+    private maxFrameMs = 0;
 
     static override async onAuth(token: string, _options: unknown, context: AuthContext): Promise<OnlineIdentity> {
       if (!services.canJoin(context)) throw new ServerError(ErrorCode.AUTH_FAILED, 'Origem não autorizada ou limite de conexões atingido.');
@@ -274,13 +277,19 @@ export function competitiveRaceRoom(services: Services) {
       this.stage = 'race';
       this.deadline = null;
       this.broadcast('snapshot', { ...this.simulation.snapshot(), sentAt: Date.now() });
-      this.setSimulationInterval((elapsedMs) => this.advance(elapsedMs), STEP_MS);
+      this.lastFrameAt = performance.now();
+      this.setSimulationInterval(() => this.advance(), STEP_MS);
     }
 
-    private advance(elapsedMs: number): void {
+    private advance(): void {
       const simulation = this.simulation!;
+      const now = performance.now();
+      const elapsedMs = now - this.lastFrameAt;
+      this.lastFrameAt = now;
+      this.maxFrameMs = Math.max(this.maxFrameMs, elapsedMs);
       this.droppedMs += Math.max(0, elapsedMs - 250);
       this.pendingMs += Math.min(250, elapsedMs);
+      const previousTick = simulation.tick;
       while (this.pendingMs >= STEP_MS) {
         const start = performance.now();
         simulation.step();
@@ -288,9 +297,28 @@ export function competitiveRaceRoom(services: Services) {
         this.pendingMs -= STEP_MS;
         if (simulation.race.phase === 'finished') {
           void this.finish(null);
-          break;
+          return;
         }
-        if (simulation.tick % SNAPSHOT_STEPS === 0) this.broadcast('snapshot', { ...simulation.snapshot(), sentAt: Date.now() });
+      }
+      if (previousTick === simulation.tick) return;
+      this.sendGearChanges(simulation);
+      if (Math.floor(previousTick / SNAPSHOT_STEPS) !== Math.floor(simulation.tick / SNAPSHOT_STEPS)) {
+        this.broadcast('snapshot', { ...simulation.snapshot(), sentAt: Date.now() });
+      }
+    }
+
+    private sendGearChanges(simulation: AuthoritativeRace): void {
+      for (const client of this.clients) {
+        const driver = this.drivers.get(client.sessionId);
+        if (!driver?.connected) continue;
+        const { sim } = simulation.race.raceLanes[driver.lane]!;
+        const { active: shifting, targetGear } = sim.shift;
+        const gear = sim.gear;
+        const previous = driver.lastGearUpdate;
+        if (previous?.gear === gear && previous.shifting === shifting && previous.targetGear === targetGear) continue;
+        const update: OnlineGearUpdate = { matchId: this.matchId, tick: simulation.tick, gear, shifting, targetGear };
+        driver.lastGearUpdate = update;
+        client.send('gear', update);
       }
     }
 
@@ -313,7 +341,9 @@ export function competitiveRaceRoom(services: Services) {
         this.broadcast('cancelled', { reason: 'Falha ao persistir o resultado da partida.' });
       } finally {
         if (snapshot?.tick) console.info('online-race-metrics', { matchId: this.matchId, ticks: snapshot.tick, meanStepMs: this.stepCostMs / snapshot.tick,
-          droppedMs: this.droppedMs, inputDelayTicks: this.ordered().map((driver) => driver.delayTicks) });
+          droppedMs: this.droppedMs, maxFrameMs: this.maxFrameMs,
+          minRttMs: this.ordered().map((driver) => driver.rttSamples.length ? Math.min(...driver.rttSamples) : null),
+          inputDelayTicks: this.ordered().map((driver) => driver.delayTicks) });
         this.stage = 'done';
         for (const driver of this.drivers.values()) this.releaseAccount(driver.identity.id);
         this.clock.setTimeout(() => { void this.disconnect(); }, 5_000);

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { OnlineRaceSnapshot } from '../../src/game/online/contracts';
+import type { OnlineGearUpdate, OnlineRaceSnapshot } from '../../src/game/online/contracts';
 
 async function login(page: Page, account: number): Promise<void> {
   await page.route('**/auth/v1/authorize?**', (route) => route.continue({
@@ -24,10 +24,27 @@ async function enroll(page: Page, nickname: string, starter: string): Promise<vo
 
 const currentSnapshot = (page: Page) => page.evaluate(() => {
   const { renderer } = (window as unknown as {
-    __app: { debug: { current: { renderer?: { newest?: OnlineRaceSnapshot; loading: { lane: 0 | 1 } } } } };
+    __app: { debug: { current: { renderer?: { newest?: OnlineRaceSnapshot; latestGear?: OnlineGearUpdate; loading: { lane: 0 | 1 } } } } };
   }).__app.debug.current;
-  return renderer && { newest: renderer.newest, lane: renderer.loading.lane };
+  return renderer && { newest: renderer.newest, gear: renderer.latestGear, lane: renderer.loading.lane };
 });
+
+async function checkClock(page: Page): Promise<void> {
+  const samples = await page.getByTestId('hud-time').evaluate((clock) => new Promise<number[]>((resolve) => {
+    const values: number[] = [];
+    const start = performance.now();
+    const sample = (now: number) => {
+      const seconds = Number.parseFloat(clock.textContent ?? '');
+      if (Number.isFinite(seconds)) values.push(seconds);
+      if (now - start < 1_200) requestAnimationFrame(sample);
+      else resolve(values);
+    };
+    requestAnimationFrame(sample);
+  }));
+  expect(samples.length).toBeGreaterThan(5);
+  expect(samples.every((seconds, index) => index === 0 || seconds >= samples[index - 1]!)).toBe(true);
+  expect(samples.at(-1)! - samples[0]!).toBeGreaterThan(0.8);
+}
 
 async function drive(page: Page): Promise<void> {
   await expect.poll(async () => {
@@ -37,6 +54,8 @@ async function drive(page: Page): Promise<void> {
   await page.keyboard.down('w');
   await page.keyboard.press('e');
   try {
+    await expect.poll(async () => (await currentSnapshot(page))?.gear?.gear, { timeout: 4_000 }).toBe(1);
+    await checkClock(page);
     for (;;) {
       const renderer = await currentSnapshot(page);
       const lane = renderer && renderer.newest?.lanes[renderer.lane];
@@ -51,6 +70,26 @@ test('duas sessões de navegador completam PKCE, garagem e corrida 1v1', async (
   const contexts = await Promise.all([browser.newContext({ baseURL }), browser.newContext({ baseURL })]);
   try {
     const [left, right] = await Promise.all(contexts.map((context) => context.newPage()));
+    await right!.routeWebSocket('ws://127.0.0.1:54752/**', (socket) => {
+      const upstream = socket.connectToServer();
+      let nextDelivery = 0;
+      let count = 0;
+      const timers = new Set<ReturnType<typeof setTimeout>>();
+      upstream.onMessage((message) => {
+        const now = performance.now();
+        const delay = ++count % 12 === 0 ? 140 : 40;
+        nextDelivery = Math.max(nextDelivery + 1, now + delay);
+        const timer = setTimeout(() => {
+          timers.delete(timer);
+          socket.send(message);
+        }, nextDelivery - now);
+        timers.add(timer);
+      });
+      socket.onClose(() => {
+        for (const timer of timers) clearTimeout(timer);
+        upstream.close();
+      });
+    });
     await Promise.all([login(left!, 0), login(right!, 1)]);
     await Promise.all([enroll(left!, 'Piloto Azul', 'fiat-uno-mille-1995'), enroll(right!, 'Piloto Ouro', 'gm-chevette-sl-1988')]);
     // Voltar a entrar com a mesma conta preserva a garagem e o saldo.

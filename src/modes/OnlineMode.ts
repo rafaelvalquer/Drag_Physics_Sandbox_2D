@@ -1,7 +1,7 @@
 import type { AppContext, Mode } from '../app/Mode';
 import { findCampaignCar } from '../data/cars/campaign';
 import { findTrack, TRACKS } from '../data/tracks';
-import { ONLINE_INPUT_HZ, type GarageRequest, type OnlineLoadingState, type OnlineLobbyState, type OnlineRaceSnapshot } from '../game/online/contracts';
+import { ONLINE_INPUT_HZ, type GarageRequest, type OnlineGearUpdate, type OnlineLoadingState, type OnlineLobbyState, type OnlineRaceSnapshot } from '../game/online/contracts';
 import { ONLINE_STARTERS } from '../game/online/demoCatalog';
 import { rankCategory } from '../game/online/economy';
 import type { Garage, HistoryRace, OnlineClient, OnlineRoom, Ranking } from '../game/online/OnlineClient';
@@ -20,6 +20,9 @@ type Result = { snapshot: OnlineRaceSnapshot; award: OnlineAward };
 const outcomes = { win: 'Vitória', loss: 'Derrota', draw: 'Empate', forfeit: 'Desistência', cancelled: 'Cancelada' };
 const cameras: CameraMode[] = ['follow', 'wide', 'start'];
 const markers = SPLITS.filter((split) => split.m <= RACE_DISTANCES.quarter.m).map((split) => ({ xM: split.m, label: split.label, major: split.trap }));
+const INPUT_INTERVAL_MS = 1_000 / ONLINE_INPUT_HZ;
+// Allow a shift before the next frame without flooding the room's message limit.
+const MIN_SHIFT_INTERVAL_MS = 28;
 
 export class OnlineMode implements Mode {
   readonly id = 'online';
@@ -45,6 +48,7 @@ export class OnlineMode implements Mode {
   private countdownLocalAt = 0;
   private reconnectNote?: HTMLElement;
   private nextInputAt = 0;
+  private lastInputAt = -Infinity;
   private nextProbeAt = 0;
   private bestRttMs = Number.POSITIVE_INFINITY;
   private serverClockOffsetMs?: number;
@@ -73,7 +77,12 @@ export class OnlineMode implements Mode {
     ctx.overlay.append(this.root);
     this.reconnectNote = h('div', { class: 'banner', hidden: true, role: 'status' }, 'Reconectando à partida…');
     ctx.overlay.append(this.reconnectNote);
-    const captureShift = (direction: 1 | -1) => { if (this.driving && this.connected) this.shift = direction; };
+    const captureShift = (direction: 1 | -1) => {
+      if (!this.driving || !this.connected) return;
+      this.shift = direction;
+      const now = performance.now();
+      if (now - this.lastInputAt >= MIN_SHIFT_INTERVAL_MS) this.sendInput(now, now + INPUT_INTERVAL_MS);
+    };
     this.cleanups.push(ctx.input.on('upshift', () => captureShift(1)), ctx.input.on('downshift', () => captureShift(-1)),
       ctx.input.on('camera', () => { this.cameraMode = cameras[(cameras.indexOf(this.cameraMode) + 1) % cameras.length]!; }));
     this.status('Conectando ao modo online…');
@@ -100,10 +109,15 @@ export class OnlineMode implements Mode {
     }
     if (!this.driving) return;
     this.ctx.input.updatePedal(dt);
+    if (now >= this.nextInputAt) this.sendInput(now, (now - this.nextInputAt > 100 ? now : this.nextInputAt) + INPUT_INTERVAL_MS);
     this.renderer?.tick(dt);
+  }
+
+  private sendInput(now: number, nextInputAt: number): void {
     const snapshot = this.renderer?.newest;
-    if (!snapshot || !this.room || !this.connected || now < this.nextInputAt) return;
-    this.nextInputAt = (now - this.nextInputAt > 100 ? now : this.nextInputAt) + 1_000 / ONLINE_INPUT_HZ;
+    if (!snapshot || !this.room || !this.connected) return;
+    this.lastInputAt = now;
+    this.nextInputAt = nextInputAt;
     this.room.send('input', { matchId: snapshot.matchId, observedTick: snapshot.tick, sequence: this.inputSequence++,
       throttle: this.ctx.input.pedal, shift: this.shift, nitrous: this.ctx.input.isDown('nitrous') });
     this.shift = undefined;
@@ -295,6 +309,7 @@ export class OnlineMode implements Mode {
       this.inputSequence = 0;
       this.shift = undefined;
       this.nextInputAt = 0;
+      this.lastInputAt = -Infinity;
       this.nextProbeAt = 0;
       this.bestRttMs = Number.POSITIVE_INFINITY;
       this.serverClockOffsetMs = undefined;
@@ -337,6 +352,9 @@ export class OnlineMode implements Mode {
           this.root.hidden = true;
           this.ctx.refreshTrackVisibility?.();
         }
+      });
+      room.onMessage('gear', (update: OnlineGearUpdate) => {
+        if (room === this.room) this.renderer?.receiveGear(update);
       });
       room.onMessage('result', (result: Result) => {
         if (room !== this.room) return;

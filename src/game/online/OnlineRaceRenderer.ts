@@ -7,7 +7,7 @@ import { Hud } from '../../ui/Hud';
 import { PHYSICS_DT } from '../SimulationRunner';
 import { RACE_DISTANCES } from '../race/RaceController';
 import type { RenderVehicle, TreeLights } from '../scenes/renderTypes';
-import type { OnlineLaneSnapshot, OnlineLoadingState, OnlineRaceSnapshot } from './contracts';
+import type { OnlineGearUpdate, OnlineLaneSnapshot, OnlineLoadingState, OnlineRaceSnapshot } from './contracts';
 
 const lerp = (from: number, to: number, alpha: number) => from + (to - from) * alpha;
 
@@ -21,6 +21,8 @@ export class OnlineRaceRenderer {
   private renderList: RenderVehicle[] = [];
   private displayedLights: TreeLights | null = null;
   private audioTick = 0;
+  private estimatedTick = 0;
+  private latestGear?: OnlineGearUpdate;
   serverClockOffsetMs?: number;
 
   constructor(private readonly ctx: AppContext, readonly loading: OnlineLoadingState, private readonly track: TrackConfig) {
@@ -37,6 +39,12 @@ export class OnlineRaceRenderer {
     this.arrivedAt = performance.now();
   }
 
+  receiveGear(update: OnlineGearUpdate): void {
+    if (update.matchId !== this.loading.matchId || update.tick < (this.current?.tick ?? 0) ||
+        update.tick <= (this.latestGear?.tick ?? -1)) return;
+    this.latestGear = update;
+  }
+
   tick(dt: number): void {
     const current = this.current;
     if (!current || !this.previous) return;
@@ -49,15 +57,17 @@ export class OnlineRaceRenderer {
     const me = this.renderList[local]!;
     const foe = this.renderList[1 - local]!;
     const telemetry = current.lanes[local];
+    const gear = this.latestGear && this.latestGear.tick > current.tick ? this.latestGear : telemetry;
     const serverElapsed = current.sentAt !== undefined && this.serverClockOffsetMs !== undefined
       ? Math.max(0, (performance.now() + this.serverClockOffsetMs - current.sentAt) / 1_000)
       : secondsSinceArrival;
-    const predictedTick = current.tick + Math.min(40, serverElapsed / PHYSICS_DT);
+    this.estimatedTick = Math.max(this.estimatedTick, current.tick + Math.min(40, serverElapsed / PHYSICS_DT));
+    const predictedTick = this.estimatedTick;
     const greenTick = current.scheduledGreenTick;
     const sinceGreen = greenTick === null ? null : Math.max(0, (predictedTick - greenTick) * PHYSICS_DT);
     const turbo = me.car.engine.turbo;
-    this.hud.updateNetwork({ car: me.car, rpm: me.rpm, gear: telemetry.gear, targetGear: telemetry.targetGear,
-      shifting: me.shifting, limiter: telemetry.audioFrame[AF.revLimiter] > 0, speed: me.speed, pedal: this.ctx.input.pedal,
+    this.hud.updateNetwork({ car: me.car, rpm: me.rpm, gear: gear.gear, targetGear: gear.targetGear,
+      shifting: gear.shifting, limiter: telemetry.audioFrame[AF.revLimiter] > 0, speed: me.speed, pedal: this.ctx.input.pedal,
       slipRatio: me.slipRatio, turbo: { visible: !!turbo, boostBar: Math.max(0, telemetry.boostBar), maxBoostBar: turbo?.maxBoostBar ?? 0 } },
     this.ctx.settings.units, telemetry.result.redLight ? 'QUEIMOU A LARGADA' : me.blown ? 'MOTOR QUEBRADO' : '', {
       distanceM: me.x, timeS: telemetry.result.total ?? sinceGreen, etS: telemetry.result.et,

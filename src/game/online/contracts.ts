@@ -73,11 +73,21 @@ export const RaceInputSchema = z.strictObject({
 
 export type RaceInput = z.infer<typeof RaceInputSchema>;
 
-export interface OnlineLaneSnapshot {
+export interface OnlineGearState {
+  gear: number;
+  shifting: boolean;
+  targetGear: number;
+}
+
+export interface OnlineGearUpdate extends OnlineGearState {
+  matchId: string;
+  tick: number;
+}
+
+export interface OnlineLaneSnapshot extends OnlineGearState {
   x: number;
   speed: number;
   rpm: number;
-  gear: number;
   pitch: number;
   wheelAngleDriven: number;
   wheelAngleFree: number;
@@ -86,8 +96,6 @@ export interface OnlineLaneSnapshot {
   runState: EngineRunState;
   pedal: number;
   braking: boolean;
-  shifting: boolean;
-  targetGear: number;
   wheelOmegaDriven: number;
   wheelOmegaFree: number;
   slipRatio: number;
