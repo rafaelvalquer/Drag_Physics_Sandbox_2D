@@ -46,24 +46,35 @@ async function checkClock(page: Page): Promise<void> {
   expect(samples.at(-1)! - samples[0]!).toBeGreaterThan(0.8);
 }
 
+function driveKey(page: Page, type: 'keydown' | 'keyup', code: 'KeyW' | 'KeyE'): Promise<void> {
+  // Send each pilot's keys to its own window without moving focus between the two sessions.
+  return page.evaluate(({ type, code }) => { window.dispatchEvent(new KeyboardEvent(type, { code })); }, { type, code });
+}
+
+async function upshift(page: Page): Promise<void> {
+  await driveKey(page, 'keydown', 'KeyE');
+  await driveKey(page, 'keyup', 'KeyE');
+}
+
 async function drive(page: Page): Promise<void> {
+  await expect.poll(async () => (await currentSnapshot(page))?.newest?.tick ?? 0, { timeout: 20_000 }).toBeGreaterThan(0);
+  await upshift(page);
+  await expect.poll(async () => (await currentSnapshot(page))?.gear?.gear, { timeout: 4_000 }).toBe(1);
   await expect.poll(async () => {
     const renderer = await currentSnapshot(page);
     return renderer?.newest?.lights.green[renderer.lane] ?? false;
   }, { timeout: 20_000 }).toBe(true);
-  await page.keyboard.down('w');
-  await page.keyboard.press('e');
+  await driveKey(page, 'keydown', 'KeyW');
   try {
-    await expect.poll(async () => (await currentSnapshot(page))?.gear?.gear, { timeout: 4_000 }).toBe(1);
     await checkClock(page);
     for (;;) {
       const renderer = await currentSnapshot(page);
       const lane = renderer && renderer.newest?.lanes[renderer.lane];
       if (!lane || lane.result.finished || lane.result.dnf) return;
       await page.waitForTimeout(130);
-      if (lane.rpm >= 5_750 && !lane.shifting) await page.keyboard.press('e');
+      if (lane.rpm >= 5_750 && !lane.shifting) await upshift(page);
     }
-  } finally { await page.keyboard.up('w'); }
+  } finally { await driveKey(page, 'keyup', 'KeyW'); }
 }
 
 test('duas sessões de navegador completam PKCE, garagem e corrida 1v1', async ({ browser, baseURL }) => {
