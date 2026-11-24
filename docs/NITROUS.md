@@ -13,8 +13,8 @@ pela embreagem/câmbio e pelos pneus como qualquer outro. Não há multiplicador
 - **Cilindro cheio em toda tentativa nova** (reiniciar, nova corrida, novo teste no Dyno). Pausa, câmera e HUD não reabastecem nem gastam.
   Não existe recarga, compra ou custo por uso. Só o id do kit e o ajuste ficam salvos.
 - **Um kit por carro**; instalar outro o substitui. A massa do kit é sempre carregada, mesmo sem usar.
-- **Pedido recusado não gasta nada**: motor desligado/quebrado, abaixo da rotação mínima do kit, cortando ignição ou no limitador.
-  A injeção pausa (sem gastar) enquanto a combustão está cortada e continua quando volta.
+- **Pedido recusado não gasta nada**: motor desligado/quebrado, sem combustível ou abaixo da rotação mínima do kit.
+  O limitador de giro e o corte de ignição da troca **não** interrompem a descarga: ela segue gastando o cilindro, e o torque extra só soma nos passos em que o motor queima.
 
 ## Kits (categoria “Nitro / N₂O”)
 

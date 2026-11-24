@@ -770,9 +770,13 @@ export class EngineModel {
   /** Extra crank torque from the nitrous system this step (N·m); written by the simulation before preStep. */
   nitrousTorqueNm = 0;
 
-  /** The engine is burning cleanly right now: a nitrous injection can start and run. */
+  /**
+   * A nitrous injection can start and run while the engine is running with the fuel on. The rev limiter and the spark cut of a
+   * shift do NOT stop it: the solenoid stays open and the cylinder keeps emptying; the extra torque is only added on the steps
+   * the engine really burns (see the combustion torque), so on the limiter the nitro is spent but cannot push past the cut.
+   */
   get nitrousInjectable(): boolean {
-    return this.runState === 'RUNNING' && !this.fuelCut && !this.ignition.limiterActive && this.lastSparkCut < 0.2;
+    return this.runState === 'RUNNING' && !this.fuelCut;
   }
 
   /** Can the engine produce combustion right now (used by the acoustic model). */

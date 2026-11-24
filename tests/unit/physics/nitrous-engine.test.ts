@@ -105,10 +105,34 @@ describe('nitrous in the simulation', () => {
     expect(sim.nitrous!.status).toBe('READY');
   });
 
+  it('on the rev limiter the injection goes on: it keeps spending and is never refused or paused', () => {
+    const sim = new VehicleSimulation(withNitro(gol), track);
+    sim.controls.autoStart = true;
+    for (let i = 0; i < 480; i++) sim.step(H);
+    sim.controls.pedal = 1; // neutral at full throttle: straight to the limiter
+    let started = false;
+    let onLimiter = 0;
+    let spentOnLimiter = 0;
+    for (let i = 0; i < 120 * 4; i++) {
+      if (!started && sim.engine.rpm > 3500) started = sim.requestNitrous();
+      const before = sim.nitrous!.telemetry().consumedKg;
+      sim.step(H);
+      if (started && sim.engine.ignition.limiterActive) {
+        onLimiter++;
+        spentOnLimiter += sim.nitrous!.telemetry().consumedKg - before;
+        expect(sim.nitrous!.status).toBe('STAGE_1_ACTIVE');
+      }
+    }
+    expect(started).toBe(true);
+    expect(onLimiter).toBeGreaterThan(20);
+    expect(spentOnLimiter).toBeGreaterThan(0);
+  });
+
   it('the injected torque makes the car faster through the driveline (402 m)', () => {
-    const car = withNitro(gol);
+    // a kit sized for the car (a flow that is too big only spins the tyres) pressed in 3rd, where the grip allows it
+    const car = withNitro(gol, { maxFlowKgS: 0.0035, capacityKg: 0.03 });
     const plain = race(gol, null);
-    const fast = race(car, 2);
+    const fast = race(car, 3);
     expect(Number.isFinite(plain.et) && Number.isFinite(fast.et)).toBe(true);
     expect(fast.et).toBeLessThan(plain.et - 0.05);
     // it is the nitro that gains, not the extra mass: with the key never pressed the car is not faster
