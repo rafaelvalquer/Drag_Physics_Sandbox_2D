@@ -32,7 +32,7 @@ import { DEALER_CARS, offerAvailability, resaleValue } from '../src/game/career/
 import { rivalBuild, rivalCar } from '../src/game/career/RivalBuildFactory';
 import { runHeadlessRace } from '../src/game/career/headlessRace';
 import { resolveBuild, type BuildTune, type BuildResult } from '../src/game/career/tuning/BuildResolver';
-import { familyOf, incompatibility } from '../src/game/career/tuning/BuildResolverV2';
+import { familyOf, forEngine, incompatibility } from '../src/game/career/tuning/BuildResolverV2';
 import { findPart } from '../src/game/career/tuning/parts';
 
 const argv = process.argv.slice(2);
@@ -67,7 +67,8 @@ export const BUILDS: Record<string, { stage1: string[]; prepared: string[]; tune
 
 function build(baseId: string, parts: readonly string[], tune: BuildTune = {}): Extract<BuildResult, { ok: true }> {
   const base = findCampaignCar(baseId)!;
-  const r = resolveBuild(base, parts, tune, 2);
+  // classic-only parts (filter, exhaust, clutch...) become the Stage 1 of the family on modern engines
+  const r = resolveBuild(base, parts.map((id) => forEngine(base, id)), tune, 2);
   if (!r.ok) throw new Error(`${baseId} [${parts.join(', ')}]: ${r.errors.join('; ')}`);
   return r;
 }

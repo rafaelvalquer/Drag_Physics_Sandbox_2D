@@ -174,7 +174,7 @@ describe('the ten events and rivals', () => {
     const ricardo = CHAPTER3_RIVALS.find((r) => r.id === 'ricardo-elite')!;
     const bianca = CHAPTER3_RIVALS.find((r) => r.id === 'bianca-elite')!;
     expect(ricardo.parts).toContain('ecu-map-vw-ea113-s2');
-    for (const need of ['downpipe-catless', 'intercooler-race', 'intake-direct-turbo', 'clutch-reinforced', 'suspension-drag-fwd']) expect(ricardo.parts).toContain(need);
+    for (const need of ['downpipe-catless', 'intercooler-race', 'intake-direct-turbo', 'clutch-vw-ea113-s1', 'suspension-drag-fwd']) expect(ricardo.parts).toContain(need);
     const golf0 = resolveBuild(findCampaignCar('vw-golf-gti-mk4-2003')!, [], {}, 2);
     const rb = rivalBuild(ricardo);
     expect(golf0.ok).toBe(true);

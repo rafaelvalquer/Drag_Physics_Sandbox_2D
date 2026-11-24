@@ -35,7 +35,7 @@ describe('upgraded automatic / dual-clutch gearbox', () => {
   it('every gearbox stage of the family does the same; a manual car is never affected', () => {
     expect(build('bmw-320i-f30-2014', ['automatic-bmw-n20-s1']).car.transmission.playerShifts).toBe(true);
     expect(build('bmw-320i-f30-2014', ['automatic-bmw-n20-s3']).car.transmission.playerShifts).toBe(true);
-    expect(build('peugeot-208-gt-2017', ['clutch-reinforced']).car.transmission.playerShifts).toBeUndefined();
+    expect(build('peugeot-208-gt-2017', ['clutch-psa-prince-thp-s1']).car.transmission.playerShifts).toBeUndefined();
   });
 
   it('the shift-point setting goes away with the schedule', () => {

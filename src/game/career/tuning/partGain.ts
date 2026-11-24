@@ -3,7 +3,7 @@ import { runAccelerationTest } from '../../race/accelerationTest';
 import { RACE_DISTANCES } from '../../race/RaceController';
 import { boostRangeForParts, resolveBuild, type BuildResult, type ResolverVersion } from './BuildResolver';
 import { compareTorqueBands } from './breathingModel';
-import { familyOf, incompatibility, transmissionKindOf } from './BuildResolverV2';
+import { familyOf, forEngine, incompatibility, transmissionKindOf } from './BuildResolverV2';
 import { findPart, type EcuPart, type PartDef } from './parts';
 import { reliabilityLimits } from './EngineReliability';
 import { physicalSlotOf, progressionOf } from './partProgression';
@@ -455,7 +455,9 @@ export interface StageComparison {
 
 function supportedTransmission(car: CarConfig): string {
   const kind = transmissionKindOf(car);
-  return kind === 'manual' ? 'clutch-reinforced' : kind === 'dual-clutch' ? 'dct-upgrade' : 'at-upgrade';
+  // heavy support builds: the strongest clutch of the family (the classic one on chapter 1 engines)
+  const clutch = car.engine.family ? `clutch-${familyOf(car)}-s3` : 'clutch-reinforced';
+  return kind === 'manual' ? clutch : kind === 'dual-clutch' ? 'dct-upgrade' : 'at-upgrade';
 }
 
 function conversionSupport(car: CarConfig): string[] {
@@ -468,7 +470,12 @@ function conversionSupport(car: CarConfig): string[] {
   ];
 }
 
+/** Reference contexts with the classic-only supports swapped for the car's own Stage 1 (modern engines). */
 function auditContexts(car: CarConfig, part: PartDef): readonly string[][] {
+  return rawAuditContexts(car, part).map((ctx) => ctx.map((id) => forEngine(car, id)));
+}
+
+function rawAuditContexts(car: CarConfig, part: PartDef): readonly string[][] {
   const group = progressionOf(part, familyOf(car), car.id)?.group;
   if (group === 'classic-turbo-kit') return [[
     'clutch-ceramic-race', 'fuel-pump', 'forged-kit', 'ecu-race', 'ignition-race',
@@ -481,7 +488,7 @@ function auditContexts(car: CarConfig, part: PartDef): readonly string[][] {
   }
   if (group === 'classic-fuel') return CONTEXTS.filter((context) => context.some((id) => findPart(id)?.category === 'turbo'));
   if (car.engine.family === 'toyota-2gr-fse' &&
-    (group === 'weight-reduction' || part.id === 'differential-short' || part.id === 'suspension-drag-rwd')) {
+    (group === 'weight-reduction' || part.id === 'suspension-drag-rwd')) {
     return [['tires-sport']];
   }
   if (car.engine.family === 'mercedes-m276' && (group === 'tire-compound' || group === 'tire-width'))

@@ -38,6 +38,30 @@ export const AT_TORQUE_MARGIN = 1.1;
 /** Highest compression ratio an NA engine takes on pump fuel (98 RON / E100). */
 export const NA_MAX_COMPRESSION: Record<'gasoline' | 'ethanol', number> = { gasoline: 12.5, ethanol: 14 };
 
+/**
+ * Classic parts without a `mod` that the modern engines do not take: the modern cars have their own
+ * series for the same system (`final-drive-<family>-sN`, `intake-filter-<family>-sN`...), and the
+ * classic part would beat its Stage 1 for the price (workshop audit: each stage must beat the part
+ * before it).
+ */
+export const CLASSIC_ONLY_REPLACEMENT: Readonly<Record<string, (family: string) => string>> = {
+  'differential-short': (family) => `final-drive-${family}-s1`,
+  'filter-sport': (family) => `intake-filter-${family}-s1`,
+  'exhaust-sport': (family) => `exhaust-${family}-s1`,
+  'radiator-large': (family) => `cooling-radiator-${family}-s1`,
+  'oil-cooler': (family) => `cooling-oil-${family}-s1`,
+  'fan-upgrade': (family) => `cooling-fan-${family}-s1`,
+  'clutch-reinforced': (family) => `clutch-${family}-s1`,
+};
+export const CLASSIC_ONLY_PARTS: ReadonlySet<string> = new Set(Object.keys(CLASSIC_ONLY_REPLACEMENT));
+
+/** The part a car takes for a classic-only one: the Stage 1 of its family on modern engines, itself otherwise. */
+export function forEngine(car: CarConfig, partId: string): string {
+  const fam = familyOf(car);
+  const repl = fam !== LEGACY_FAMILY ? CLASSIC_ONLY_REPLACEMENT[partId] : undefined;
+  return repl ? repl(fam) : partId;
+}
+
 type V1Resolver = (base: CarConfig, partIds: readonly string[], key: string, tune: BuildTune) => BuildResult;
 
 export function familyOf(car: CarConfig): string {
@@ -62,6 +86,7 @@ export function incompatibility(base: CarConfig, p: PartDef): string | null {
   // car hardware of the slot catalogue (mass, cooling, tyre size/pressure) fits every car
   if ('mod' in p && fam !== LEGACY_FAMILY && !GENERIC_V2_CATEGORIES.includes(p.category) && !isModernBreathingPart(p))
     return `${p.name} é do catálogo dos motores clássicos`;
+  if (CLASSIC_ONLY_PARTS.has(p.id) && fam !== LEGACY_FAMILY) return `${p.name} é do catálogo dos motores clássicos`;
   if ((p.since ?? 1) === 2 && fam === LEGACY_FAMILY) return `${p.name} é para motores modernos`;
   const c = p.compat;
   if (!c) return null;

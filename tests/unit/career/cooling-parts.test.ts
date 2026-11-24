@@ -26,13 +26,19 @@ describe('arrefecimento da oficina', () => {
       };
       let previous = temperature(stock.car.engine);
       let mass = stock.car.massKg;
+      // the whole curve: a factory turbo's peak sits on the ECU torque limiter
+      const torque = (b: typeof stock): number => b.car.engine.torqueCurve.torqueNm.reduce((a, t) => a + t, 0);
+      let previousTorque = torque(stock);
       for (const part of parts.filter((part) => part.category === category)) {
         const next = resolveBuild(car, [part.id], {}, version);
         if (!next.ok) throw new Error(next.errors.join('\n'));
         const cooler = temperature(next.car.engine);
         expect(cooler).toBeLessThan(previous);
         expect(next.car.massKg).toBeGreaterThan(mass);
-        expect(next.car.engine.torqueCurve).toEqual(stock.car.engine.torqueCurve);
+        // chapter 1: thermal only; modern engines: the cooler circuit also cuts friction, more at each stage
+        if (car.engine.family) expect(torque(next), part.id).toBeGreaterThan(previousTorque);
+        else expect(next.car.engine.torqueCurve).toEqual(stock.car.engine.torqueCurve);
+        previousTorque = torque(next);
         mass = next.car.massKg;
         previous = cooler;
       }
@@ -54,7 +60,7 @@ describe('arrefecimento da oficina', () => {
     expect(bench.engine.thermal.oilC).toBe(94);
   });
 
-  it.each(['radiator-large', 'oil-cooler', 'fan-upgrade'])('%s reduz a temperatura sob carga no C43', (partId) => {
+  it.each(['cooling-radiator-mercedes-m276-s1', 'cooling-oil-mercedes-m276-s1', 'cooling-fan-mercedes-m276-s1'])('%s reduz a temperatura sob carga no C43', (partId) => {
     const car = CAREER_CARS.find((item) => item.engine.family === 'mercedes-m276')!;
     const track = TRACKS.find((item) => item.id === 'test-track')!;
     const audit = auditPartGain(car, findPart(partId)!, track, 2);

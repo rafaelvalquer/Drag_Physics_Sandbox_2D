@@ -25,7 +25,7 @@ describe('ignição por arquitetura de motor', () => {
 
   it('reduz a perda por atraso de centelha em pressão sem aumentar a pressão alvo', () => {
     const golf = modern.find((car) => car.id === 'vw-golf-gti-mk4-2003')!;
-    const support = ['ecu-programmable', 'boost-control', 'clutch-reinforced'];
+    const support = ['ecu-programmable', 'boost-control', 'clutch-vw-ea113-s3'];
     const tune = { boostBar: 1.15 };
     const original = resolveBuild(golf, support, tune, 2);
     if (!original.ok) throw new Error(original.errors.join('\n'));

@@ -9,7 +9,7 @@ it('responde ao acelerador progressivo sem perder o kickdown na largada do IS 35
   const track = TRACKS.find((item) => item.id === 'test-track')!;
   const distance = 402.336;
   const stock = resolveBuild(car, [], {}, 2);
-  const filter = resolveBuild(car, ['filter-sport'], {}, 2);
+  const filter = resolveBuild(car, ['intake-filter-toyota-2gr-fse-s1'], {}, 2);
   if (!stock.ok || !filter.ok) throw new Error('Montagem de referência inválida');
   const options = { speedsKmh: [100], distancesM: [distance], stopAtLastSplit: true, maxS: 45 };
   const before = runAccelerationTest(stock.car, track, options);

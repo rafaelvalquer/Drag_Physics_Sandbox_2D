@@ -31,6 +31,7 @@ import {
 } from './CareerState';
 import { resolveBuild, type ResolverVersion } from './tuning/BuildResolver';
 import { hasLegacyEcus, migrateLegacyEcus } from './legacyEcuMigration';
+import { hasClassicOnlyParts, migrateClassicOnlyParts } from './classicPartMigration';
 import { findPart, type PartCategory, type UnlockId } from './tuning/parts';
 import { familyOf } from './tuning/BuildResolverV2';
 import { careerResolverVersion } from './tuning/resolverVersion';
@@ -122,6 +123,12 @@ export class CareerController {
       let notices: string[] = [];
       this.save = await this.commit((n) => void (notices = migrateLegacyEcus(n)));
       this.migrationNotices = notices;
+    }
+    // classic parts the modern engines no longer take become their own series' Stage 1
+    if (this.save && hasClassicOnlyParts(this.save)) {
+      let notices: string[] = [];
+      this.save = await this.commit((n) => void (notices = migrateClassicOnlyParts(n)));
+      this.migrationNotices = [...this.migrationNotices, ...notices];
     }
     return this.save && (await this.dropUnknownParts());
   }
@@ -764,6 +771,7 @@ export class CareerController {
     if (!r.ok) return fail(`importação recusada: ${r.errors.slice(0, 3).join('; ')}`);
     // old ECU maps move to the new ones before the builds are checked
     this.migrationNotices = hasLegacyEcus(r.save) ? migrateLegacyEcus(r.save) : [];
+    if (hasClassicOnlyParts(r.save)) this.migrationNotices.push(...migrateClassicOnlyParts(r.save));
     for (const c of r.save.ownedCars) {
       if (!findCampaignCar(c.baseCarId)) return fail(`importação recusada: carro desconhecido ${c.baseCarId}`);
       const chk = this.checkBuild(c, c.installedParts);

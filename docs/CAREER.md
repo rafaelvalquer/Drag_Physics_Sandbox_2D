@@ -131,13 +131,30 @@ Cada peça declara onde cabe (`compat`): família de motor, alimentação (aspir
 para motores futuros (seis contrapostos, V8, V12), a arquitetura do motor (`layouts`). Um carro mais caro pode
 ter peças só dele: basta cadastrar a família e as peças, sem mexer no resolvedor.
 
-- **Peças do carro, não do motor clássico:** alívio de peso, radiador, óleo, ventoinha, largura e pressão de
-  pneu também servem nos carros modernos (`GENERIC_V2_CATEGORIES`). Comandos, coletores, kits turbo e o
-  resto do catálogo clássico continuam só nos motores clássicos.
+- **Peças do carro, não do motor clássico:** alívio de peso, largura e pressão de pneu também servem nos carros
+  modernos (`GENERIC_V2_CATEGORIES`). Comandos, coletores, kits turbo e o resto do catálogo clássico continuam
+  só nos motores clássicos.
+- **Cada Stage rende mais que a peça anterior:** as peças genéricas do Capítulo 1 que ganhavam do Stage 1 da
+  série própria do motor moderno ficam só nos clássicos (`CLASSIC_ONLY_PARTS` em `BuildResolverV2.ts`):
+
+  | Peça clássica | No carro moderno, a série própria |
+  |---|---|
+  | Diferencial alternativo | Relação final e rolamentos Stage 1–3 |
+  | Filtro esportivo | Filtro Stage 1–3 |
+  | Escape dimensionado | Escape completo Stage 1–3 |
+  | Radiador maior, Sistema de óleo melhorado, Ventoinha melhorada | Radiador, Resfriador de óleo e Ventoinha Stage 1–3 |
+  | Embreagem reforçada | Embreagem reforçada Stage 1–3 |
+
+  Nos motores modernos, o arrefecimento Stage também reduz o atrito interno (motor mais frio, óleo menos viscoso)
+  e, no radiador, a detonação, mais a cada estágio: o Stage 1 empata com a peça genérica, e cada estágio ganha do
+  anterior nos 402 m. No Capítulo 1 o arrefecimento Stage continua só térmico. Saves com essas peças num carro
+  moderno trocam pelo Stage 1 da família e recebem a diferença de preço; se o carro não rodar com o Stage 1, a
+  peça sai e o preço volta inteiro (`classicPartMigration.ts`, ao carregar e ao importar). Os rivais dos Capítulos
+  2 e 3 usam os Stages que o jogador já tem na etapa do duelo, com o tempo nos 402 m mantido (diferença ≤ 0,03 s).
 - **Liberação ao longo do capítulo:** nos carros modernos, essas peças pedem um desbloqueio a mais
   (`modernUnlock`):
   - largura e pressão de pneu na etapa 2;
-  - peso e arrefecimento na etapa 5;
+  - peso na etapa 5;
   - os níveis de competição só no Capítulo 3.
 - **ECU por família (Stage 1 a 3):** cada motor com turbo de fábrica tem seu mapa (`ecu-map-<família>-s1|s2|s3`: Rua,
   Esportivo e Competição). Os mapas genéricos antigos (`ecu-stage1/2/3`) saíram do catálogo; saves antigos migram

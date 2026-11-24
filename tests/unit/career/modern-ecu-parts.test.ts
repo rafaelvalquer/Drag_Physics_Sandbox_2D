@@ -13,7 +13,7 @@ const modern = [...CHAPTER2_CARS, ...CHAPTER3_CARS];
 function supportFor(car: CarConfig, competition = false): string[] {
   const f = car.engine.family!;
   const kind = transmissionKindOf(car);
-  const gearbox = kind === 'manual' ? 'clutch-reinforced' : kind === 'dual-clutch' ? 'dct-upgrade' : 'at-upgrade';
+  const gearbox = kind === 'manual' ? `clutch-${f}-s3` : kind === 'dual-clutch' ? 'dct-upgrade' : 'at-upgrade';
   return [`fuel-${f}-s3`, gearbox, ...(car.engine.induction === 'turbo'
     ? [`charge-cooler-${f}-s3`, `rotating-assembly-${f}-s3`, ...(competition ? [`exhaust-downpipe-${f}-s3`, `factory-turbo-${f}-s3`] : [])] : [])];
 }
@@ -63,7 +63,7 @@ describe('mapas de ECU modernos', () => {
     const civic = modern.find((car) => car.engine.family === 'honda-k20')!;
     const converted = [
       'conversion-turbo-honda-k20-s1', 'conversion-compression-honda-k20', 'conversion-oil-honda-k20',
-      'fuel-honda-k20-s1', 'ignition-honda-k20-s1', 'rotating-assembly-honda-k20-s1', 'clutch-reinforced',
+      'fuel-honda-k20-s1', 'ignition-honda-k20-s1', 'rotating-assembly-honda-k20-s1', 'clutch-honda-k20-s3',
     ];
     expect(resolveBuild(civic, converted, {}, 2).ok).toBe(true);
     const mismatch = resolveBuild(civic, [...converted, 'ecu-map-honda-k20-s1'], {}, 2);

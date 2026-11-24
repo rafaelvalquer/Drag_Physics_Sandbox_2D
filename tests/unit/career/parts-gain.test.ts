@@ -53,7 +53,7 @@ describe('ganho de cada peça da oficina', () => {
     }, 300_000);
   }
 
-  it.each(['differential-short', 'suspension-drag-rwd'])('mede %s no IS 350 com a mesma aderência na referência', (partId) => {
+  it.each(['suspension-drag-rwd'])('mede %s no IS 350 com a mesma aderência na referência', (partId) => {
     const car = CAREER_CARS.find((item) => item.id === 'lexus-is350-2015')!;
     const audit = auditPartGain(car, findPart(partId)!, track, 2);
     if (!('gain' in audit)) throw new Error(audit.reasons.join('\n'));

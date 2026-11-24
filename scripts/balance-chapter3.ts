@@ -30,7 +30,7 @@ import { CHAPTER3_EVENTS, findRival, rivalOf } from '../src/game/career/CareerEv
 import { rivalBuild, rivalCar } from '../src/game/career/RivalBuildFactory';
 import { runHeadlessRace } from '../src/game/career/headlessRace';
 import { resolveBuild, type BuildResult, type BuildTune } from '../src/game/career/tuning/BuildResolver';
-import { incompatibility } from '../src/game/career/tuning/BuildResolverV2';
+import { forEngine, incompatibility } from '../src/game/career/tuning/BuildResolverV2';
 import { findPart } from '../src/game/career/tuning/parts';
 
 const argv = process.argv.slice(2);
@@ -57,9 +57,9 @@ const S3 = ['ecu-stage3', 'turbo-hybrid', 'downpipe-catless', 'intercooler-race'
 
 /** Stage 1 is the remap (turbo cars) or the first generic upgrades (aspirated V6); prepared is the full route of the workshop. */
 export const BUILDS: Record<string, { stage1: string[]; prepared: string[]; tune?: BuildTune; label: [string, string] }> = {
-  'nissan-350z-2006': { stage1: ['tires-semislick', 'clutch-reinforced'], prepared: [...V6, 'cam-vq35-s1', 'clutch-reinforced', 'tires-slick', 'differential-short', 'weight-medium', 'flywheel-light-modern', 'suspension-drag-rwd'], label: ['pneus + embreagem', 'preparado'] },
-  'lexus-is350-2015': { stage1: ['tires-semislick'], prepared: [...V6, 'at-upgrade', 'tires-slick', 'differential-short', 'weight-medium', 'suspension-drag-rwd'], label: ['pneus', 'preparado'] },
-  'nissan-370z-2014': { stage1: ['tires-semislick', 'clutch-reinforced'], prepared: [...V6, 'cam-vq37-s1', 'clutch-reinforced', 'tires-slick', 'differential-short', 'weight-medium', 'flywheel-light-modern', 'suspension-drag-rwd'], label: ['pneus + embreagem', 'preparado'] },
+  'nissan-350z-2006': { stage1: ['tires-semislick', 'clutch-reinforced'], prepared: [...V6, 'cam-vq35-s1', 'clutch-reinforced', 'tires-slick', 'final-drive-nissan-vq35de-s2', 'weight-medium', 'flywheel-light-modern', 'suspension-drag-rwd'], label: ['pneus + embreagem', 'preparado'] },
+  'lexus-is350-2015': { stage1: ['tires-semislick'], prepared: [...V6, 'at-upgrade', 'tires-slick', 'final-drive-toyota-2gr-fse-s1', 'weight-medium', 'suspension-drag-rwd'], label: ['pneus', 'preparado'] },
+  'nissan-370z-2014': { stage1: ['tires-semislick', 'clutch-reinforced'], prepared: [...V6, 'cam-vq37-s1', 'clutch-reinforced', 'tires-slick', 'final-drive-nissan-vq37vhr-s1', 'weight-medium', 'flywheel-light-modern', 'suspension-drag-rwd'], label: ['pneus + embreagem', 'preparado'] },
   'mercedes-amg-c43-2017': { stage1: ['ecu-stage1'], prepared: [...S2, 'at-upgrade', 'tires-slick', 'awd-center-tune', 'suspension-drag-awd'], label: ['Stage 1', 'Stage 2 preparado'] },
   'kia-stinger-gt-2019': { stage1: ['ecu-stage1'], prepared: [...S2, 'at-upgrade', 'tires-slick', 'awd-center-tune', 'suspension-drag-awd'], label: ['Stage 1', 'Stage 2 preparado'] },
   'maserati-ghibli-sq4-2015': { stage1: ['ecu-stage1'], prepared: [...S2, 'at-upgrade', 'tires-slick', 'awd-center-tune', 'suspension-drag-awd'], label: ['Stage 1', 'Stage 2 preparado'] },
@@ -75,7 +75,7 @@ const REFERENCE: { id: string; name: string; parts: string[] }[] = [
   { id: 'bmw-335i-f30-2013', name: '335i Stage 3', parts: [...S3, 'at-upgrade', 'tires-slick', 'suspension-drag-rwd', 'weight-medium'] },
   { id: 'mitsubishi-evo-x-2012', name: 'Evo X preparado (cap. 2)', parts: ['ecu-stage1', 'intercooler-race', 'boost-control', 'dct-upgrade', 'awd-center-tune', 'tires-semislick', 'suspension-drag-awd'] },
   { id: 'mitsubishi-evo-x-2012', name: 'Evo X Stage 3', parts: [...S3, 'dct-upgrade', 'awd-center-tune', 'tires-slick', 'suspension-drag-awd'] },
-  { id: 'vw-golf-gti-mk4-2003', name: 'Golf GTI preparado', parts: ['ecu-stage2', 'downpipe-catless', 'intercooler-race', 'intake-direct-turbo', 'pistons-forged-modern', 'clutch-reinforced', 'tires-slick', 'suspension-drag-fwd', 'weight-medium', 'flywheel-light-modern', 'differential-short'] },
+  { id: 'vw-golf-gti-mk4-2003', name: 'Golf GTI preparado', parts: ['ecu-stage2', 'downpipe-catless', 'intercooler-race', 'intake-direct-turbo', 'pistons-forged-modern', 'clutch-reinforced', 'tires-slick', 'suspension-drag-fwd', 'weight-medium', 'flywheel-light-modern', 'final-drive-vw-ea113-s2'] },
 ];
 
 /** Three drivers for the player: a middling one, the AI's best, and a human-like one (late reaction, sloppier shifts and traction). */
@@ -87,7 +87,8 @@ const PILOTS: { name: string; profile: AiProfile }[] = [
 
 function build(baseId: string, parts: readonly string[], tune: BuildTune = {}): Extract<BuildResult, { ok: true }> {
   const base = findCampaignCar(baseId)!;
-  const r = resolveBuild(base, parts, tune, 2);
+  // classic-only parts (filter, exhaust, clutch...) become the Stage 1 of the family on modern engines
+  const r = resolveBuild(base, parts.map((id) => forEngine(base, id)), tune, 2);
   if (!r.ok) throw new Error(`${baseId} [${parts.join(', ')}]: ${r.errors.join('; ')}`);
   return r;
 }

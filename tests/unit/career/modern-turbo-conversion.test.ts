@@ -18,7 +18,7 @@ const kitFor = (id: string) => {
 };
 const support = (family: string, tier: number): string[] => [
   `conversion-compression-${family}`, `conversion-oil-${family}`, `fuel-${family}-s${tier}`,
-  `ignition-${family}-s${tier}`, `rotating-assembly-${family}-s${tier}`, 'clutch-reinforced',
+  `ignition-${family}-s${tier}`, `rotating-assembly-${family}-s${tier}`, `clutch-${family}-s${tier}`,
 ];
 
 describe('conversões turbo modernas', () => {
@@ -65,7 +65,7 @@ describe('conversões turbo modernas', () => {
     expect(resolveBuild(car, ['turbo-basic'], {}, 2).ok).toBe(false);
     const astra = kitFor('gm-astra-2011');
     const full = support(astra.family, 3);
-    const originalClutch = resolveBuild(astra.car, [...full.filter((id) => id !== 'clutch-reinforced'), astra.kits[2]!.id], {}, 2);
+    const originalClutch = resolveBuild(astra.car, [...full.filter((id) => !id.startsWith('clutch-')), astra.kits[2]!.id], {}, 2);
     expect(originalClutch.ok ? [] : originalClutch.errors).toContainEqual(expect.stringContaining('embreagem'));
   });
 

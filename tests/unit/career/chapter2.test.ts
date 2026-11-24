@@ -361,12 +361,12 @@ describe('chapter 2 progression and economy', () => {
     await c.buyCar('gm-astra-2011');
     const astra = c.save!.ownedCars.find((x) => x.baseCarId === 'gm-astra-2011')!;
     await c.setActiveCar(astra.id);
-    expect((await c.buyPart('filter-sport')).ok).toBe(true);
+    expect((await c.buyPart('tires-sport')).ok).toBe(true);
     const credits = c.save!.credits;
     const r = await c.sellCar(astra.id);
     expect(r.ok).toBe(true);
     expect(c.save!.credits).toBe(credits + Math.round((6000 * RESALE_SHARE) / 10) * 10);
-    expect(c.save!.inventoryPartIds).toContain(inventoryEntry('filter-sport', 'gm-astra-2011'));
+    expect(c.save!.inventoryPartIds).toContain(inventoryEntry('tires-sport', 'gm-astra-2011'));
     expect(c.save!.ownedCars.some((x) => x.id === astra.id)).toBe(false);
     expect(c.save!.activeCarId).toBe(c.save!.ownedCars[0]!.id);
   });

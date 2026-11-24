@@ -14,8 +14,9 @@ const ch1Done = EVENTS.map((e) => e.id);
 const upTo = (order: number) => [...ch1Done, ...CHAPTER2_EVENTS.filter((e) => e.order <= order).map((e) => e.id)];
 
 describe('generic car hardware on modern engines', () => {
-  it('fits the 320i, while classic engine parts stay out', () => {
-    for (const id of ['weight-light', 'radiator-large', 'oil-cooler', 'fan-upgrade', 'tires-width-1', 'tires-pressure-street'])
+  it('fits the 320i, while classic engine parts (and the classic cooling, beaten by its own Stage 1) stay out', () => {
+    for (const id of ['radiator-large', 'oil-cooler', 'fan-upgrade']) expect(incompatibility(bmw, findPart(id)!), id).not.toBeNull();
+    for (const id of ['weight-light', 'cooling-radiator-bmw-n20-s1', 'cooling-oil-bmw-n20-s1', 'cooling-fan-bmw-n20-s1', 'tires-width-1', 'tires-pressure-street'])
       expect(incompatibility(bmw, findPart(id)!), id).toBeNull();
     expect(incompatibility(bmw, findPart('cam-sport')!)).not.toBeNull();
     expect(incompatibility(bmw, findPart('turbo-basic')!)).not.toBeNull();
@@ -27,7 +28,7 @@ describe('generic car hardware on modern engines', () => {
     if (!stock.ok || !w.ok) throw new Error('build');
     expect(w.car.massKg).toBe(stock.car.massKg - 48);
     expect(w.car.tires.muPeak).toBeGreaterThan(stock.car.tires.muPeak);
-    const oil = resolveBuild(findCampaignCar('honda-civic-si-2008')!, ['oil-cooler'], {}, 2);
+    const oil = resolveBuild(findCampaignCar('honda-civic-si-2008')!, ['cooling-oil-honda-k20-s1'], {}, 2);
     const civic = resolveBuild(findCampaignCar('honda-civic-si-2008')!, [], {}, 2);
     if (!oil.ok || !civic.ok) throw new Error('build');
     expect(oil.peakPowerCv).toBeGreaterThan(civic.peakPowerCv);
@@ -84,7 +85,7 @@ describe('Stage maps of the factory turbo (one map per engine family)', () => {
     const cl = resolveBuild(p208, hw, {}, 2);
     expect(cl.ok).toBe(false);
     if (!cl.ok) expect(cl.errors.join()).toMatch(/embreagem/);
-    expect(resolveBuild(p208, [...hw, 'clutch-reinforced'], {}, 2).ok).toBe(true);
+    expect(resolveBuild(p208, [...hw, 'clutch-psa-prince-thp-s3'], {}, 2).ok).toBe(true);
   });
 
   it('Stage 2 opens at the 8th event; Stage 3 opens at the 5th duel of chapter 3; a map never fits an NA engine or another family', () => {

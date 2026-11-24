@@ -43,12 +43,12 @@ describe('transmissão dos clássicos em três estágios', () => {
     }
   });
 
-  it('mantém as peças compartilhadas disponíveis nos modernos fora das séries clássicas', () => {
+  it('embreagem e diferencial clássicos ficam só nos clássicos: os modernos têm as próprias séries Stage', () => {
     const golf = CAREER_CARS.find((car) => car.engine.family === 'vw-ea113')!;
-    for (const id of ['clutch-reinforced', 'differential-short']) {
-      const part = findPart(id)!;
-      expect(progressionOf(part, familyOf(golf))).toBeUndefined();
-      expect(resolveBuild(golf, [part.id], {}, 2).ok).toBe(true);
+    for (const [classic, stage1] of [['clutch-reinforced', 'clutch-vw-ea113-s1'], ['differential-short', 'final-drive-vw-ea113-s1']]) {
+      expect(progressionOf(findPart(classic)!, familyOf(golf))).toBeUndefined();
+      expect(resolveBuild(golf, [classic], {}, 2).ok, classic).toBe(false);
+      expect(resolveBuild(golf, [stage1], {}, 2).ok, stage1).toBe(true);
     }
   });
 });

@@ -11,7 +11,7 @@ const factoryTurboCars = [...CHAPTER2_CARS, ...CHAPTER3_CARS].filter((car) => ca
 function supportFor(car: CarConfig): string[] {
   const family = car.engine.family!;
   const kind = transmissionKindOf(car);
-  const transmission = kind === 'manual' ? 'clutch-reinforced' : kind === 'dual-clutch' ? 'dct-upgrade' : 'at-upgrade';
+  const transmission = kind === 'manual' ? `clutch-${family}-s3` : kind === 'dual-clutch' ? 'dct-upgrade' : 'at-upgrade';
   return ['ecu-programmable', 'intercooler-race', `fuel-${family}-s3`, `rotating-assembly-${family}-s3`, transmission];
 }
 
