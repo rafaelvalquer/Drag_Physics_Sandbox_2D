@@ -211,6 +211,6 @@ test('capítulo 3: liberação, cenários, rivais, revenda Elite, oficina dos V6
   await expect.poll(() => mode<boolean>(page, `m.controller.save.seenStorySceneIds.includes('c3-completion')`)).toBe(true);
   await mode(page, `m.controller.setActiveCar(m.controller.save.ownedCars.find((c) => c.prizeEventId === '${C3[9]}').id).then(() => m.show('garage'))`);
   await expect(page.getByTestId('garage-trophy')).toBeVisible();
-  await expect(page.getByTestId('stat-gearbox')).toContainText('dupla embreagem');
+  await expect(page.getByTestId('stat-gearbox')).toContainText('manual (câmbio melhorado), 6 marchas');
   await shot(page, 'e2e-13-gtr-do-akira');
 });
