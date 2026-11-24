@@ -6,6 +6,7 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
+    "online:proof": "tsx src/server/online/startProof.ts",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
@@ -20,12 +21,18 @@
     "assets": "tsx scripts/assets/export-sprites.ts"
   },
   "dependencies": {
+    "@colyseus/core": "0.18.29",
+    "@colyseus/sdk": "0.18.10",
+    "@colyseus/ws-transport": "0.18.5",
+    "@supabase/supabase-js": "2.119.2",
     "gsap": "3.13.0",
     "phaser": "4.2.1",
+    "postgres": "4.1.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.0",
+    "@types/express": "5.0.6",
     "@types/node": "^22.10.0",
     "fake-indexeddb": "^6.2.8",
     "tsx": "^4.23.15",

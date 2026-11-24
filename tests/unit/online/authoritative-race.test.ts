@@ -1,0 +1,63 @@
+import { randomUUID } from 'node:crypto';
+import { describe, expect, it } from 'vitest';
+import { CHAPTER1_CARS, CAREER_CARS } from '../../../src/data/cars/campaign';
+import { TRACKS } from '../../../src/data/tracks';
+import { careerResolverVersion } from '../../../src/game/career/tuning/resolverVersion';
+import { AuthoritativeRace } from '../../../src/game/online/AuthoritativeRace';
+import { RaceInputSchema } from '../../../src/game/online/contracts';
+import { ONLINE_STARTERS, stockOnlineBuild } from '../../../src/game/online/demoCatalog';
+
+function newRace() {
+  return new AuthoritativeRace(randomUUID(), [
+    stockOnlineBuild(ONLINE_STARTERS[0], 'Piloto A'),
+    stockOnlineBuild(ONLINE_STARTERS[1], 'Piloto B'),
+  ], TRACKS[0]!, 17);
+}
+
+describe('catálogo da prova online', () => {
+  it('contém os 25 veículos da campanha', () => {
+    expect(CAREER_CARS).toHaveLength(25);
+    expect(new Set(CAREER_CARS.map((car) => car.id)).size).toBe(25);
+  });
+
+  it.each(CAREER_CARS.map((car) => [car.id, car] as const))('resolve o veículo original %s no Node', (id, car) => {
+    expect(careerResolverVersion(id)).toBe(CHAPTER1_CARS.includes(car) ? 1 : 2);
+    expect(stockOnlineBuild(id, car.name).car.id).toBe(id);
+  });
+});
+
+describe('corrida autoritativa', () => {
+  it('rejeita mensagem adulterada, repetida ou fora da janela', () => {
+    const race = newRace();
+    const input = { matchId: race.matchId, sequence: 0, observedTick: 0, throttle: 1 };
+    expect(RaceInputSchema.safeParse({ ...input, x: 402 }).success).toBe(false);
+    expect(RaceInputSchema.safeParse({ ...input, throttle: 2 }).success).toBe(false);
+    expect(race.submit(0, { ...input, matchId: randomUUID() })).toBe(false);
+    expect(race.submit(0, { ...input, observedTick: 1 })).toBe(false);
+    expect(race.submit(0, input)).toBe(true);
+    expect(race.submit(0, input)).toBe(false);
+    for (let i = 0; i < 121; i++) race.step();
+    expect(race.submit(0, { ...input, sequence: 1 })).toBe(false);
+    expect(race.race.raceLanes[0]!.sim.controls.pedal).toBe(0);
+  });
+
+  it('recebe comandos independentes e calcula o resultado do quarto de milha', () => {
+    const race = newRace();
+    while (race.race.phase !== 'finished' && race.tick < 6_000) {
+      if (race.tick % 4 === 0) {
+        for (const lane of [0, 1] as const) {
+          const sim = race.race.raceLanes[lane]!.sim;
+          const launch = race.race.greenAt !== null && race.race.time >= race.race.greenAt + 0.12 * lane;
+          const shift = launch && (sim.gear === 0 || sim.engine.rpm >= 5_750) ? 1 : undefined;
+          race.submit(lane, { matchId: race.matchId, sequence: race.tick, observedTick: race.tick, throttle: launch ? 1 : 0, shift });
+        }
+      }
+      race.step();
+    }
+    const result = race.snapshot();
+    expect(result.phase).toBe('finished');
+    expect(result.lanes.every((lane) => lane.result.et !== null && !lane.result.redLight)).toBe(true);
+    expect(result.lanes[0].result.rt).not.toBe(result.lanes[1].result.rt);
+    expect(result.winner).toBe(result.lanes[0].result.total! < result.lanes[1].result.total! ? 0 : 1);
+  });
+});

@@ -1,7 +1,7 @@
 import { Prng } from '../../core/prng';
 import type { VehicleSimulation } from '../../physics/vehicle/VehicleSimulation';
 import type { DragAI } from '../ai/DragAI';
-import type { TreeLights } from '../scenes/RaceScene';
+import type { TreeLights } from '../scenes/renderTypes';
 
 export const FT = 0.3048;
 /** Distance the front tyre travels before it un-blocks the stage beam (≈ 11.5 in). */
