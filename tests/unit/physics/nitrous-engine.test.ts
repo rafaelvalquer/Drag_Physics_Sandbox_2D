@@ -45,6 +45,24 @@ function race(car: CarConfig, gear: number | null): { et: number; maxSpeed: numb
 }
 
 describe('nitrous in the simulation', () => {
+  it('mechanical failure ends injection on the same step without refilling the cylinder', () => {
+    const sim = new VehicleSimulation(withNitro(gol, { torqueLimitNm: 40 }), track);
+    sim.enableEngineFailure({ recommendedSafeRpm: 7500, maxSafeRpm: 8000, enduranceS: 8, recoveryPerS: 0.1 });
+    sim.controls.autoStart = true;
+    for (let i = 0; i < 480; i++) sim.step(H);
+    sim.controls.pedal = 0.3;
+    sim.nitrousHeld = true;
+    for (let i = 0; i < 600 && sim.engine.runState !== 'BROKEN'; i++) sim.step(H);
+    expect(sim.engine.runState).toBe('BROKEN');
+    const tank = sim.nitrous!.telemetry();
+    expect(tank).toMatchObject({ status: 'DISABLED', flowKgPerS: 0, additionalTorqueNm: 0 });
+    expect(tank.remainingFraction).toBeGreaterThan(0);
+    expect(tank.remainingFraction).toBeLessThan(1);
+    sim.nitrousHeld = true;
+    sim.step(H);
+    expect(sim.nitrous!.remainingFraction).toBe(tank.remainingFraction);
+  });
+
   it('a car without a kit has no nitrous system and the key does nothing', () => {
     const sim = new VehicleSimulation(gol, track);
     expect(sim.nitrous).toBeNull();
