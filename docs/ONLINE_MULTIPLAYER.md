@@ -1,0 +1,44 @@
+# Multiplayer online 1.0
+
+A aba **Online** abre a garagem vinculada à conta Google. A Campanha usa os saves locais e o seu próprio catálogo de desbloqueios. Apenas a entrada no modo Online carrega o cliente de autenticação e estabelece conexão com os serviços online.
+
+## Desenvolvimento local
+
+Requer Node.js 22.12 ou posterior. Use `npm ci` para instalar as versões registradas no lockfile. `npm run dev` inicia o frontend. `npm run online:proof` inicia uma prova de dois clientes com carros originais na interface de loopback. O servidor competitivo é iniciado com `npm run online:server` e recebe as variáveis do ambiente. Para usar um arquivo local, copie `.env.example` para `.env` e execute `node --env-file=.env --import tsx src/server/online/start.ts`.
+
+## Google e Supabase
+
+1. Crie projetos Supabase separados para homologação e produção. Use o projeto local da CLI ou um projeto separado para desenvolvimento. Aplique as migrations com `supabase db reset` no ambiente local ou `supabase db push` após vincular a CLI ao projeto correto. Configure a autenticação Google em cada projeto que usará OAuth.
+2. Configure a marca e a tela de consentimento na Google Auth Platform. Crie um cliente OAuth do tipo aplicação web, cadastre os domínios autorizados do jogo e adicione a URI `https://<PROJECT_REF>.supabase.co/auth/v1/callback`. Cadastre os contatos e links reais de privacidade e termos de uso. Para um app de teste, inclua as contas que farão a homologação.
+3. No provedor Google do Supabase, registre o Client ID e o Client Secret do Google. Em **Authentication → URL Configuration**, defina a URL do frontend e permita o caminho completo `/auth/callback` de cada ambiente autorizado, incluindo `http://localhost:5173/auth/callback` em desenvolvimento. O jogo usa PKCE e os escopos `openid email profile`. [Configuração do Google no Supabase](https://supabase.com/docs/guides/auth/social-sign-in/auth-google) · [URLs de retorno](https://supabase.com/docs/guides/auth/redirect-urls)
+4. Use a chave pública nas variáveis `VITE_*`. Configure a chave secreta e a URL PostgreSQL apenas no backend. No painel do Supabase, use **Connect** para copiar a URL de conexão direta ou do pooler em modo Session para ambientes IPv4. Use TLS para o banco remoto, por exemplo com `sslmode=require` na URL de conexão. [Conexão PostgreSQL](https://supabase.com/docs/guides/database/connecting-to-postgres)
+
+## Railway e Netlify
+
+1. No Railway, associe o repositório e selecione a branch de homologação. O `Dockerfile` inicia o servidor com `PORT` fornecido pelo host. Cadastre as variáveis privadas, mantenha uma réplica e gere o domínio público. Valide `https://<backend>/health`. Encerre partidas em andamento antes de trocar a implantação. Ao iniciar, o servidor classifica partidas `running` como canceladas. [Dockerfiles](https://docs.railway.com/builds/dockerfiles) · [Health checks](https://docs.railway.com/deployments/healthchecks)
+2. Na Netlify, associe o mesmo commit e configure as quatro variáveis públicas antes de gerar o bundle. Use `https://<backend>` para `VITE_ONLINE_API_URL` e `wss://<backend>` para `VITE_ONLINE_WS_URL`. O `netlify.toml` publica `dist` e atende `/auth/callback` com a página do jogo. [Rewrites da Netlify](https://docs.netlify.com/manage/routing/redirects/rewrites-proxies/)
+3. No Railway, inclua o domínio HTTPS exato da Netlify em `ALLOWED_ORIGINS`. No Supabase, acrescente o callback HTTPS correspondente. Refaça o build da Netlify quando mudar uma variável `VITE_*`. Use projetos e saldos iniciais separados para homologação. Mantenha o padrão de 4.500 CR e 1.000 RP em produção.
+
+## Autoridade e persistência
+
+- O servidor verifica assinatura, emissor, audiência, validade e origem Google dos tokens do Supabase. O UUID do token identifica a conta. A API aplica limites por IP e conta, e o WebSocket limita a taxa e o tamanho das mensagens.
+- O Colyseus agrupa dois jogadores por sala. A seleção dura 30 segundos por padrão e usa o carro ativo se o piloto aguardar sem escolher outro. A partida aguarda os dois clientes carregarem e usa builds imutáveis com hash, versão, seed e revisão. O servidor bloqueia operações de garagem durante a fila e a partida.
+- O `SimulationRunner` e o `RaceController` executam a física em passos de 1/120 s. O cliente envia comandos aproximadamente a 30 Hz e o servidor publica snapshots a 20 Hz. As entradas têm sequência e janela de idade. O semáforo usa um relógio estimado por RTT. A primeira versão interpola posições, áudio e rotação das rodas. Os comandos são aplicados a partir da recepção no servidor, dentro da janela de validade. A vantagem de conexões mais rápidas ainda exige medidas de homologação.
+- As alterações de garagem usam UUID de operação, bloqueio por perfil e revisão de build. CR é global, RP usa Elo com K=32 e PP é atribuído ao veículo do snapshot. O ledger e os resultados são atualizados na mesma transação. RLS expõe consultas privadas do titular e o catálogo versionado. O ranking é servido pela API com campos públicos selecionados.
+- A garagem inicial é limitada a 25 veículos. Veículos vendidos preservam o histórico. A Saveiro, que não tem oferta da campanha, inicia no online a 2.600 CR. As árvores usam as peças reais, os estágios e os limites do resolver. Comprar, instalar e desbloquear são operações separadas.
+- O servidor registra jogos repetidos e mudanças consecutivas de vencedor para inspeção, aplica supressão por falta de participação efetiva e evita a concessão em duplicidade. Para abuso confirmado, um administrador pode inserir em `online_reward_holds` o percentual de CR e PP que continuará sendo concedido, o motivo e a expiração. O resultado preserva o motivo. A repetição de rivais por si só não altera a recompensa. Queima de largada e quebra de motor contam como participação.
+
+## Validação
+
+| Verificação | Comando ou evidência |
+|---|---|
+| Tipos e bundle do navegador | `npm run build` |
+| Resolver, árvores e regras de corrida | `npm test -- tests/unit/online` |
+| Dois clientes TCP e WebSocket, migração PostgreSQL, JWT, garagem e recompensas | `npm test -- tests/integration/online` |
+| Regressões de campanha e oficina no navegador | `npm run test:e2e` |
+
+Os testes de integração usam portas de loopback atribuídas pelo sistema. O simulador PostgreSQL em teste usa PGlite. O teste JWT assina tokens locais e usa o fluxo oficial de verificação do SDK contra um JWKS local. Ele não abre uma conta Google real.
+
+Para homologar, entre com contas Google diferentes em dois dispositivos, cadastre nicknames únicos, recarregue a garagem após sair e voltar, selecione carros, dispute uma corrida de 402,336 m e confronte os dois tempos oficiais. Interrompa temporariamente a rede durante outra corrida e confirme se a sessão retorna. Verifique a alteração de CR e RP no ranking e o PP nos dois veículos utilizados. Registre o commit e o ID da partida, condições de rede, capturas dos resultados e as métricas `ticks`, `meanStepMs` e `droppedMs` do backend.
+
+O teste de homologação deve cobrir rede móvel e Wi‑Fi, diferentes combinações de transmissão e tração, rejeição de seleção alheia, timeout na carga e recuperação após restart. O resultado de dois usuários Google em dispositivos distintos deve ser anexado ao PR antes da publicação pública.

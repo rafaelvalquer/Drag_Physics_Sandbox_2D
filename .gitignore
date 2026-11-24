@@ -6,3 +6,6 @@ playwright-report/
 dist-assets/
 .claude/
 visual-captures/
+.env
+.env.*
+!.env.example

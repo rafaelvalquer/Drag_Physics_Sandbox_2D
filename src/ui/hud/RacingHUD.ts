@@ -1,8 +1,9 @@
 import type { VehicleSimulation } from '../../physics/vehicle/VehicleSimulation';
+import type { CarConfig } from '../../data/schema';
 import { h, speedUnit } from '../dom';
 import { GearIndicator } from './GearIndicator';
 import { ShiftLights, shiftLightState, shiftTargets } from './ShiftLights';
-import { TurboGauge, turboGaugeState } from './TurboGauge';
+import { TurboGauge, turboGaugeState, type TurboGaugeState } from './TurboGauge';
 import { Tachometer, tachScale, type TachScale } from './Tachometer';
 import type { StrainLevel } from '../../physics/engine/EngineOverrevFailure';
 import { StrainDisplay } from './strainDisplay';
@@ -34,6 +35,19 @@ export interface HudInfo {
   alert?: boolean;
   /** Opponent position relative to the player (m, positive = opponent ahead) or null. */
   gapM: number | null;
+}
+
+export interface HudFrame {
+  car: CarConfig;
+  rpm: number;
+  gear: number;
+  targetGear: number;
+  shifting: boolean;
+  limiter: boolean;
+  speed: number;
+  pedal: number;
+  slipRatio: number;
+  turbo: TurboGaugeState;
 }
 
 /**
@@ -188,40 +202,53 @@ export class RacingHUD {
   }
 
   update(sim: VehicleSimulation, units: 'kmh' | 'mph', message = '', info?: HudInfo): void {
+    this.updateFrame({ car: sim.car, rpm: sim.engine.rpm, gear: sim.gearbox.engaged ? sim.gearbox.gear : 0,
+      shifting: sim.shift.active, targetGear: sim.shift.targetGear, limiter: sim.engine.ignition.limiterActive,
+      speed: sim.speed, pedal: sim.controls.pedal, turbo: turboGaugeState(sim), slipRatio: sim.telemetry.slipRatio },
+    units, message || stateText(sim), info ?? { distanceM: sim.x, timeS: null, gapM: null });
+    this.updateStrain(sim);
+    this.updateNitrous(sim);
+    this.heatAlert.hidden = sim.engine.thermal.torqueFraction >= 1;
+  }
+
+  updateNetwork(frame: HudFrame, units: 'kmh' | 'mph', message: string, info: HudInfo): void {
+    this.strainRow.style.display = this.nitroRow.style.display = 'none';
+    this.updateFrame(frame, units, message, info);
+  }
+
+  private updateFrame(frame: HudFrame, units: 'kmh' | 'mph', message: string, inf: HudInfo): void {
     const now = performance.now();
     const dt = this.lastT === 0 ? 1 / 60 : Math.min(0.1, (now - this.lastT) / 1000);
     this.lastT = now;
     this.clock += dt;
-    const e = sim.car.engine;
-    const t = sim.car.transmission;
+    const e = frame.car.engine;
+    const t = frame.car.transmission;
     // scale and shift points belong to the car: recompute when the car changes
-    const key = `${sim.car.id}|${e.redlineRpm}|${e.revLimitRpm}|${t.gearRatios.join(',')}|${t.finalDrive}|${e.torqueCurve.torqueNm.join(',')}`;
+    const key = `${frame.car.id}|${e.redlineRpm}|${e.revLimitRpm}|${t.gearRatios.join(',')}|${t.finalDrive}|${e.torqueCurve.torqueNm.join(',')}`;
     if (key !== this.carKey) {
       this.carKey = key;
       this.scale = tachScale(e.redlineRpm, e.revLimitRpm);
-      this.targets = shiftTargets(sim.car);
+      this.targets = shiftTargets(frame.car);
     }
-    const rpm = sim.engine.rpm;
-    const g = sim.gearbox.engaged ? sim.gearbox.gear : 0;
+    const { rpm, gear: g } = frame;
     const target = g > 0 ? (this.shiftRpm ?? this.targets[g - 1] ?? null) : null;
-    this.gear.update({ gear: g, shifting: sim.shift.active, targetGear: sim.shift.targetGear });
-    this.tach.draw(rpm, this.scale, target, sim.engine.ignition.limiterActive, dt);
-    this.lights.update(shiftLightState(rpm, sim.shift.active ? null : target), this.clock);
+    this.gear.update({ gear: g, shifting: frame.shifting, targetGear: frame.targetGear });
+    this.tach.draw(rpm, this.scale, target, frame.limiter, dt);
+    this.lights.update(shiftLightState(rpm, frame.shifting ? null : target), this.clock);
     this.rpm.textContent = String(Math.round(rpm / 10) * 10);
 
     const su = speedUnit(units);
-    const v = Math.abs(sim.speed * su.k);
+    const v = Math.abs(frame.speed * su.k);
     this.shownSpeed += (v - this.shownSpeed) * (1 - Math.exp(-dt / 0.06));
     this.speed.textContent = this.shownSpeed.toFixed(0);
     this.speedLabel.textContent = su.label;
 
-    const pedal = Math.max(0, Math.min(1, sim.controls.pedal));
+    const pedal = Math.max(0, Math.min(1, frame.pedal));
     this.throttle.style.width = `${(pedal * 100).toFixed(0)}%`;
     this.throttleText.textContent = `${(pedal * 100).toFixed(0)} %`;
-    this.turbo.update(turboGaugeState(sim), dt);
+    this.turbo.update(frame.turbo, dt);
 
-    this.msg.textContent = message || stateText(sim);
-    const inf = info ?? { distanceM: sim.x, timeS: null, gapM: null };
+    this.msg.textContent = message;
     const shown = inf.totalM === undefined ? inf.distanceM : Math.min(inf.distanceM, inf.totalM);
     this.dist.textContent = inf.totalM === undefined ? `${shown.toFixed(1)} m` : `${Math.max(0, shown).toFixed(0)} / ${inf.totalM.toFixed(0)} m`;
     this.leftRow.style.display = inf.totalM === undefined ? 'none' : '';
@@ -239,13 +266,10 @@ export class RacingHUD {
     this.gapRow.style.display = inf.gapM === null ? 'none' : '';
     if (inf.gapM !== null) this.gap.textContent = `${inf.gapM >= 0 ? '+' : '−'}${Math.abs(inf.gapM).toFixed(1)} m ${inf.gapM >= 0 ? 'à frente' : 'atrás'}`;
     // slip ratio of the driven tyres; below ~2 m/s the ratio uses 2 m/s as reference (telemetry)
-    const slip = Math.max(0, sim.telemetry.slipRatio);
+    const slip = Math.max(0, frame.slipRatio);
     this.slipBar.style.width = `${Math.min(100, slip * 100).toFixed(0)}%`;
     this.slipBar.classList.toggle('hot', slip > 0.15);
     this.slipText.textContent = slip > 9.99 ? '>999 %' : `${(slip * 100).toFixed(0)} %`;
-    this.updateStrain(sim);
-    this.updateNitrous(sim);
-    this.heatAlert.hidden = sim.engine.thermal.torqueFraction >= 1;
   }
 
   /** N₂O gauge driven by cylinder mass and actual injection flow. */

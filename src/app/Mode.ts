@@ -18,6 +18,7 @@ export interface AppContext {
   updateSetting<K extends keyof AppSettings>(key: K, value: AppSettings[K]): void;
   /** Switches to another mode (e.g. the campaign's "back" button). */
   switchMode?(id: string): void;
+  refreshTrackVisibility?(): void;
 }
 
 /**

@@ -1,0 +1,27 @@
+.online-screen[hidden] { display: none; }
+.online-nav { margin-bottom: 1rem; }
+.online-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 245px), 1fr)); gap: 12px; }
+.online-card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+.online-card h2, .online-card h3 { margin: 0 0 .4rem; font-size: 1.03rem; }
+.online-card p { margin: .45rem 0; }
+.online-card header { display: flex; justify-content: space-between; gap: 1rem; align-items: baseline; }
+.online-card header span { color: var(--accent); white-space: nowrap; }
+.online-card canvas.garage-preview { display: block; margin: 6px auto; max-width: 100%; }
+.online-card canvas[hidden] { display: none; }
+.online-card .row, .online-nav { flex-wrap: wrap; gap: 6px; }
+.online-small { max-width: 520px; }
+.online-small > label, .online-filters label { display: flex; flex-direction: column; gap: 4px; }
+.online-small > label.row, .online-filters label.row { flex-direction: row; }
+.online-small > * + * { margin-top: 10px; }
+.online-filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; margin-bottom: 14px; }
+.online-tree { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 235px), 1fr)); gap: 14px; }
+.online-tree-branch article + article { margin-top: 12px; }
+.online-focused { outline: 1px solid var(--accent); outline-offset: -1px; }
+.online-specs { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: .85rem; }
+.online-specs dt { color: var(--muted); }
+.online-specs dd { margin: 0; }
+.online-table { overflow-x: auto; }
+.online-records table { width: 100%; border-collapse: collapse; white-space: nowrap; }
+.online-records th, .online-records td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); }
+.online-records .row { margin-top: 12px; }
+.online-dyno-chart { width: 100%; height: 260px; }

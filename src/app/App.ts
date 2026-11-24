@@ -7,6 +7,7 @@ import { SandboxMode } from '../modes/SandboxMode';
 import { RaceMode } from '../modes/RaceMode';
 import { DynoMode } from '../modes/DynoMode';
 import { CareerMode } from '../modes/CareerMode';
+import { OnlineMode } from '../modes/OnlineMode';
 import { clear, h, toast } from '../ui/dom';
 import { openSettingsDialog } from '../ui/SettingsDialog';
 import { openGarage } from '../ui/garage/GarageDialog';
@@ -31,6 +32,7 @@ export class App {
     race: () => new RaceMode(),
     dyno: () => new DynoMode(),
     career: () => new CareerMode(),
+    online: () => new OnlineMode(),
   };
   private readonly el = {
     app: document.getElementById('app')!,
@@ -64,6 +66,7 @@ export class App {
       settings: this.settings,
       updateSetting: (k, v) => this.updateSetting(k, v),
       switchMode: (id) => this.switchMode(id),
+      refreshTrackVisibility: () => this.refreshTrackVisibility(),
     };
     this.buildTopbar();
     this.touch = new TouchControls(this.el.stage, this.input);
@@ -74,7 +77,7 @@ export class App {
     window.addEventListener('keydown', unlock, { once: true });
     window.addEventListener('pointerdown', unlock, { once: true });
     if (!this.store.persistent) toast('IndexedDB indisponível: presets e recordes valem só nesta sessão.', 'error');
-    this.switchMode('sandbox');
+    this.switchMode(location.pathname.replace(/\/$/, '') === '/auth/callback' ? 'online' : 'sandbox');
     this.createGame();
   }
 
@@ -126,7 +129,7 @@ export class App {
     tb.append(
       h('span', { class: 'brand', title: 'Drag Physics Sandbox 2D' }, h('span', { class: 'long' }, 'DRAG PHYSICS SANDBOX 2D'), h('span', { class: 'short' }, 'DPS·2D')),
       ...Object.keys(this.modes).map((id) =>
-        h('button', { class: 'tab', 'data-mode': id, onclick: () => this.switchMode(id) }, { sandbox: 'Sandbox', race: 'Corrida', dyno: 'Dinamômetro', career: 'Campanha' }[id] ?? id),
+        h('button', { class: 'tab', 'data-mode': id, onclick: () => this.switchMode(id) }, { sandbox: 'Sandbox', race: 'Corrida', dyno: 'Dinamômetro', career: 'Campanha', online: 'Online' }[id] ?? id),
       ),
       h('button', { class: 'tab garage-btn', 'data-testid': 'garage-open', title: 'Ver os carros em detalhe e escolher um', onclick: () => this.openGarage() }, 'Garagem'),
       h('span', { class: 'spacer' }),
@@ -163,10 +166,15 @@ export class App {
     this.mode = m;
     m.mount(this.ctx);
     this.el.app.classList.toggle('panel-less', !!m.noPanel);
-    this.el.game.style.visibility = m.usesTrack ? 'visible' : 'hidden';
-    this.touch?.setVisible(m.usesTrack && TouchControls.wanted(this.settings.touchControls));
+    this.refreshTrackVisibility();
     for (const b of this.el.topbar.querySelectorAll<HTMLButtonElement>('button.tab[data-mode]')) b.classList.toggle('active', b.dataset.mode === id);
     if (audioEngine.running) m.onAudioReady();
+  }
+
+  private refreshTrackVisibility(): void {
+    const visible = this.mode?.usesTrack ?? false;
+    this.el.game.style.visibility = visible ? 'visible' : 'hidden';
+    this.touch?.setVisible(visible && TouchControls.wanted(this.settings.touchControls));
   }
 
   private openGarage(): void {
