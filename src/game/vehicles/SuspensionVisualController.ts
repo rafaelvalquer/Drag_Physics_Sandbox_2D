@@ -62,6 +62,12 @@ export class SuspensionVisualController {
     this.heaveV = 0;
   }
 
+  /** A sudden push of the drive (nitrous): velocity added to the spring model, which then settles by itself. */
+  kick(pitchRadPerS: number, heaveMPerS: number): void {
+    if (Number.isFinite(pitchRadPerS)) this.pitchV += pitchRadPerS;
+    if (Number.isFinite(heaveMPerS)) this.heaveV += heaveMPerS;
+  }
+
   update(dt: number, input: SuspensionInput): SuspensionState {
     const a = Number.isFinite(input.accel) ? input.accel : 0;
     const v = Number.isFinite(input.speed) ? input.speed : 0;

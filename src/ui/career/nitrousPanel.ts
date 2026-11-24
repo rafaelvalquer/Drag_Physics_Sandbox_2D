@@ -44,73 +44,65 @@ export function nitrousGripRatio(car: CarConfig, addNm: number): number {
   return grip > 0 ? force / grip : 0;
 }
 
-/** Nitrous settings of the Workshop: kit data, mode, flow and ramp of each stage, with a live preview. */
-export function buildNitrousPanel(d: NitrousPanelDeps): HTMLElement {
+export interface NitrousTabDeps {
+  kit: NitrousKitPart;
+  /** The draft tune of the Dyno Lab (all settings; the nitrous ones are read from it). */
+  draft(): BuildTune;
+  /** Writes one nitrous setting into the draft (undefined = back to the default). */
+  set(field: NitrousField, value: BuildTune[NitrousField] | undefined): void;
+  /** Resolves the car with the kit and a tune (the preview reads the physical setup from it). */
+  resolve(tune: BuildTune): BuildResult;
+  /** The draft changed: the Dyno Lab measures it again. */
+  changed(): void;
+}
+type NitrousField = (typeof NITROUS_TUNE_FIELDS)[number];
+
+/**
+ * "Nitro" tab of the Dyno Lab: mode, flow and ramp of each stage, with a live preview of power, torque, duration, risk and
+ * traction. The settings live in the Dyno Lab draft, so the A/B comparison, "Aplicar" and "Descartar" are the Dyno's own.
+ */
+export function buildNitrousTab(d: NitrousTabDeps): HTMLElement {
   const kit = d.kit;
   const lim = nitrousLimits(kit);
-  const own = (t: BuildTune): BuildTune => {
-    const o: BuildTune = {};
-    for (const f of NITROUS_TUNE_FIELDS) if (t[f] !== undefined) (o as Record<string, unknown>)[f] = t[f];
-    return o;
-  };
-  const rest = (t: BuildTune): BuildTune => {
-    const o: BuildTune = { ...t };
-    for (const f of NITROUS_TUNE_FIELDS) delete o[f];
-    return o;
-  };
-  let draft: BuildTune = own(d.saved);
-  const savedOwn = JSON.stringify(own(d.saved));
-  const values = () => nitrousTuneOf(kit, draft);
-
+  const values = () => nitrousTuneOf(kit, d.draft());
   const root = h('div', { class: 'nitro-panel', 'data-testid': 'nitro-panel' });
   const info = h(
     'div',
     { class: 'nitro-info', 'data-testid': 'nitro-info' },
     h('b', {}, `${kit.name} · nível ${kit.kit.level}`),
     h('span', {}, `Potência nominal: até +${kit.kit.maxPowerCvRef} cv · cilindro ${pt(kit.kit.capacityKg * 1000, 0)} g de N₂O · ${kit.kit.massKg} kg a mais · vazão máx. ${pt(kit.kit.maxFlowKgS * 1000, 1)} g/s`),
-    h('span', {}, 'Compatível com este carro · instalado'),
   );
+  const preview1 = h('div', { class: 'nitro-prev', 'data-testid': 'nitro-prev-1' });
+  const preview2 = h('div', { class: 'nitro-prev', 'data-testid': 'nitro-prev-2' });
+  const risk = h('div', { class: 'nitro-risk', 'data-testid': 'nitro-risk' });
+  const grip = h('div', { class: 'nitro-grip', 'data-testid': 'nitro-grip' });
+
   const modeSel = h(
     'select',
     { 'data-testid': 'nitro-mode', 'aria-label': 'Modo de acionamento' },
     h('option', { value: 'single' }, 'Descarga única'),
     h('option', { value: 'dual' }, 'Dois estágios'),
-  );
-  const dirtyTag = h('span', { class: 'nitro-dirty', 'data-testid': 'nitro-dirty' });
-  const preview1 = h('div', { class: 'nitro-prev', 'data-testid': 'nitro-prev-1' });
-  const preview2 = h('div', { class: 'nitro-prev', 'data-testid': 'nitro-prev-2' });
-  const risk = h('div', { class: 'nitro-risk', 'data-testid': 'nitro-risk' });
-  const grip = h('div', { class: 'nitro-grip', 'data-testid': 'nitro-grip' });
-  const msg = h('p', { class: 'nitro-msg', 'data-testid': 'nitro-msg', role: 'status' });
+  ) as HTMLSelectElement;
+  modeSel.value = values().mode;
 
-  const row = (label: string, id: string, min: number, max: number, step: number, get: () => number, set: (v: number) => void, fmt: (v: number) => string): { el: HTMLElement; sync(): void } => {
-    const out = h('output', { 'data-testid': `${id}-out` });
-    const input = h('input', { type: 'range', min: String(min), max: String(max), step: String(step), 'data-testid': id, 'aria-label': label }) as HTMLInputElement;
-    const sync = (): void => {
-      input.value = String(get());
-      out.textContent = fmt(get());
-    };
+  const row = (label: string, id: string, field: NitrousField, min: number, max: number, step: number, get: () => number, fmt: (v: number) => string): HTMLElement => {
+    const out = h('output', { 'data-testid': `${id}-out` }, fmt(get()));
+    const input = h('input', { type: 'range', min: String(min), max: String(max), step: String(step), value: String(get()), 'data-testid': id, 'aria-label': label }) as HTMLInputElement;
     input.addEventListener('input', () => {
-      set(Number(input.value));
-      out.textContent = fmt(get());
+      const v = Number(input.value);
+      d.set(field, v as never);
+      out.textContent = fmt(v);
       update();
+      d.changed();
     });
-    sync();
-    return { el: h('label', { class: 'nitro-row' }, h('span', {}, label), input, out), sync };
+    return h('label', { class: 'nitro-row' }, h('span', {}, label), input, out);
   };
-  const flow1 = row('Vazão do estágio 1', 'nitro-flow1', lim.flowMin, lim.flowMax, 0.05, () => values().flow1, (v) => (draft = { ...draft, nitrousFlow1: v }), (v) => `${Math.round(v * 100)} %`);
-  const ramp1 = row('Entrada progressiva do estágio 1', 'nitro-ramp1', 0, lim.rampMax, 0.1, () => values().ramp1, (v) => (draft = { ...draft, nitrousRamp1: v }), (v) => `${pt(v)} s`);
-  const share = row('Divisão da carga (estágio 1)', 'nitro-share', lim.shareMin, lim.shareMax, NITROUS_SHARE_STEP, () => values().share, (v) => (draft = { ...draft, nitrousShare: v }), (v) => `${Math.round(v * 100)} / ${Math.round((1 - v) * 100)}`);
-  const flow2 = row('Vazão do estágio 2', 'nitro-flow2', lim.flowMin, lim.flowMax, 0.05, () => values().flow2, (v) => (draft = { ...draft, nitrousFlow2: v }), (v) => `${Math.round(v * 100)} %`);
-  const ramp2 = row('Entrada progressiva do estágio 2', 'nitro-ramp2', 0, lim.rampMax, 0.1, () => values().ramp2, (v) => (draft = { ...draft, nitrousRamp2: v }), (v) => `${pt(v)} s`);
-  const dualOnly = [share.el, flow2.el, ramp2.el, preview2];
-
-  const resolved = (): { car: CarConfig; setup: NitrousSetup } | string => {
-    const r = d.resolve({ ...rest(d.saved), ...draft });
-    if (!r.ok) return r.errors.join('; ');
-    if (!r.car.nitrous) return 'o kit não está instalado';
-    return { car: r.car, setup: r.car.nitrous };
-  };
+  const flow1 = row('Vazão do estágio 1', 'nitro-flow1', 'nitrousFlow1', lim.flowMin, lim.flowMax, 0.05, () => values().flow1, (v) => `${Math.round(v * 100)} %`);
+  const ramp1 = row('Entrada progressiva do estágio 1', 'nitro-ramp1', 'nitrousRamp1', 0, lim.rampMax, 0.1, () => values().ramp1, (v) => `${pt(v)} s`);
+  const share = row('Divisão da carga (estágio 1)', 'nitro-share', 'nitrousShare', lim.shareMin, lim.shareMax, NITROUS_SHARE_STEP, () => values().share, (v) => `${Math.round(v * 100)} / ${Math.round((1 - v) * 100)} %`);
+  const flow2 = row('Vazão do estágio 2', 'nitro-flow2', 'nitrousFlow2', lim.flowMin, lim.flowMax, 0.05, () => values().flow2, (v) => `${Math.round(v * 100)} %`);
+  const ramp2 = row('Entrada progressiva do estágio 2', 'nitro-ramp2', 'nitrousRamp2', 0, lim.rampMax, 0.1, () => values().ramp2, (v) => `${pt(v)} s`);
+  const dualOnly = [share, flow2, ramp2, preview2];
 
   const stageText = (setup: NitrousSetup, stage: 1 | 2, rpm: number): string => {
     const p = nitrousStagePreview(setup, stage, rpm);
@@ -120,19 +112,16 @@ export function buildNitrousPanel(d: NitrousPanelDeps): HTMLElement {
   function update(): void {
     const dual = values().mode === 'dual';
     for (const el of dualOnly) el.style.display = dual ? '' : 'none';
-    modeSel.value = values().mode;
-    const dirty = JSON.stringify(own(draft)) !== savedOwn;
-    dirtyTag.textContent = dirty ? 'Alterações não salvas' : 'Salvo';
-    dirtyTag.classList.toggle('on', dirty);
-    const res = resolved();
-    if (typeof res === 'string') {
-      preview1.textContent = res;
+    const r0 = d.resolve(d.draft());
+    if (!r0.ok || !r0.car.nitrous) {
+      preview1.textContent = r0.ok ? 'o kit não está instalado' : r0.errors.join('; ');
       preview2.textContent = '';
       risk.textContent = '';
       grip.textContent = '';
       return;
     }
-    const { car, setup } = res;
+    const car = r0.car;
+    const setup = car.nitrous!;
     const torqueRpm = car.engine.torqueCurve.rpm[car.engine.torqueCurve.torqueNm.indexOf(Math.max(...car.engine.torqueCurve.torqueNm))] ?? car.engine.redlineRpm * 0.6;
     const rpm = Math.max(setup.minRpm, torqueRpm);
     preview1.textContent = stageText(setup, 1, rpm);
@@ -147,50 +136,24 @@ export function buildNitrousPanel(d: NitrousPanelDeps): HTMLElement {
   }
 
   modeSel.addEventListener('change', () => {
-    draft = { ...draft, nitrousMode: (modeSel as HTMLSelectElement).value as 'single' | 'dual' };
+    d.set('nitrousMode', modeSel.value === 'dual' ? 'dual' : undefined);
     update();
+    d.changed();
   });
-  const setMsg = (t: string, bad = false): void => {
-    msg.textContent = t;
-    msg.classList.toggle('bad', bad);
-  };
-  const save = h('button', { class: 'primary', 'data-testid': 'nitro-save', onclick: () => void (async () => {
-    const r = await d.save({ ...rest(d.saved), ...draft });
-    if (!r.ok) setMsg(r.error ?? 'não foi possível salvar', true);
-    else {
-      setMsg('Regulagem do nitro salva.');
-      d.done();
-    }
-  })() }, 'Salvar regulagem');
-  const restore = h('button', { 'data-testid': 'nitro-restore', onclick: () => {
-    draft = {};
-    for (const r of [flow1, ramp1, share, flow2, ramp2]) r.sync();
-    update();
-  } }, 'Restaurar padrão');
-  const cancel = h('button', { 'data-testid': 'nitro-cancel', onclick: () => {
-    draft = own(d.saved);
-    for (const r of [flow1, ramp1, share, flow2, ramp2]) r.sync();
-    update();
-    setMsg('');
-  } }, 'Cancelar');
 
   root.append(
-    h('div', { class: 'nitro-title' }, 'Regulagem do nitro (N₂O)'),
     info,
     h('label', { class: 'nitro-row' }, h('span', {}, 'Modo de acionamento'), modeSel),
-    flow1.el,
-    ramp1.el,
-    share.el,
-    flow2.el,
-    ramp2.el,
+    flow1,
+    ramp1,
+    share,
+    flow2,
+    ramp2,
     preview1,
     preview2,
     risk,
     grip,
-    h('p', { class: 'nitro-hint' }, 'Shift aciona o estágio seguinte. A descarga corre sozinha até acabar e o cilindro volta a 100 % a cada corrida, sem custo.'),
-    dirtyTag,
-    msg,
-    h('div', { class: 'row' }, save, restore, cancel),
+    h('p', { class: 'nitro-hint' }, 'Shift aciona o estágio seguinte. A descarga corre sozinha até acabar e o cilindro volta a 100 % a cada corrida, sem custo. O gráfico e os tempos acima medem este rascunho (use "Nitro no teste" para escolher o uso).'),
   );
   update();
   return root;

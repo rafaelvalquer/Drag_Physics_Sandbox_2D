@@ -34,14 +34,13 @@ import type { RaceRecord } from '../game/career/CareerController';
 import { TelemetryProbe, runHeadlessRace } from '../game/career/headlessRace';
 import { ownedCarBuild, ownedCarConfig, ownedCarLook, rivalBuild, rivalCar } from '../game/career/RivalBuildFactory';
 import { BUILD_RESOLVER_VERSION, resolveBuild, type BuildResult } from '../game/career/tuning/BuildResolver';
-import { buildNitrousPanel } from '../ui/career/nitrousPanel';
 import { compareTorqueBands } from '../game/career/tuning/breathingModel';
 import type { BuildTune } from '../game/career/tuning/buildCommon';
 import { failureSpecFor, reconcileTune, tuneReliability } from '../game/career/tuning/TuningCapabilities';
 import { ISSUE_LABEL } from '../game/career/tuning/buildIssues';
 import { planInstall, type InstallPlan } from '../game/career/tuning/ProjectRequirements';
 import { playBlownEngine, playRiskWarning } from '../audio/core/blownEngineSound';
-import { ALL_PARTS, CATEGORY_DESCRIPTION, CATEGORY_LABEL, CATEGORY_ORDER_V1, UNLOCK_LABEL, WORKSHOP_TABS, findPart, type PartCategory, type PartDef } from '../game/career/tuning/parts';
+import { ALL_PARTS, CATEGORY_DESCRIPTION, CATEGORY_LABEL, CATEGORY_ORDER_V1, UNLOCK_LABEL, WORKSHOP_TABS, findPart, type NitrousKitPart, type PartCategory, type PartDef } from '../game/career/tuning/parts';
 import { progressionOf } from '../game/career/tuning/partProgression';
 import { factoryFuelSupply } from '../game/career/tuning/fuelDelivery';
 import { RACE_DISTANCES, RaceController, type LaneResult, type RaceLane } from '../game/race/RaceController';
@@ -1139,16 +1138,12 @@ export class CareerMode implements Mode {
       plan ? this.requirementsPanel(plan, act) : '',
       // the installed nitrous kit: mode, flow and ramp of each discharge, with a live preview
       installed && p.category === 'nitrous'
-        ? buildNitrousPanel({
-            kit: p,
-            saved: car.tune ?? {},
-            resolve: (tune) => resolveBuild(findCampaignCar(car.baseCarId)!, car.installedParts, tune, buildVersionFor(car, car.installedParts)),
-            save: (tune) => this.controller.applyTune(car.id, tune),
-            done: () => {
-              toast('Regulagem do nitro salva.');
-              this.show('workshop');
-            },
-          })
+        ? h(
+            'div',
+            { class: 'nitro-info', 'data-testid': 'nitro-dyno-hint' },
+            h('span', {}, 'A regulagem do nitro (modo, vazão e entrada de cada estágio) fica no Dyno Lab, aba Nitro, onde dá para medir o efeito antes de aplicar.'),
+            h('button', { class: 'primary', 'data-testid': 'nitro-open-dyno', onclick: () => this.show('dyno') }, 'Abrir o Dyno Lab'),
+          )
         : '',
       cmpHost,
       h('div', { class: 'row' }, buttons),
@@ -1285,6 +1280,7 @@ export class CareerMode implements Mode {
         h('option', { value: 'all', selected: this.dynoNitro === 'all' }, 'todos os estágios'),
       ),
     );
+    const nitroKit = car.installedParts.map((id) => findPart(id)).find((p): p is NitrousKitPart => !!p && p.category === 'nitrous');
     const nitroNote = h('p', { class: 'lead', 'data-testid': 'dyno-nitro-note' });
     const view = buildDynoLab({
       carName: car.nickname,
@@ -1293,6 +1289,9 @@ export class CareerMode implements Mode {
       caps,
       saved: car.tune ?? {},
       turbo: b.ok && b.car.engine.induction === 'turbo',
+      ...(nitroKit
+        ? { nitro: { kit: nitroKit, resolve: (tune: BuildTune) => resolveBuild(base, car.installedParts, tune, version) } }
+        : {}),
       measure: async (tune, stale, prog) => {
         const r = resolveBuild(base, car.installedParts, tune, version);
         if (!r.ok) return { error: r.errors.join('; ') };

@@ -38,7 +38,7 @@ alguns segundos o quebra, como no turbo.
 - `EngineModel.nitrousTorqueNm`: somado ao torque de combustão só enquanto queima. `VehicleSimulation.requestNitrous()`.
 - Resolvedor: o kit **não** é peça de nenhum dos dois resolvedores; `resolveBuild` o separa, resolve o resto como sempre e aplica
   `applyNitrousOverlay` (massa + `car.nitrous`). Builds sem kit resolvem exatamente como antes (v1 intocado).
-- Oficina: `src/ui/career/nitrousPanel.ts` (modo único/duplo, divisão, vazão e rampa por estágio, prévia ao vivo de potência, torque,
+- Regulagem: aba **Nitro** do Dyno Lab (`src/ui/career/nitrousPanel.ts`, `buildNitrousTab`; a Oficina só instala o kit e aponta para o Dyno) (modo único/duplo, divisão, vazão e rampa por estágio, prévia ao vivo de potência, torque,
   duração, risco e tração). HUD: `RacingHUD` (reserva, modo, estágio, estado em texto). Entrada: `InputManager` (ação `nitrous`).
 - Áudio: `src/audio/core/NitrousLayer.ts` (chiado proporcional à vazão e cliques da solenoide), acionado por transição de estado em
   `SimulationRunner`. Partículas: sopros no escape proporcionais à vazão (`VehicleVisualController`), reaproveitando o pool existente.

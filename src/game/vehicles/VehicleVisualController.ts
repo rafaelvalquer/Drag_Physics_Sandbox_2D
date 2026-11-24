@@ -5,6 +5,7 @@ import { spriteTint, type LightingState } from '../scenes/LightingController';
 import type { RenderVehicle } from '../scenes/renderTypes';
 import { PPM_BASE, laneScale, laneYPx } from '../scenes/worldScale';
 import { SuspensionVisualController } from './SuspensionVisualController';
+import { prefersReducedMotion } from '../scenes/reducedMotion';
 import { FX_TEXTURE, type VehicleParticleSystem } from './VehicleParticleSystem';
 import { assembleVehicleSprites, type FrameName, type VehicleSpriteSet } from './VehicleSpriteAssembler';
 import { WheelAnimationController } from './WheelAnimationController';
@@ -78,6 +79,8 @@ interface Parts {
   lights: Phaser.GameObjects.Image;
   brake: Phaser.GameObjects.Image;
   flame: Phaser.GameObjects.Image;
+  nflame: Phaser.GameObjects.Image;
+  nglow: Phaser.GameObjects.Image;
   all: Phaser.GameObjects.Image[];
 }
 
@@ -123,6 +126,9 @@ export class VehicleVisualController {
   private crankPuff = 0;
   private blownPuff = 0;
   private nitroPuff = 0;
+  /** Smoothed N₂O flow (0..1) drawn as light and flame; the previous raw flow detects a new injection. */
+  private nitroGlow = 0;
+  private nitroPrev = 0;
   private wasRunning = false;
   private lastX = 0;
   private destroyed = false;
@@ -169,9 +175,11 @@ export class VehicleVisualController {
         const lights = layer('lights').setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
         const brake = layer('brake').setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
         const flame = this.scene.add.image(0, 0, FX_TEXTURE, 'flame').setOrigin(1, 0.5).setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
-        const all = [shadow, beam, under, rear.hub, rear.sharp, rear.soft, rear.full, front.hub, front.sharp, front.soft, front.full, body, gloss, lights, brake, flame];
+        const nflame = this.scene.add.image(0, 0, FX_TEXTURE, 'nflame').setOrigin(1, 0.5).setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
+        const nglow = this.scene.add.image(0, 0, FX_TEXTURE, 'glow').setBlendMode(Phaser.BlendModes.ADD).setTint(0x58b4ff).setVisible(false);
+        const all = [shadow, beam, under, rear.hub, rear.sharp, rear.soft, rear.full, front.hub, front.sharp, front.soft, front.full, body, gloss, lights, brake, nglow, flame, nflame];
         this.root.add(all);
-        this.parts = { texKey, set, shadow, beam, under, rear, front, body, gloss, lights, brake, flame, all };
+        this.parts = { texKey, set, shadow, beam, under, rear, front, body, gloss, lights, brake, flame, nflame, nglow, all };
         this.artKey = v.artKey;
         this.pxPerM = pxPerM;
         this.susp = new SuspensionVisualController({ wheelbaseM: v.car.wheelbaseM, cgHeightM: v.car.cgHeightM });
@@ -187,6 +195,9 @@ export class VehicleVisualController {
 
   /** Visual idle shake (m, rad) of the body on its mounts; larger with fewer cylinders. */
   private idleShake(v: RenderVehicle): [number, number] {
+    // N₂O: the exhaust shakes the body in proportion to the flow (small, bounded; off with reduced motion)
+    const nf = v.nitrous ?? 0;
+    if (nf > 0.02 && v.running && !prefersReducedMotion()) return [0.007 * nf * this.shake.bipolar(), 0.003 * nf * this.shake.bipolar()];
     if (v.cranking) return [0.004 * this.shake.bipolar(), 0.0018 * this.shake.bipolar()];
     if (!v.running || v.speed > 3) return [0, 0];
     const idle = v.car.engine.idleRpm;
@@ -212,6 +223,12 @@ export class VehicleVisualController {
     const tint = spriteTint(L);
 
     // ---- body on its suspension
+    // N₂O: a new injection kicks the body (nose up, tail squats), then the spring settles it
+    const nitroNow = v.nitrous ?? 0;
+    if (nitroNow > 0.05 && this.nitroPrev <= 0.05 && !prefersReducedMotion()) this.susp.kick(0.5, -0.12);
+    this.nitroPrev = nitroNow;
+    this.nitroGlow += (nitroNow - this.nitroGlow) * Math.min(1, dtS / 0.08);
+    const ng = this.nitroGlow;
     const st = this.susp.update(dtS, { accel: v.accel, speed: v.speed });
     const [shakeY, shakeRot] = this.idleShake(v);
     const rot = -(st.pitch + shakeRot);
@@ -250,18 +267,25 @@ export class VehicleVisualController {
 
     // ---- lamps
     const lampsOn = L.headlights && v.running;
-    p.lights.setVisible(lampsOn);
+    // N₂O lights the lamps (day or night) in blue-white, and the tail turns blue; both fade with the flow
+    const nitroLamps = ng > 0.03 && v.running;
+    p.lights.setVisible(lampsOn || nitroLamps);
+    if (nitroLamps) p.lights.setTint(0xb4e2ff).setAlpha(lampsOn ? 1 : Math.min(1, ng * 1.4));
+    else p.lights.clearTint().setAlpha(1);
     this.brakeGlow += ((v.braking ? 1 : 0) - this.brakeGlow) * Math.min(1, dtS / 0.06);
-    p.brake.setVisible(this.brakeGlow > 0.02).setAlpha(this.brakeGlow);
-    const beamOn = lampsOn && env.profile.glow;
+    const tailNitro = ng > 0.03;
+    p.brake.setVisible(this.brakeGlow > 0.02 || tailNitro).setAlpha(Math.max(this.brakeGlow, tailNitro ? Math.min(1, ng * 1.2) : 0));
+    if (tailNitro) p.brake.setTint(0x6ac8ff);
+    else p.brake.clearTint();
+    const beamOn = (lampsOn || nitroLamps) && env.profile.glow;
     p.beam.setVisible(beamOn);
     if (beamOn) {
       p.beam
         .setPosition(m.headlight.x * PPM_BASE, -m.headlight.y * PPM_BASE)
-        .setScale((11 * PPM_BASE) / 320, (2.6 * PPM_BASE) / 128)
+        .setScale(((11 + 3 * ng) * PPM_BASE) / 320, ((2.6 + 0.6 * ng) * PPM_BASE) / 128)
         .setRotation(rot + 0.05)
-        .setAlpha(0.75 * L.glow)
-        .setTint(0xfff1c8);
+        .setAlpha(Math.max(lampsOn ? 0.75 * L.glow : 0, 0.55 * ng))
+        .setTint(nitroLamps ? 0x9fdcff : 0xfff1c8);
     }
 
     // ---- exhaust flame (afterfire)
@@ -269,6 +293,23 @@ export class VehicleVisualController {
     p.flame.setVisible(v.afterfire);
     if (v.afterfire) {
       p.flame.setPosition(ex.x * PPM_BASE, -ex.y * PPM_BASE).setScale((0.45 + Math.random() * 0.35) * (PPM_BASE / 40), 0.4 + Math.random() * 0.3);
+    }
+
+    // ---- N₂O flame at the pipe (blue-white, longer and brighter with the flow) and the glow behind it
+    const flameOn = ng > 0.03;
+    p.nflame.setVisible(flameOn);
+    p.nglow.setVisible(flameOn && env.profile.glow);
+    if (flameOn) {
+      const flick = env.profile.glow ? 0.85 + 0.3 * Math.random() : 1;
+      p.nflame
+        .setPosition(ex.x * PPM_BASE, -ex.y * PPM_BASE)
+        .setRotation(rot)
+        .setScale((0.5 + 0.9 * ng) * (PPM_BASE / 40) * flick, (0.5 + 0.5 * ng) * (0.9 + 0.2 * Math.random()))
+        .setAlpha(Math.min(1, 0.55 + 0.45 * ng));
+      p.nglow
+        .setPosition(ex.x * PPM_BASE - 0.15 * PPM_BASE, -ex.y * PPM_BASE)
+        .setScale((0.35 + 0.5 * ng) * (PPM_BASE / 40))
+        .setAlpha(0.8 * ng);
     }
 
     this.last = { pitch: st.pitch, heave: st.heave, layers: { rear: lr, front: lf }, lights: lampsOn };

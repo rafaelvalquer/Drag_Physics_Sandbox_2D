@@ -1,10 +1,12 @@
 import type { CarConfig } from '../../../data/schema';
-import type { BuildTune, FinalDrivePreset, ThrottlePreset, TuneField } from '../../../game/career/tuning/buildCommon';
+import type { BuildResult, BuildTune, FinalDrivePreset, ThrottlePreset, TuneField } from '../../../game/career/tuning/buildCommon';
 import type { LabMeasurement } from '../../../game/career/tuning/dynoLab';
 import { RELIABILITY_LABEL, type ReliabilityLevel } from '../../../game/career/tuning/EngineReliability';
 import type { PresetControl, RangeControl, TuningCapabilities } from '../../../game/career/tuning/TuningCapabilities';
 import { drawLineChart, drawMessage, type Series } from '../../charts';
 import { h } from '../../dom';
+import type { NitrousKitPart } from '../../../game/career/tuning/parts';
+import { buildNitrousTab } from '../nitrousPanel';
 import { DynoTuningController } from '../dyno/DynoTuningController';
 import { icon, nf, panel, primaryButton, progress, secondaryButton, sectionHeader } from '../design/CareerComponents';
 
@@ -22,6 +24,8 @@ export interface DynoLabDeps {
   caps: TuningCapabilities;
   saved: BuildTune;
   turbo: boolean;
+  /** The installed N₂O kit (adds the Nitro tab) and the resolver the tab reads the physical setup from. */
+  nitro?: { kit: NitrousKitPart; resolve(tune: BuildTune): BuildResult };
   measure(tune: BuildTune, isStale: () => boolean, progress: (f: number) => void): Promise<LabMeasurement | { error: string } | null>;
   reliabilityOf(tune: BuildTune): ReliabilityLevel;
   apply(tune: BuildTune): Promise<{ ok: true; notice?: string } | { ok: false; error: string }>;
@@ -58,7 +62,7 @@ function uniqueShifts(rpms: readonly number[], cut: number): { rpm: number; labe
 
 const LEVEL_SYMBOL: Record<ReliabilityLevel, string> = { safe: '●', sport: '▲', aggressive: '▲▲', critical: '⚠' };
 
-type Tab = 'motor' | 'arrancada' | 'transmissao';
+type Tab = 'motor' | 'arrancada' | 'transmissao' | 'nitro';
 
 export function buildDynoLab(d: DynoLabDeps): DynoLabView {
   const caps = d.caps;
@@ -115,6 +119,7 @@ export function buildDynoLab(d: DynoLabDeps): DynoLabView {
     motor: h('button', { class: 'dx-tab', role: 'tab', 'data-testid': 'dyno-tab-motor', onclick: () => selectTab('motor') }, 'Motor'),
     arrancada: h('button', { class: 'dx-tab', role: 'tab', 'data-testid': 'dyno-tab-arrancada', onclick: () => selectTab('arrancada') }, 'Arrancada'),
     transmissao: h('button', { class: 'dx-tab', role: 'tab', 'data-testid': 'dyno-tab-transmissao', onclick: () => selectTab('transmissao') }, 'Transmissão'),
+    nitro: h('button', { class: 'dx-tab', role: 'tab', 'data-testid': 'dyno-tab-nitro', onclick: () => selectTab('nitro') }, 'Nitro'),
   };
 
   const ctl = new DynoTuningController<Result>({
@@ -260,6 +265,17 @@ export function buildDynoLab(d: DynoLabDeps): DynoLabView {
       tabBody.append(
         rangeControl('launchRpm', 'Rotação de largada', caps.launch, rpm, 'Rotação em que a embreagem morde na largada. Alta demais patina; baixa demais afoga.'),
         rangeControl('tirePressureKpa', 'Pressão dos pneus', caps.tirePressure, (v) => `${Math.round(v)} kPa`, 'Pressão baixa: mais área de contato e aderência, mais resistência ao rolamento.'),
+      );
+    } else if (tab === 'nitro' && d.nitro) {
+      const nz = d.nitro;
+      tabBody.append(
+        buildNitrousTab({
+          kit: nz.kit,
+          draft: () => ctl.draft,
+          set: (field, value) => ctl.set(field, value as never),
+          resolve: nz.resolve,
+          changed: () => render(),
+        }),
       );
     } else {
       tabBody.append(
@@ -423,7 +439,7 @@ export function buildDynoLab(d: DynoLabDeps): DynoLabView {
     h(
       'div',
       { class: 'dx-lab' },
-      panel('dx-tune', sectionHeader('Ajustes do Dyno Lab', dirtyTag), h('div', { class: 'dx-tabs', role: 'tablist' }, tabs.motor, tabs.arrancada, tabs.transmissao), tabBody, h('div', { class: 'dx-apply' }, applyBtn, discardBtn)),
+      panel('dx-tune', sectionHeader('Ajustes do Dyno Lab', dirtyTag), h('div', { class: 'dx-tabs', role: 'tablist' }, tabs.motor, tabs.arrancada, tabs.transmissao, ...(d.nitro ? [tabs.nitro] : [])), tabBody, h('div', { class: 'dx-apply' }, applyBtn, discardBtn)),
       panel('dx-rel', sectionHeader('CONFIABILIDADE DA PREPARAÇÃO'), h('div', { class: 'dx-rel-head' }, relBadge, relGauge), relDetail),
     ),
   );

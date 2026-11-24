@@ -81,8 +81,8 @@ function partsAtStage(car: CarConfig, origin: 2 | 3, hardware: Hardware): Drivel
       launchRpmAdd: 0,
       ...(dualClutch ? { efficiencyAdd: tierValue(0.004, 0.008, 0.012) } : { lockupScale: lockup }),
       description: dualClutch
-        ? 'Pacotes de embreagem de maior capacidade e calibração da transição entre os dois eixos.'
-        : 'Conversor com embreagem de travamento reforçada e recalibração das trocas.',
+        ? 'O carro passa a ser manual: você troca as marchas. Pacotes de embreagem de maior capacidade e calibração da transição entre os dois eixos.'
+        : 'O carro passa a ser manual: você troca as marchas. Conversor com embreagem de travamento reforçada e recalibração das trocas.',
       physics: `Capacidade de torque aumenta ${rate(strength - 1)}%. As fases de troca duram até ${rate(1 - shift * shift)}% menos.${dualClutch ? '' : ` O travamento do conversor suporta ${rate(lockup - 1)}% mais torque.`} O carro vira manual: as trocas passam a ser suas (E/Q).`,
     });
   }

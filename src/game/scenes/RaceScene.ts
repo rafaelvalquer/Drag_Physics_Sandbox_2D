@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { GRAPHICS, type GraphicsProfile } from '../../app/graphics';
 import { buildFxAtlas } from '../vehicles/fxArt';
+import { prefersReducedMotion } from './reducedMotion';
 import { FX_TEXTURE, VehicleParticleSystem } from '../vehicles/VehicleParticleSystem';
 import { VehicleTextureRegistry, VehicleVisualController, type VehicleVisualInfo } from '../vehicles/VehicleVisualController';
 import { CameraController } from './CameraController';
@@ -150,6 +151,7 @@ export class RaceScene extends Phaser.Scene {
       trackEndM: cfg.lengthM + TRACK_END_MARGIN_M,
       userZoom: this.bridge.zoom(),
       include: this.bridge.focusM(),
+      boost: prefersReducedMotion() ? 0 : (player?.nitrous ?? 0),
     });
     const zoom = cam.ppm / PPM_BASE;
     const toScreenX = (xm: number): number => W / 2 + (xm - cam.x) * cam.ppm;

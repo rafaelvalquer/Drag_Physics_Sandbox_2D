@@ -78,6 +78,7 @@ export class RacingHUD {
   private readonly nitroBar: HTMLElement;
   private readonly nitroTitle: HTMLElement;
   private readonly nitroState: HTMLElement;
+  private readonly nitroEdge: HTMLElement;
   private readonly heatAlert: HTMLElement;
   private readonly risk = new StrainDisplay();
   private riskLastMs: number | null = null;
@@ -151,6 +152,7 @@ export class RacingHUD {
       this.nitroState,
     );
     this.nitroRow.style.display = 'none';
+    this.nitroEdge = h('div', { class: 'nitro-edge', 'data-testid': 'hud-nitrous-edge', 'data-active': '0', 'aria-hidden': 'true' });
     this.strainRow.style.display = 'none';
     this.el = h(
       'div',
@@ -181,6 +183,8 @@ export class RacingHUD {
       ),
     );
     parent.append(this.el);
+    // the border glow covers the whole picture (the stage), not the small HUD box
+    (parent.parentElement ?? parent).append(this.nitroEdge);
   }
 
   update(sim: VehicleSimulation, units: 'kmh' | 'mph', message = '', info?: HudInfo): void {
@@ -248,8 +252,16 @@ export class RacingHUD {
   private updateNitrous(sim: VehicleSimulation): void {
     const n = sim.nitrous;
     this.nitroRow.style.display = n ? '' : 'none';
-    if (!n) return;
+    if (!n) {
+      if (this.nitroEdge.dataset.active !== '0') this.nitroEdge.dataset.active = '0';
+      return;
+    }
     const t = n.telemetry();
+    const injecting = t.status === 'STAGE_1_ACTIVE' || t.status === 'STAGE_2_ACTIVE';
+    const flow = injecting && n.setup.maxFlowKgS > 0 ? Math.min(1, t.flowKgPerS / n.setup.maxFlowKgS) : 0;
+    const act = injecting ? '1' : '0';
+    if (this.nitroEdge.dataset.active !== act) this.nitroEdge.dataset.active = act;
+    this.nitroEdge.style.setProperty('--nitro-flow', flow.toFixed(2));
     const pct = Math.round(t.remainingFraction * 100);
     const dual = n.setup.mode === 'dual';
     const split = dual ? ` · E1 ${Math.round(n.setup.stage1Share * 100)} % | E2 ${Math.round((1 - n.setup.stage1Share) * 100)} %` : ' · descarga única';
@@ -325,6 +337,7 @@ export class RacingHUD {
 
   dispose(): void {
     this.el.remove();
+    this.nitroEdge.remove();
   }
 }
 

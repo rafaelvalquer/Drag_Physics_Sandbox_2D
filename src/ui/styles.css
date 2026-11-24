@@ -1144,3 +1144,19 @@ details.fold[open] > summary {
 @media (prefers-reduced-motion: reduce) {
   .rhud .nitro-row-hud .fill, .rhud .nitro-row-hud .val { animation: none !important; }
 }
+
+/* N₂O injecting: the screen border lights up blue with the flow, the gauge pulses harder (text still says the state) */
+.nitro-edge {
+  position: absolute; inset: 0; pointer-events: none; opacity: 0; z-index: 4;
+  box-shadow: inset 0 0 110px 18px rgba(70, 150, 255, 0.55), inset 0 0 28px 4px rgba(150, 215, 255, 0.5);
+  transition: opacity 0.12s linear;
+}
+.nitro-edge[data-active='1'] { opacity: calc(0.35 + 0.65 * var(--nitro-flow, 1)); }
+.rhud .nitro-row-hud[data-status='STAGE_1_ACTIVE'], .rhud .nitro-row-hud[data-status='STAGE_2_ACTIVE'] {
+  box-shadow: 0 0 14px rgba(90, 190, 255, 0.65); border-radius: 6px;
+}
+.rhud .nitro-row-hud[data-status='STAGE_1_ACTIVE'] .val, .rhud .nitro-row-hud[data-status='STAGE_2_ACTIVE'] .val { color: #aee7ff; animation: nitro-ready 0.5s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .nitro-edge { transition: none; }
+  .rhud .nitro-row-hud .val { animation: none !important; }
+}

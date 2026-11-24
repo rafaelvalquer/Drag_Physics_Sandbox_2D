@@ -36,6 +36,8 @@ export interface CameraInput {
   userZoom: number;
   /** A point (m) to keep in frame together with the player while it is nearby, or null. */
   include: number | null;
+  /** N₂O flow of the player (0..1): the view opens a little and looks further ahead while it injects. */
+  boost?: number;
 }
 
 export interface CameraState {
@@ -62,6 +64,8 @@ const MAX_EASE_DT_S = 0.1;
 const TELEPORT_M = 30;
 /** An opponent closer than this (m) is kept in frame by opening the zoom a little. */
 const PAIR_RANGE_M = 16;
+/** Share of the view the N₂O opens (follow camera). */
+export const BOOST_SPAN = 0.12;
 const MIN_PPM = 6;
 const MAX_PPM = 150;
 /** Reference viewport: keep the same vertical world coverage while horizontal FOV adapts. */
@@ -118,10 +122,11 @@ export class CameraController {
       targetX = (lo + hi) / 2;
     } else if (p) {
       const k = smoothstep(0, FOLLOW_FAST_SPEED, Math.abs(p.speed));
-      span = (FOLLOW_SPAN_REST_M + (FOLLOW_SPAN_FAST_M - FOLLOW_SPAN_REST_M) * k) / zoomUser;
+      const boost = Math.min(1, Math.max(0, i.boost ?? 0));
+      span = ((FOLLOW_SPAN_REST_M + (FOLLOW_SPAN_FAST_M - FOLLOW_SPAN_REST_M) * k) * (1 + BOOST_SPAN * boost)) / zoomUser;
       const centre = p.x - p.wheelbaseM * 0.5;
       // look ahead in the direction of travel, never more than a fifth of the view
-      const leadTarget = Math.min(span * 0.2, Math.max(0, p.speed) * 0.11);
+      const leadTarget = Math.min(span * 0.2, Math.max(0, p.speed) * 0.11 * (1 + 0.4 * boost));
       // the look-ahead is a damped offset from the drawn car, never a position prediction
       this.lead = this.initialised ? this.lead + (leadTarget - this.lead) * (1 - Math.exp(-dt / LEAD_TAU_S)) : leadTarget;
       targetX = centre + this.lead;

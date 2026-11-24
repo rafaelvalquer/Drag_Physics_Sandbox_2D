@@ -4,7 +4,7 @@ import { Prng } from '../../core/prng';
  * Effects atlas: every particle and light sprite on one texture (one draw batch).
  * Original procedural artwork, deterministic.
  */
-export type FxFrame = 'smoke' | 'speck' | 'flame' | 'skid' | 'glow' | 'beam' | 'pool';
+export type FxFrame = 'smoke' | 'speck' | 'flame' | 'nflame' | 'skid' | 'glow' | 'beam' | 'pool';
 
 export interface FxAtlas {
   canvas: HTMLCanvasElement;
@@ -24,6 +24,7 @@ export function buildFxAtlas(): FxAtlas {
     beam: { x: 2, y: 134, w: 320, h: 128 },
     pool: { x: 2, y: 266, w: 320, h: 96 },
     flame: { x: 266, y: 2, w: 96, h: 48 },
+    nflame: { x: 266, y: 94, w: 128, h: 40 },
     skid: { x: 266, y: 54, w: 128, h: 20 },
     speck: { x: 266, y: 78, w: 12, h: 12 },
   };
@@ -109,6 +110,39 @@ export function buildFxAtlas(): FxAtlas {
     ctx.beginPath();
     ctx.ellipse(f.x + f.w * 0.52, f.y + f.h / 2, f.w * 0.48, f.h * 0.36, 0, 0, Math.PI * 2);
     ctx.fill();
+  }
+  // nflame (N₂O): long blue-white tongue from the pipe (right edge) to the left, with shock diamonds
+  {
+    const f = frames.nflame;
+    const cy = f.y + f.h / 2;
+    const g = ctx.createLinearGradient(f.x + f.w, 0, f.x, 0);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.2, 'rgba(190,230,255,0.95)');
+    g.addColorStop(0.55, 'rgba(70,150,255,0.6)');
+    g.addColorStop(1, 'rgba(30,80,255,0)');
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(f.x, f.y, f.w, f.h);
+    ctx.clip();
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(f.x + f.w, cy - f.h * 0.16);
+    ctx.quadraticCurveTo(f.x + f.w * 0.55, cy - f.h * 0.46, f.x + 2, cy);
+    ctx.quadraticCurveTo(f.x + f.w * 0.55, cy + f.h * 0.46, f.x + f.w, cy + f.h * 0.16);
+    ctx.closePath();
+    ctx.fill();
+    for (let i = 0; i < 4; i++) {
+      const x = f.x + f.w * (0.8 - i * 0.17);
+      const r = f.h * (0.2 - i * 0.03);
+      const d = ctx.createRadialGradient(x, cy, 0, x, cy, r * 2);
+      d.addColorStop(0, 'rgba(255,255,255,0.9)');
+      d.addColorStop(1, 'rgba(120,190,255,0)');
+      ctx.fillStyle = d;
+      ctx.beginPath();
+      ctx.ellipse(x, cy, r * 1.8, r, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
   }
   // skid: soft-edged rubber streak with uneven density
   {
