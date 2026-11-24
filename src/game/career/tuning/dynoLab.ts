@@ -128,19 +128,22 @@ export async function measureLab(
   let nitrous: LabNitrous | undefined;
   if (car.nitrous) {
     const nz = car.nitrous;
-    const curve = (flowKgS: number): LabPoint[] => {
-      const nd = new EngineDyno(e);
+    const curve = (): LabPoint[] => {
+      const nd = new EngineDyno(e, undefined, nz);
       if (!nd.start()) return [];
-      const f = Math.max(nz.fuelSupply, 0) / Math.max(nz.fuelNeed, 0.01);
-      nd.nitrous = { flowKgS, fuelFactor: Math.min(1, f) ** 1.5 };
       const out: LabPoint[] = [];
       for (const r of rpms.filter((_, i) => i % 2 === 0)) {
-        const p = nd.measure(r, 1, H, e.induction === 'turbo' ? 1.5 : 0.6, 0.15);
+        // Each spot measurement is a separate bench run at the selected RPM.
+        nd.nitrousHeld = false;
+        nd.measure(r, 1, H, e.induction === 'turbo' ? 1.5 : 0.6, 0.15);
+        nd.nitrous!.reset();
+        nd.nitrousHeld = true;
+        const p = nd.measure(r, 1, H, Math.max(0.15, nz.rampS), 0.15);
         out.push({ rpm: p.rpm, torqueNm: p.torqueNm, powerCv: p.powerCv });
       }
       return out;
     };
-    const injectedPoints = curve(nz.maxFlowKgS * nz.flow);
+    const injectedPoints = curve();
     nitrous = {
       mode, points: injectedPoints, peakCv: injectedPoints.reduce((peak, p) => Math.max(peak, p.powerCv), 0),
       observedExtraCv: acc.nitrousPeakPowerCv, usedKg: acc.nitrousUsedKg,

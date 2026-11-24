@@ -1,8 +1,8 @@
 import type { EngineConfig } from '../../data/schema';
 import { radSToRpm, rpmToRadS, wattsToCv } from '../../core/units';
 import { ConstraintSolver } from '../solver/ConstraintSolver';
-import { NITROUS_ENERGY_J_PER_KG } from '../../game/career/tuning/nitrousParts';
 import { EngineModel, type Ambient, type EngineInputs } from './EngineModel';
+import { NitrousController, type NitrousSetup } from './NitrousController';
 
 export interface DynoPoint {
   rpm: number;
@@ -24,18 +24,24 @@ export class EngineDyno {
   readonly solver = new ConstraintSolver();
   readonly inputs: EngineInputs = { pedal: 0, throttleOverride: null, sparkCut: 0, ignitionOn: true, starter: false };
   simTime = 0;
-  /** Steady N₂O flow on the bench (kg/s) and its fuel factor: torque = flow·E·factor/ω, only while the engine burns. 0 = off. */
-  nitrous = { flowKgS: 0, fuelFactor: 1 };
+  readonly nitrous: NitrousController | null;
+  nitrousHeld = false;
 
-  constructor(cfg: EngineConfig, ambient?: Ambient) {
+  constructor(cfg: EngineConfig, ambient?: Ambient, nitrous?: NitrousSetup) {
     this.engine = new EngineModel(cfg, ambient);
+    this.nitrous = nitrous ? new NitrousController(nitrous) : null;
   }
+
+  private readonly injectNitrous = (h: number, rpm: number, injectable: boolean): number => {
+    const n = this.nitrous!;
+    n.update(h, { rpm, injectable, broken: this.engine.runState === 'BROKEN' }, this.nitrousHeld);
+    n.drainEvents();
+    return n.additionalTorqueNm;
+  };
 
   step(h: number): void {
     const e = this.engine;
-    const n = this.nitrous;
-    e.nitrousTorqueNm = n.flowKgS > 0 && e.nitrousInjectable ? (n.flowKgS * NITROUS_ENERGY_J_PER_KG * n.fuelFactor) / Math.max(e.omega, 150) : 0;
-    const explicit = e.preStep(h, this.inputs);
+    const explicit = e.preStep(h, this.inputs, this.nitrous ? this.injectNitrous : undefined);
     e.crank.v += h * e.crank.invMass * explicit;
     this.solver.solve([e.frictionRow, e.starterRow, e.dynoRow], h);
     this.simTime += h;
@@ -45,6 +51,8 @@ export class EngineDyno {
 
   /** Cranks the engine until it runs (or gives up after `timeoutS`). */
   start(h = 1 / 120, timeoutS = 6): boolean {
+    this.nitrous?.reset();
+    this.nitrousHeld = false;
     this.inputs.ignitionOn = true;
     this.inputs.starter = true;
     const steps = Math.ceil(timeoutS / h);

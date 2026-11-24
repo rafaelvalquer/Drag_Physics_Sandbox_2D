@@ -4,6 +4,7 @@ import { findCampaignCar } from '../../../src/data/cars/campaign';
 import { TRACKS } from '../../../src/data/tracks/index';
 import { resolveBuild } from '../../../src/game/career/tuning/BuildResolver';
 import { measureLab } from '../../../src/game/career/tuning/dynoLab';
+import { EngineDyno } from '../../../src/physics/engine/EngineDyno';
 
 const track = TRACKS.find((t) => t.id === 'test-track')!;
 const gol = findCampaignCar('vw-gol-gts-1988')!;
@@ -15,6 +16,20 @@ const build = (kit: string, tune = {}) => {
 const opts = { rpmStep: 1000, topSpeedS: 40 };
 
 describe('Dyno Lab with N₂O', () => {
+  it('uses the same cylinder at the bench and refills it for a new test', () => {
+    const car = build('nitrous-wet');
+    const bench = new EngineDyno(car.engine, undefined, car.nitrous);
+    expect(bench.start()).toBe(true);
+    bench.nitrousHeld = true;
+    bench.measure(4600, 1);
+    expect(bench.nitrous!.telemetry().consumedKg).toBeGreaterThan(0);
+    bench.nitrousHeld = false;
+    bench.step(1 / 120);
+    expect(bench.nitrous!.telemetry().flowKgPerS).toBe(0);
+    expect(bench.start()).toBe(true);
+    expect(bench.nitrous!.remainingFraction).toBe(1);
+  });
+
   it('a car without a kit has no nitrous section', async () => {
     const m = await measureLab(gol, track, () => false, () => {}, opts);
     expect(m!.nitrous).toBeUndefined();
