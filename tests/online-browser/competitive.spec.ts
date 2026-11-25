@@ -88,6 +88,38 @@ async function drive(page: Page): Promise<void> {
   } finally { await driveKey(page, 'keyup', 'KeyW'); }
 }
 
+async function checkProgress(page: Page, won: boolean, pilot: string, rival: string): Promise<void> {
+  const screen = page.getByTestId('online-screen');
+  const credits = won ? '5.100 CR' : '4.800 CR';
+  const rp = won ? '1016' : '984';
+  const pp = won ? '5' : '3';
+  const outcome = won ? 'Vitória' : 'Derrota';
+  await expect(screen.getByRole('heading', { name: outcome, exact: true })).toBeVisible();
+  await expect(screen.getByText(credits, { exact: true })).toBeVisible();
+  await expect(screen.getByText(won ? '+600 CR · +16 RP · +5 PP' : '+300 CR · -16 RP · +3 PP', { exact: true })).toBeVisible();
+
+  await page.reload();
+  await page.getByRole('button', { name: 'Online', exact: true }).click();
+  await expect(screen.getByText(credits, { exact: true })).toBeVisible();
+  await expect(screen.getByText(new RegExp(`^${pp} PP · Árvore .* · 1 corridas`))).toBeVisible();
+
+  const nav = screen.getByRole('navigation', { name: 'Modo online' });
+  await nav.getByRole('button', { name: 'Ranking', exact: true }).click();
+  const position = won ? '1' : '2';
+  await expect(screen.getByText(`Sua posição global: ${position}`, { exact: true })).toBeVisible();
+  const rankingRow = screen.getByRole('row').filter({ has: page.getByRole('cell', { name: pilot, exact: true }) });
+  await expect(rankingRow).toHaveClass(/\bonline-focused\b/);
+  await expect(rankingRow.getByRole('cell').nth(0)).toHaveText(position);
+  await expect(rankingRow.getByRole('cell').nth(3)).toHaveText(rp);
+
+  await nav.getByRole('button', { name: 'Histórico', exact: true }).click();
+  const historyRow = screen.getByRole('row').filter({ has: page.getByRole('cell', { name: rival, exact: true }) });
+  await expect(historyRow.getByRole('cell').nth(2)).toHaveText(outcome);
+  await expect(historyRow.getByRole('cell').nth(3)).toHaveText(won ? '600' : '300');
+  await expect(historyRow.getByRole('cell').nth(4)).toHaveText(won ? '16' : '-16');
+  await expect(historyRow.getByRole('cell').nth(5)).toHaveText(pp);
+}
+
 test('duas sessões de navegador completam PKCE, garagem e corrida 1v1', async ({ browser, baseURL }) => {
   const options = { baseURL, viewport: { width: 1000, height: 680 } };
   const contexts = await Promise.all([browser.newContext(options), browser.newContext(options)]);
@@ -131,8 +163,11 @@ test('duas sessões de navegador completam PKCE, garagem e corrida 1v1', async (
     expect(await timings(left!)).toEqual(await timings(right!));
     expect(await timings(left!)).toHaveLength(2);
     expect((await timings(left!)).every((line) => /ET \d+\.\d{3} s/.test(line))).toBe(true);
-    await expect(left!.getByTestId('online-screen').getByText(/^(4\.800|5\.100) CR$/)).toBeVisible();
-    await expect(right!.getByTestId('online-screen').getByText(/^(4\.800|5\.100) CR$/)).toBeVisible();
     for (const [index, page] of [left!, right!].entries()) await page.screenshot({ path: test.info().outputPath(`resultado-${index + 1}.png`) });
+    const leftWon = await left!.getByTestId('online-screen').getByRole('heading', { name: 'Vitória', exact: true }).isVisible();
+    await Promise.all([
+      checkProgress(left!, leftWon, 'Piloto Azul', 'Piloto Ouro'),
+      checkProgress(right!, !leftWon, 'Piloto Ouro', 'Piloto Azul'),
+    ]);
   } finally { await Promise.allSettled(contexts.map((context) => context.close())); }
 });
