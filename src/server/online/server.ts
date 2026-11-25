@@ -56,10 +56,10 @@ function limiter(max: number, windowMs: number) {
 const page = z.strictObject({ offset: z.coerce.number().int().min(0).max(100_000).default(0) });
 const historyPage = page.extend({ carId: z.uuid().optional() });
 
-export async function startOnlineServer(environment: NodeJS.ProcessEnv) {
+export async function startOnlineServer(environment: NodeJS.ProcessEnv, { databasePoolSize = 12 } = {}) {
   const config = configSchema.parse(environment);
   const authenticate = createAuthenticator(config.SUPABASE_URL, config.SUPABASE_SECRET_KEY, config.SUPABASE_JWT_ISSUER);
-  const sql = postgres(config.DATABASE_URL, { max: 12, prepare: false, connect_timeout: 10 });
+  const sql = postgres(config.DATABASE_URL, { max: databasePoolSize, prepare: false, connect_timeout: 10 });
   const garage = new OnlineGarage(sql, { startRp: config.ONLINE_START_RP, startCredits: config.ONLINE_START_CREDITS });
   const matches = new OnlineMatches(garage);
   const active = new Map<string, string>();

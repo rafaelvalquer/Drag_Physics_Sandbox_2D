@@ -38,7 +38,7 @@ Requer Node.js 22.12 ou posterior. Use `npm ci` para instalar as versões regist
 | Dois navegadores, callback PKCE, login repetido e corrida com controles reais | `npm run test:e2e:online` |
 | Regressões de campanha e oficina no navegador | `npm run test:e2e` |
 
-Os testes de integração usam portas de loopback atribuídas pelo sistema. O PostgreSQL embarcado usa PGlite. Os testes de JWT e navegador usam tokens assinados por um provedor de teste local. O teste no navegador valida o desafio PKCE, usa o servidor competitivo e salva as duas telas de resultado no artefato `online-browser-results` do GitHub Actions.
+Os testes de integração usam portas de loopback atribuídas pelo sistema e PGlite. O teste de navegador também pode usar o PGlite local com uma conexão. No GitHub Actions, ele usa um serviço PostgreSQL descartável para exercitar as consultas simultâneas. Os testes de JWT e navegador usam tokens assinados por um provedor local. O teste no navegador valida o desafio PKCE, usa o servidor competitivo e salva as duas telas de resultado no artefato `online-browser-results`.
 
 Para medir concorrência local, configure `ONLINE_PROOF_PAIRS=8` e execute `npm test -- tests/integration/online/proof-race.test.ts`. A prova abre oito salas com dezesseis clientes WebSocket e valida que cada par recebe o mesmo resultado. O workflow de multiplayer executa essa carga junto aos testes de integração e de unidade. Os logs do servidor competitivo registram o custo médio da física, o tempo descartado, o maior intervalo de atualização e o menor RTT medido para cada piloto.
 

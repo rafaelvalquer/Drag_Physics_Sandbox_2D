@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { connect, createServer as createTcpServer } from 'node:net';
 import { PGlite } from '@electric-sql/pglite';
 import { PGLiteSocketServer } from '@electric-sql/pglite-socket';
+import postgres from 'postgres';
 import { startOnlineServer } from '../../src/server/online/server';
 
 const auth = 'http://127.0.0.1:54751';
@@ -13,14 +14,36 @@ const codes = new Map<string, { id: string; challenge: string }>();
 const keyId = randomUUID();
 const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
 
-const db = await PGlite.create();
-await db.exec(`create role anon; create role authenticated; create schema auth;
+const authSchema = `create role anon; create role authenticated; create schema auth;
   create table auth.users(id uuid primary key);
-  create function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;`);
-await db.exec(await readFile(new URL('../../supabase/migrations/20261124000100_online.sql', import.meta.url), 'utf8'));
-await db.query('insert into auth.users values ($1), ($2)', accounts);
-const database = new PGLiteSocketServer({ db, port: 0, maxConnections: 12 });
-await database.start();
+  create function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;`;
+const migration = await readFile(new URL('../../supabase/migrations/20261124000100_online.sql', import.meta.url), 'utf8');
+
+async function startFixtureDatabase() {
+  const databaseUrl = process.env.ONLINE_E2E_DATABASE_URL;
+  if (databaseUrl) {
+    const url = new URL(databaseUrl);
+    if (url.hostname !== '127.0.0.1' || url.pathname !== '/drag_online_test') throw new Error('Use o PostgreSQL local descartável drag_online_test.');
+    const sql = postgres(databaseUrl, { max: 1 });
+    try {
+      await sql.unsafe(authSchema).simple();
+      await sql.unsafe(migration).simple();
+      await sql`insert into auth.users values (${accounts[0]}), (${accounts[1]})`;
+    } finally { await sql.end(); }
+    return { url: databaseUrl, poolSize: 12, close: undefined };
+  }
+
+  const db = await PGlite.create();
+  await db.exec(authSchema);
+  await db.exec(migration);
+  await db.query('insert into auth.users values ($1), ($2)', accounts);
+  const socket = new PGLiteSocketServer({ db, port: 0, maxConnections: 1 });
+  await socket.start();
+  return { url: `postgresql://postgres@${socket.getServerConn()}/postgres`, poolSize: 1,
+    close: async () => { await socket.stop(); await db.close(); } };
+}
+
+const database = await startFixtureDatabase();
 
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url');
 function session(id: string) {
@@ -78,8 +101,8 @@ const provider = createServer(async (request, response) => {
 await new Promise<void>((resolve) => provider.listen(54751, '127.0.0.1', resolve));
 const server = await startOnlineServer({
   SUPABASE_URL: auth, SUPABASE_SECRET_KEY: 'test-secret-only-for-local-auth',
-  DATABASE_URL: `postgresql://postgres@${database.getServerConn()}/postgres`, PORT: '54752', ALLOWED_ORIGINS: ui,
-});
+  DATABASE_URL: database.url, PORT: '54752', ALLOWED_ORIGINS: ui,
+}, { databasePoolSize: database.poolSize });
 
 // Keep the browser's native WebSocket and simulate jitter on ordered TCP deliveries to it.
 const jitter = createTcpServer((client) => {
@@ -104,7 +127,6 @@ await new Promise<void>((resolve) => jitter.listen(54753, '127.0.0.1', resolve))
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => { void (async () => {
   jitter.close();
   await server.gracefullyShutdown(false);
-  await database.stop();
-  await db.close();
+  await database.close?.();
   provider.close();
 })(); });
