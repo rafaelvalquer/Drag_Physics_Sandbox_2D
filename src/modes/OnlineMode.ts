@@ -22,7 +22,7 @@ const cameras: CameraMode[] = ['follow', 'wide', 'start'];
 const markers = SPLITS.filter((split) => split.m <= RACE_DISTANCES.quarter.m).map((split) => ({ xM: split.m, label: split.label, major: split.trap }));
 const INPUT_INTERVAL_MS = 1_000 / ONLINE_INPUT_HZ;
 // Allow a shift before the next frame without flooding the room's message limit.
-const MIN_SHIFT_INTERVAL_MS = 28;
+const MIN_INPUT_INTERVAL_MS = 28;
 
 export class OnlineMode implements Mode {
   readonly id = 'online';
@@ -47,7 +47,8 @@ export class OnlineMode implements Mode {
   private countdown?: HTMLElement;
   private countdownLocalAt = 0;
   private reconnectNote?: HTMLElement;
-  private nextInputAt = 0;
+  private inputTimer?: number;
+  private pedalUpdatedAt = 0;
   private lastInputAt = -Infinity;
   private nextProbeAt = 0;
   private bestRttMs = Number.POSITIVE_INFINITY;
@@ -80,8 +81,7 @@ export class OnlineMode implements Mode {
     const captureShift = (direction: 1 | -1) => {
       if (!this.driving || !this.connected) return;
       this.shift = direction;
-      const now = performance.now();
-      if (now - this.lastInputAt >= MIN_SHIFT_INTERVAL_MS) this.sendInput(now, now + INPUT_INTERVAL_MS);
+      this.sendInput(performance.now());
     };
     this.cleanups.push(ctx.input.on('upshift', () => captureShift(1)), ctx.input.on('downshift', () => captureShift(-1)),
       ctx.input.on('camera', () => { this.cameraMode = cameras[(cameras.indexOf(this.cameraMode) + 1) % cameras.length]!; }));
@@ -107,17 +107,15 @@ export class OnlineMode implements Mode {
       this.nextProbeAt = now + 2_000;
       this.room.send('timeProbe', now);
     }
-    if (!this.driving) return;
-    this.ctx.input.updatePedal(dt);
-    if (now >= this.nextInputAt) this.sendInput(now, (now - this.nextInputAt > 100 ? now : this.nextInputAt) + INPUT_INTERVAL_MS);
-    this.renderer?.tick(dt);
+    if (this.driving) this.renderer?.tick(dt);
   }
 
-  private sendInput(now: number, nextInputAt: number): void {
+  private sendInput(now: number): void {
     const snapshot = this.renderer?.newest;
-    if (!snapshot || !this.room || !this.connected) return;
+    if (!snapshot || !this.room || !this.connected || now - this.lastInputAt < MIN_INPUT_INTERVAL_MS) return;
     this.lastInputAt = now;
-    this.nextInputAt = nextInputAt;
+    this.ctx.input.updatePedal((now - this.pedalUpdatedAt) / 1_000);
+    this.pedalUpdatedAt = now;
     this.room.send('input', { matchId: snapshot.matchId, observedTick: snapshot.tick, sequence: this.inputSequence++,
       throttle: this.ctx.input.pedal, shift: this.shift, nitrous: this.ctx.input.isDown('nitrous') });
     this.shift = undefined;
@@ -308,7 +306,6 @@ export class OnlineMode implements Mode {
       this.lobby = undefined;
       this.inputSequence = 0;
       this.shift = undefined;
-      this.nextInputAt = 0;
       this.lastInputAt = -Infinity;
       this.nextProbeAt = 0;
       this.bestRttMs = Number.POSITIVE_INFINITY;
@@ -349,6 +346,8 @@ export class OnlineMode implements Mode {
         this.renderer.receive(snapshot);
         if (!this.driving) {
           this.driving = true;
+          this.pedalUpdatedAt = performance.now();
+          this.inputTimer = window.setInterval(() => this.sendInput(performance.now()), INPUT_INTERVAL_MS);
           this.root.hidden = true;
           this.ctx.refreshTrackVisibility?.();
         }
@@ -401,6 +400,8 @@ export class OnlineMode implements Mode {
     this.room = undefined;
     this.connected = false;
     this.driving = false;
+    window.clearInterval(this.inputTimer);
+    this.inputTimer = undefined;
     this.renderer?.dispose();
     this.renderer = undefined;
     this.ctx.input.release('nitrous');

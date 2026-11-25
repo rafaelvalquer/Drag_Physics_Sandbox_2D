@@ -7,6 +7,11 @@ async function login(page: Page, account: number): Promise<void> {
   }));
   await page.goto('/');
   await page.getByRole('button', { name: 'Ativar som e começar' }).click();
+  // Two software-rendered scenes share one GitHub runner during this network test.
+  await page.getByTestId('settings').click();
+  await page.getByTestId('graphics-setting').selectOption('low');
+  await page.getByRole('combobox').filter({ has: page.getByRole('option', { name: 'baixa (menos CPU)', exact: true }) }).selectOption('low');
+  await page.getByRole('button', { name: 'Fechar', exact: true }).click();
   await page.getByRole('button', { name: 'Online', exact: true }).click();
   await page.getByRole('button', { name: 'Continuar com Google' }).click();
 }
@@ -84,7 +89,8 @@ async function drive(page: Page): Promise<void> {
 }
 
 test('duas sessões de navegador completam PKCE, garagem e corrida 1v1', async ({ browser, baseURL }) => {
-  const contexts = await Promise.all([browser.newContext({ baseURL }), browser.newContext({ baseURL })]);
+  const options = { baseURL, viewport: { width: 1000, height: 680 } };
+  const contexts = await Promise.all([browser.newContext(options), browser.newContext(options)]);
   try {
     const [left, right] = await Promise.all(contexts.map((context) => context.newPage()));
     await right!.routeWebSocket('ws://127.0.0.1:54752/**', (socket) => {

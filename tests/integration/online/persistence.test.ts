@@ -5,14 +5,14 @@ import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 import { PGLiteSocketServer } from '@electric-sql/pglite-socket';
 import postgres from 'postgres';
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { TRACKS } from '../../../src/data/tracks';
 import { AuthoritativeRace } from '../../../src/game/online/AuthoritativeRace';
-import { COMPETITIVE_ROOM, type OnlineLoadingState, type OnlineLobbyState, type OnlineRaceSnapshot } from '../../../src/game/online/contracts';
+import { COMPETITIVE_ROOM, type OnlineGearUpdate, type OnlineLoadingState, type OnlineLobbyState, type OnlineRaceSnapshot, type RaceInput } from '../../../src/game/online/contracts';
 import { ONLINE_STARTERS } from '../../../src/game/online/demoCatalog';
 import { PREPARATION_TREES } from '../../../src/game/online/preparation';
 import { OnlineGarage, savePreparationCatalog } from '../../../src/server/online/garage';
-import { OnlineMatches, type OnlineAward } from '../../../src/server/online/matches';
+import { OnlineMatches, type OnlineAward, type RaceBuild } from '../../../src/server/online/matches';
 import { startOnlineServer } from '../../../src/server/online/server';
 
 let db: PGlite;
@@ -148,6 +148,18 @@ it('valida tokens pelo JWKS e completa um lobby competitivo com reconexão', asy
     return `${data}.${sign('sha256', Buffer.from(data), { key: privateKey, dsaEncoding: 'ieee-p1363' }).toString('base64url')}`;
   };
   let server: Awaited<ReturnType<typeof startOnlineServer>> | undefined;
+  const commands: { matchId: string; tick: number; lane: 0 | 1; input?: RaceInput; delayTicks?: number }[] = [];
+  const submit = AuthoritativeRace.prototype.submit;
+  const release = AuthoritativeRace.prototype.release;
+  const submissions = vi.spyOn(AuthoritativeRace.prototype, 'submit').mockImplementation(function (this: AuthoritativeRace, lane, input, delayTicks) {
+    const accepted = submit.call(this, lane, input, delayTicks);
+    if (accepted) commands.push({ matchId: this.matchId, tick: this.tick, lane, input, delayTicks });
+    return accepted;
+  });
+  const releases = vi.spyOn(AuthoritativeRace.prototype, 'release').mockImplementation(function (this: AuthoritativeRace, lane) {
+    release.call(this, lane);
+    commands.push({ matchId: this.matchId, tick: this.tick, lane });
+  });
   try {
     server = await startOnlineServer({
       SUPABASE_URL: providerUrl, SUPABASE_SECRET_KEY: 'test-secret-only-for-jwks', PORT: '0',
@@ -186,6 +198,7 @@ it('valida tokens pelo JWKS e completa um lobby competitivo com reconexão', asy
     const lanes = new Set<number>();
     let reconnected = false;
     let foreignCarId: string | undefined;
+    const engagedGears = [new Set<number>(), new Set<number>()];
     const setup = await Promise.all([garage.get(users[0]), garage.get(users[1])]);
     const results = [left, right].map((room, index) => new Promise<{ snapshot: OnlineRaceSnapshot; award: OnlineAward }>((resolve, reject) => {
       room.reconnection.minUptime = 0;
@@ -208,6 +221,7 @@ it('valida tokens pelo JWKS e completa um lobby competitivo com reconexão', asy
         room.send('loaded', state.matchId);
       });
       room.onReconnect(() => { reconnected = true; room.send('sync'); });
+      room.onMessage('gear', (update: OnlineGearUpdate) => { engagedGears[index]!.add(update.gear); });
       room.onMessage('snapshot', (snapshot: OnlineRaceSnapshot) => {
         if (index === 1 && snapshot.tick >= 120 && !dropped) {
           dropped = true;
@@ -227,11 +241,32 @@ it('valida tokens pelo JWKS e completa um lobby competitivo com reconexão', asy
     expect(foreignCarId).toBeDefined();
     expect(lanes).toEqual(new Set([0, 1]));
     expect(reconnected).toBe(true);
+    expect(engagedGears.every((gears) => gears.has(1))).toBe(true);
     expect(a!.snapshot).toEqual(b!.snapshot);
     expect(a!.snapshot.lanes.every((lane) => lane.result.finished)).toBe(true);
     expect([a!.award.cr, b!.award.cr].sort()).toEqual([300, 600]);
     expect((await request('/v1/history', tokens[0])).status).toBe(200);
+
+    const official = a!.snapshot;
+    const [match] = await sql<{ seed: number }[]>`select seed from online_matches where id = ${official.matchId}`;
+    const [laneA, laneB] = await sql<{ build_snapshot: RaceBuild }[]>`
+      select build_snapshot from online_match_players where match_id = ${official.matchId} order by lane`;
+    const replay = new AuthoritativeRace(official.matchId, [laneA!.build_snapshot, laneB!.build_snapshot], TRACKS[0]!, match!.seed);
+    const inputs = commands.filter((command) => command.matchId === official.matchId);
+    expect(inputs.some((command) => !command.input)).toBe(true);
+    expect(inputs.some((command) => command.input?.shift !== undefined)).toBe(true);
+    for (const command of inputs) {
+      while (replay.tick < command.tick && replay.race.phase !== 'finished') replay.step();
+      expect(replay.tick).toBe(command.tick);
+      if (command.input) expect(submit.call(replay, command.lane, command.input, command.delayTicks)).toBe(true);
+      else release.call(replay, command.lane);
+    }
+    while (replay.tick < official.tick && replay.race.phase !== 'finished') replay.step();
+    // The wire codec normalizes negative zero in audio channels.
+    expect(JSON.parse(JSON.stringify(replay.snapshot()))).toEqual(official);
   } finally {
+    submissions.mockRestore();
+    releases.mockRestore();
     await server?.gracefullyShutdown(false);
     await new Promise<void>((resolve) => provider.close(() => resolve()));
   }
