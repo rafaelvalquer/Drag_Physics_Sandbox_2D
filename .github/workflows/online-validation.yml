@@ -7,6 +7,8 @@ on:
       - 'src/**'
       - 'supabase/**'
       - 'tests/online-browser/**'
+      - 'tests/unit/online/**'
+      - 'tests/integration/online/**'
       - 'package*.json'
       - 'playwright.online.config.ts'
       - 'Dockerfile'
@@ -17,6 +19,21 @@ permissions:
   contents: read
 
 jobs:
+  online-server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test -- tests/unit/online tests/integration/online
+        env:
+          ONLINE_PROOF_PAIRS: '8'
+
   online-browser:
     runs-on: ubuntu-latest
     timeout-minutes: 12

@@ -40,8 +40,7 @@ export class OnlineRaceRenderer {
   }
 
   receiveGear(update: OnlineGearUpdate): void {
-    if (update.matchId !== this.loading.matchId || update.tick < (this.current?.tick ?? 0) ||
-        update.tick <= (this.latestGear?.tick ?? -1)) return;
+    if (update.matchId !== this.loading.matchId || update.tick <= (this.latestGear?.tick ?? -1)) return;
     this.latestGear = update;
   }
 

@@ -449,6 +449,7 @@ export class OnlineMode implements Mode {
     this.show(outcomes[award.outcome], h('section', { class: 'online-card' },
       h('p', {}, `+${award.cr} CR · ${award.rp >= 0 ? '+' : ''}${award.rp} RP · +${award.pp} PP`),
       h('p', {}, `${setup.cars[setup.lane].name} · ${award.ppBefore} → ${award.ppAfter} PP`),
+      h('p', { class: 'online-match-reference', 'data-testid': 'online-match-reference' }, 'ID da partida ', h('code', {}, snapshot.matchId)),
       award.reason && h('p', {}, award.reason),
       next && h('p', {}, `Nova preparação disponível · ${next.name} · ${next.costPP} PP`),
       h('div', { class: 'online-grid' }, snapshot.lanes.map((lane, index) => h('article', { class: 'online-card' },

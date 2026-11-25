@@ -57,9 +57,15 @@ async function upshift(page: Page): Promise<void> {
 }
 
 async function drive(page: Page): Promise<void> {
-  await expect.poll(async () => (await currentSnapshot(page))?.newest?.tick ?? 0, { timeout: 20_000 }).toBeGreaterThan(0);
+  await expect.poll(async () => {
+    const renderer = await currentSnapshot(page);
+    return renderer?.newest?.lanes[renderer.lane].runState;
+  }, { timeout: 20_000 }).toBe('RUNNING');
   await upshift(page);
-  await expect.poll(async () => (await currentSnapshot(page))?.gear?.gear, { timeout: 4_000 }).toBe(1);
+  await expect.poll(async () => {
+    const renderer = await currentSnapshot(page);
+    return { lane: renderer?.lane, confirmed: renderer?.gear?.gear, snapshot: renderer?.newest?.lanes[renderer.lane].gear };
+  }, { timeout: 4_000 }).toMatchObject({ confirmed: 1, snapshot: 1 });
   await expect.poll(async () => {
     const renderer = await currentSnapshot(page);
     return renderer?.newest?.lights.green[renderer.lane] ?? false;
@@ -83,21 +89,18 @@ test('duas sessões de navegador completam PKCE, garagem e corrida 1v1', async (
     const [left, right] = await Promise.all(contexts.map((context) => context.newPage()));
     await right!.routeWebSocket('ws://127.0.0.1:54752/**', (socket) => {
       const upstream = socket.connectToServer();
-      let nextDelivery = 0;
       let count = 0;
-      const timers = new Set<ReturnType<typeof setTimeout>>();
+      let delivery = Promise.resolve();
+      let closed = false;
       upstream.onMessage((message) => {
-        const now = performance.now();
-        const delay = ++count % 12 === 0 ? 140 : 40;
-        nextDelivery = Math.max(nextDelivery + 1, now + delay);
-        const timer = setTimeout(() => {
-          timers.delete(timer);
-          socket.send(message);
-        }, nextDelivery - now);
-        timers.add(timer);
+        const ready = new Promise<void>((resolve) => setTimeout(resolve, ++count % 12 === 0 ? 140 : 40));
+        delivery = delivery.then(async () => {
+          await ready;
+          if (!closed) socket.send(message);
+        });
       });
       socket.onClose(() => {
-        for (const timer of timers) clearTimeout(timer);
+        closed = true;
         upstream.close();
       });
     });
@@ -115,6 +118,9 @@ test('duas sessões de navegador completam PKCE, garagem e corrida 1v1', async (
     await Promise.all([left!, right!].map((page) => page.getByRole('button', { name: 'Confirmar veículo' }).click()));
     await Promise.all([drive(left!), drive(right!)]);
     for (const page of [left!, right!]) await expect(page.getByRole('button', { name: 'Buscar nova partida' })).toBeVisible({ timeout: 45_000 });
+    const matchReference = (page: Page) => page.getByTestId('online-match-reference').locator('code');
+    await expect(matchReference(left!)).toHaveText(/^[0-9a-f-]{36}$/);
+    await expect(matchReference(right!)).toHaveText(await matchReference(left!).innerText());
     const timings = (page: Page) => page.getByTestId('online-screen').getByText(/Reação .* ET .* Total/).allTextContents();
     expect(await timings(left!)).toEqual(await timings(right!));
     expect(await timings(left!)).toHaveLength(2);
