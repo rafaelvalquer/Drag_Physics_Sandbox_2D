@@ -113,6 +113,21 @@ async function checkProgress(page: Page, won: boolean, pilot: string, rival: str
   await expect(screen.getByText(credits, { exact: true })).toBeVisible();
   await expect(screen.getByText(new RegExp(`^${pp} PP · Árvore .* · 1 corridas`))).toBeVisible();
 
+  const nav = screen.getByRole('navigation', { name: 'Modo online' });
+  await screen.getByRole('button', { name: 'Dinamômetro', exact: true }).click();
+  await expect(screen.getByRole('spinbutton', { name: 'Pressão dos pneus', exact: true })).toBeDisabled();
+  await expect(screen.getByText('Exige pneus de competição ou kit de pressão.', { exact: true })).toBeVisible();
+  await screen.getByRole('button', { name: 'Medir e comparar', exact: true }).click();
+  await expect(screen.getByText('Medição concluída.', { exact: true })).toBeVisible();
+  const measured = screen.getByRole('table', { name: 'Comparação dos picos' });
+  for (const label of ['Potência (cv)', 'Torque (N·m)']) {
+    const row = measured.getByRole('row').filter({ has: page.getByRole('rowheader', { name: label, exact: true }) });
+    const [saved, current] = await row.getByRole('cell').allTextContents();
+    expect(Number(saved)).toBeGreaterThan(0);
+    expect(current).toBe(saved);
+  }
+
+  await nav.getByRole('button', { name: 'Garagem', exact: true }).click();
   await screen.getByRole('button', { name: 'Oficina', exact: true }).click();
   await expect(screen.getByRole('heading', { name: 'Componentes de fábrica', exact: true })).toBeVisible();
   await expect(screen.getByText('Original', { exact: true })).toBeVisible();
@@ -122,7 +137,6 @@ async function checkProgress(page: Page, won: boolean, pilot: string, rival: str
   await expect(screen.getByRole('heading', { name: 'Preparação', exact: true })).toBeVisible();
   await expect(screen.locator('.online-focused')).toHaveCount(1);
 
-  const nav = screen.getByRole('navigation', { name: 'Modo online' });
   await nav.getByRole('button', { name: 'Ranking', exact: true }).click();
   const position = won ? '1' : '2';
   await expect(screen.getByText(`Sua posição global: ${position}`, { exact: true })).toBeVisible();

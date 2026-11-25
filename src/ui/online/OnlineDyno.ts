@@ -1,7 +1,7 @@
 import { findCampaignCar } from '../../data/cars/campaign';
 import { resolveBuild, type BuildTune } from '../../game/career/tuning/BuildResolver';
 import { nitrousKitOf, nitrousLimits, nitrousTuneOf } from '../../game/career/tuning/nitrousOverlay';
-import { TUNE_LABEL, tuningCapabilities, type RangeControl } from '../../game/career/tuning/TuningCapabilities';
+import { TUNE_LABEL, tuningCapabilities, validateTune, type RangeControl } from '../../game/career/tuning/TuningCapabilities';
 import type { Garage } from '../../game/online/OnlineClient';
 import { EngineDyno, type DynoPoint } from '../../physics/engine/EngineDyno';
 import { drawLineChart } from '../charts';
@@ -10,11 +10,13 @@ import { DynoBayView } from '../dyno/DynoBayView';
 
 export function onlineDyno(car: Garage['cars'][number], save: (tune: BuildTune) => Promise<void>) {
   const factory = findCampaignCar(car.base_car_id)!;
-  const caps = tuningCapabilities(factory, car.parts, car.build_version, { tunersUnlocked: true, exactBoostMax: true });
+  const tuneContext = { tunersUnlocked: true, exactBoostMax: true };
+  const caps = tuningCapabilities(factory, car.parts, car.build_version, tuneContext);
   const tune = { ...car.tune };
   const kit = nitrousKitOf(car.parts);
   const status = h('p', { role: 'status' });
-  const chart = h('canvas', { class: 'online-dyno-chart', 'aria-label': 'Curvas de potência e torque' });
+  const comparison = h('table', { class: 'online-dyno-comparison', 'aria-label': 'Comparação dos picos', hidden: true });
+  const chart = h('canvas', { class: 'online-dyno-chart', 'aria-label': 'Curvas de potência e torque', hidden: true });
   const bay = new DynoBayView();
   const painted = car.paint ? { ...car.config, visual: { ...car.config.visual, color: car.paint } } : car.config;
   void bay.setCar(painted).catch(() => { bay.canvas.hidden = true; });
@@ -28,6 +30,13 @@ export function onlineDyno(car: Garage['cars'][number], save: (tune: BuildTune) 
     visualRpm = Math.max(0, visualRpm - dt * 4_000);
     frame = requestAnimationFrame(updateBay);
   }
+  const fieldLabel = (field: keyof BuildTune, input: HTMLElement, reason: string | null): HTMLElement => {
+    const id = `online-dyno-${field}`;
+    input.id = id;
+    if (reason) input.setAttribute('aria-describedby', `${id}-reason`);
+    return h('div', {}, h('label', { for: id }, TUNE_LABEL[field], input),
+      reason && h('small', { id: `${id}-reason` }, reason));
+  };
   const numerical = (field: keyof BuildTune, control: RangeControl): HTMLElement => {
     const input = h('input', { type: 'number', min: control.min, max: control.max, step: control.step, disabled: !control.enabled,
       value: typeof tune[field] === 'number' ? tune[field] : control.default, onchange: (event) => {
@@ -35,12 +44,12 @@ export function onlineDyno(car: Garage['cars'][number], save: (tune: BuildTune) 
         if (Number.isFinite(value)) Object.assign(tune, { [field]: value });
         else delete tune[field];
       } });
-    return h('label', { title: control.reason }, TUNE_LABEL[field], input);
+    return fieldLabel(field, input, control.reason);
   };
   const preset = <T extends 'throttleResponse' | 'finalDrive'>(field: T, control: typeof caps.throttle | typeof caps.finalDrive): HTMLElement =>
-    h('label', { title: control.reason }, TUNE_LABEL[field], h('select', { disabled: !control.enabled,
+    fieldLabel(field, h('select', { disabled: !control.enabled,
       onchange: (event) => Object.assign(tune, { [field]: (event.target as HTMLSelectElement).value }),
-    }, control.options.map((option) => h('option', { value: option.value, selected: (tune[field] ?? control.default) === option.value }, option.label))));
+    }, control.options.map((option) => h('option', { value: option.value, selected: (tune[field] ?? control.default) === option.value }, option.label))), control.reason);
   let before: DynoPoint[] | undefined;
   const measure = (engine: typeof car.config.engine) => {
     const bench = new EngineDyno(engine);
@@ -49,23 +58,32 @@ export function onlineDyno(car: Garage['cars'][number], save: (tune: BuildTune) 
   };
   const run = h('button', { onclick: () => {
     run.disabled = true;
+    comparison.hidden = true;
+    chart.hidden = true;
     status.textContent = 'Medindo no dinamômetro…';
     setTimeout(() => {
       try {
+        const errors = validateTune(factory, car.parts, car.build_version, tune, tuneContext);
+        if (errors.length) throw new Error(errors.join('. '));
         const build = resolveBuild(factory, car.parts, tune, car.build_version);
         if (!build.ok) throw new Error(build.errors.join('. '));
-        before ??= measure(car.config.engine);
+        const saved = before ??= measure(car.config.engine);
         const after = measure(build.car.engine);
         visualRpm = after.at(-1)?.rpm ?? 0;
-        const peakPower = Math.max(...after.map((point) => point.powerCv));
-        const peakTorque = Math.max(...after.map((point) => point.torqueNm));
+        const peakRow = (label: string, field: 'powerCv' | 'torqueNm') => h('tr', {}, h('th', { scope: 'row' }, label),
+          [saved, after].map((points) => h('td', {}, Math.max(...points.map((point) => point[field])).toFixed(1))));
+        comparison.replaceChildren(h('thead', {}, h('tr', {},
+          ['Medida', 'Acerto salvo', 'Acerto atual'].map((label) => h('th', { scope: 'col' }, label)))),
+        h('tbody', {}, peakRow('Potência (cv)', 'powerCv'), peakRow('Torque (N·m)', 'torqueNm')));
+        comparison.hidden = false;
+        chart.hidden = false;
         drawLineChart(chart, [
-          { label: 'Potência salva', color: '#ffb24a', dashed: true, x: before.map((p) => p.rpm), y: before.map((p) => p.powerCv) },
-          { label: 'Torque salvo', color: '#68d5ff', dashed: true, right: true, x: before.map((p) => p.rpm), y: before.map((p) => p.torqueNm) },
+          { label: 'Potência salva', color: '#ffb24a', dashed: true, x: saved.map((p) => p.rpm), y: saved.map((p) => p.powerCv) },
+          { label: 'Torque salvo', color: '#68d5ff', dashed: true, right: true, x: saved.map((p) => p.rpm), y: saved.map((p) => p.torqueNm) },
           { label: 'Potência medida', color: '#ffb24a', x: after.map((p) => p.rpm), y: after.map((p) => p.powerCv) },
           { label: 'Torque medido', color: '#68d5ff', right: true, x: after.map((p) => p.rpm), y: after.map((p) => p.torqueNm) },
         ], { xLabel: 'rpm', yLabel: 'cv', yRightLabel: 'N·m' });
-        status.textContent = `${peakPower.toFixed(1)} cv · ${peakTorque.toFixed(1)} N·m`;
+        status.textContent = 'Medição concluída.';
       } catch (error) {
         status.textContent = error instanceof Error ? error.message : 'Medição indisponível.';
       } finally { run.disabled = false; }
@@ -81,12 +99,12 @@ export function onlineDyno(car: Garage['cars'][number], save: (tune: BuildTune) 
   })() : [];
   const element = h('section', { class: 'online-card' }, h('h2', {}, car.config.name), bay.canvas,
     h('form', { onsubmit: (event) => { event.preventDefault(); void save(tune); } },
-      h('div', { class: 'online-filters' }, [
+      h('div', { class: 'online-filters online-dyno-controls' }, [
         numerical('boostBar', caps.boost), numerical('revLimitRpm', caps.revLimit), numerical('launchRpm', caps.launch),
         numerical('shiftRpm', caps.shift), numerical('tirePressureKpa', caps.tirePressure),
         preset('throttleResponse', caps.throttle), preset('finalDrive', caps.finalDrive), ...nitrous,
       ]),
       h('div', { class: 'row' }, h('button', { type: 'submit', class: 'primary' }, 'Salvar acerto'))),
-    run, status, chart);
+    run, status, comparison, chart);
   return { element, dispose: () => { cancelAnimationFrame(frame); bay.dispose(); } };
 }
