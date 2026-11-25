@@ -11,6 +11,8 @@ import { AuthoritativeRace } from '../../../src/game/online/AuthoritativeRace';
 import { COMPETITIVE_ROOM, type OnlineGearUpdate, type OnlineLoadingState, type OnlineLobbyState, type OnlineRaceSnapshot, type RaceInput } from '../../../src/game/online/contracts';
 import { ONLINE_STARTERS } from '../../../src/game/online/demoCatalog';
 import { PREPARATION_TREES } from '../../../src/game/online/preparation';
+import { createAuthenticator } from '../../../src/server/online/auth';
+import { competitiveRaceRoom } from '../../../src/server/online/CompetitiveRaceRoom';
 import { OnlineGarage, savePreparationCatalog } from '../../../src/server/online/garage';
 import { OnlineMatches, type OnlineAward, type RaceBuild } from '../../../src/server/online/matches';
 import { startOnlineServer } from '../../../src/server/online/server';
@@ -264,6 +266,47 @@ it('valida tokens pelo JWKS e completa um lobby competitivo com reconexão', asy
     while (replay.tick < official.tick && replay.race.phase !== 'finished') replay.step();
     // The wire codec normalizes negative zero in audio channels.
     expect(JSON.parse(JSON.stringify(replay.snapshot()))).toEqual(official);
+
+    // Exercise the same room with shorter deadlines so the test does not wait through a full second lobby.
+    const deadlineRoom = 'race_deadlines';
+    const active = new Map<string, string>();
+    server.define(deadlineRoom, competitiveRaceRoom({
+      authenticate: createAuthenticator(providerUrl, 'test-secret-only-for-jwks'),
+      garage, matches, active, lobbySeconds: 2, loadingSeconds: 2, canJoin: () => true,
+    }));
+    const alternate = await apply(users[0], { kind: 'buy', baseCarId: ONLINE_STARTERS[2] });
+    const garagesBefore = await Promise.all(users.slice(0, 2).map((id) => garage.get(id)));
+    const waitingRooms = [await networks[0]!.joinOrCreate(deadlineRoom), await networks[1]!.joinOrCreate(deadlineRoom)];
+    expect(waitingRooms[0]!.roomId).toBe(waitingRooms[1]!.roomId);
+    const cancellations = await Promise.all(waitingRooms.map((room, index) => new Promise<{ loaded: OnlineLoadingState; reason: string }>((resolve, reject) => {
+      let loaded: OnlineLoadingState | undefined;
+      let selected = false;
+      room.onMessage('lobby', (state: OnlineLobbyState) => {
+        if (index === 0 && state.phase === 'lobby' && !selected) {
+          selected = true;
+          room.send('select', alternate.carId);
+        }
+      });
+      room.onMessage('loading', (payload: OnlineLoadingState) => {
+        loaded = payload;
+        if (index === 0) room.send('loaded', payload.matchId);
+      });
+      room.onMessage('snapshot', () => reject(new Error('A corrida largou sem os dois pilotos.')));
+      room.onMessage('cancelled', ({ reason }: { reason: string }) => {
+        if (loaded) resolve({ loaded, reason });
+        else reject(new Error('O lobby foi cancelado sem selecionar os carros.'));
+      });
+      room.onLeave(() => reject(new Error('A sala fechou sem registrar o cancelamento.')));
+      room.send('sync');
+    })));
+    const interrupted = cancellations[0]!.loaded.matchId;
+    expect(cancellations.map(({ loaded }) => loaded.matchId)).toEqual([interrupted, interrupted]);
+    expect(cancellations.map(({ loaded }) => loaded.ownCarId)).toEqual([alternate.carId, garagesBefore[1]?.profile.active_car_id]);
+    expect(cancellations.map(({ reason }) => reason)).toEqual(['Tempo limite de carregamento.', 'Tempo limite de carregamento.']);
+    const [cancelled] = await sql`select status, winner_user_id from online_matches where id = ${interrupted}`;
+    expect(cancelled).toMatchObject({ status: 'cancelled', winner_user_id: null });
+    expect(await Promise.all(users.slice(0, 2).map((id) => garage.get(id)))).toEqual(garagesBefore);
+    expect(active.size).toBe(0);
   } finally {
     submissions.mockRestore();
     releases.mockRestore();
