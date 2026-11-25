@@ -66,17 +66,25 @@ function driveKey(page: Page, type: 'keydown' | 'keyup', code: 'KeyW' | 'KeyE'):
   return page.evaluate(({ type, code }) => { window.dispatchEvent(new KeyboardEvent(type, { code })); }, { type, code });
 }
 
-async function upshift(page: Page): Promise<void> {
-  await driveKey(page, 'keydown', 'KeyE');
-  await driveKey(page, 'keyup', 'KeyE');
-}
-
-async function drive(page: Page): Promise<void> {
+async function drive(page: Page, touch = false): Promise<void> {
+  const controls = page.getByTestId('touch-controls');
+  const accelerator = page.getByTestId('touch-throttle');
+  const throttle = (pressed: boolean) => touch
+    ? accelerator.dispatchEvent(pressed ? 'pointerdown' : 'pointerup', { pointerType: 'touch', pointerId: 101 })
+    : driveKey(page, pressed ? 'keydown' : 'keyup', 'KeyW');
+  const upshift = async () => {
+    if (touch) await page.getByTestId('touch-upshift').tap();
+    else {
+      await driveKey(page, 'keydown', 'KeyE');
+      await driveKey(page, 'keyup', 'KeyE');
+    }
+  };
+  if (touch) await expect(controls).toBeVisible();
   await expect.poll(async () => {
     const renderer = await currentSnapshot(page);
     return renderer?.newest?.lanes[renderer.lane].runState;
   }, { timeout: 20_000 }).toBe('RUNNING');
-  await upshift(page);
+  await upshift();
   await expect.poll(async () => {
     const renderer = await currentSnapshot(page);
     return { lane: renderer?.lane, confirmed: renderer?.gear?.gear, snapshot: renderer?.newest?.lanes[renderer.lane].gear };
@@ -85,7 +93,8 @@ async function drive(page: Page): Promise<void> {
     const renderer = await currentSnapshot(page);
     return renderer?.newest?.lights.green[renderer.lane] ?? false;
   }, { timeout: 20_000 }).toBe(true);
-  await driveKey(page, 'keydown', 'KeyW');
+  await throttle(true);
+  if (touch) await expect(accelerator).toHaveClass(/\bheld\b/);
   try {
     await checkClock(page);
     for (;;) {
@@ -93,9 +102,12 @@ async function drive(page: Page): Promise<void> {
       const lane = renderer && renderer.newest?.lanes[renderer.lane];
       if (!lane || lane.result.finished || lane.result.dnf) return;
       await page.waitForTimeout(130);
-      if (lane.rpm >= 5_750 && !lane.shifting) await upshift(page);
+      if (lane.rpm >= 5_750 && !lane.shifting) await upshift();
     }
-  } finally { await driveKey(page, 'keyup', 'KeyW'); }
+  } finally {
+    // Keep the touch press held to verify that leaving the race clears it.
+    if (!touch) await throttle(false);
+  }
 }
 
 async function checkProgress(page: Page, won: boolean, pilot: string, rival: string): Promise<void> {
@@ -154,8 +166,10 @@ async function checkProgress(page: Page, won: boolean, pilot: string, rival: str
 }
 
 test('duas sessões de navegador completam PKCE, garagem e corrida 1v1', async ({ browser, baseURL }) => {
-  const options = { baseURL, viewport: { width: 1000, height: 680 } };
-  const contexts = await Promise.all([browser.newContext(options), browser.newContext(options)]);
+  const contexts = await Promise.all([
+    browser.newContext({ baseURL, viewport: { width: 1000, height: 680 } }),
+    browser.newContext({ baseURL, viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true }),
+  ]);
   try {
     const [left, right] = await Promise.all(contexts.map((context) => context.newPage()));
     await Promise.all([login(left!, 0), login(right!, 1)]);
@@ -170,8 +184,10 @@ test('duas sessões de navegador completam PKCE, garagem e corrida 1v1', async (
       await page.getByRole('button', { name: 'Buscar partida', exact: true }).click();
     }
     await Promise.all([left!, right!].map((page) => page.getByRole('button', { name: 'Confirmar veículo' }).click()));
-    await Promise.all([drive(left!), drive(right!)]);
+    await Promise.all([drive(left!), drive(right!, true)]);
     for (const page of [left!, right!]) await expect(page.getByRole('button', { name: 'Buscar nova partida' })).toBeVisible({ timeout: 45_000 });
+    await expect(right!.getByTestId('touch-controls')).toBeHidden();
+    await expect(right!.getByTestId('touch-throttle')).not.toHaveClass(/\bheld\b/);
     const matchReference = (page: Page) => page.getByTestId('online-match-reference').locator('code');
     await expect(matchReference(left!)).toHaveText(/^[0-9a-f-]{36}$/);
     await expect(matchReference(right!)).toHaveText(await matchReference(left!).innerText());

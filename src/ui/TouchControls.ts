@@ -8,6 +8,7 @@ import { h } from './dom';
  */
 export class TouchControls {
   readonly el: HTMLElement;
+  private readonly releaseButtons: (() => void)[] = [];
 
   constructor(parent: HTMLElement, input: InputManager) {
     const button = (action: DriveAction, label: string, title: string, cls = ''): HTMLButtonElement => {
@@ -17,6 +18,7 @@ export class TouchControls {
         b.classList.remove('held');
         input.release(action);
       };
+      this.releaseButtons.push(up);
       b.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         try {
@@ -43,6 +45,7 @@ export class TouchControls {
   }
 
   setVisible(visible: boolean): void {
+    if (!visible) this.releaseButtons.forEach((release) => release());
     this.el.classList.toggle('hidden', !visible);
     this.el.parentElement?.classList.toggle('touch-on', visible);
   }
