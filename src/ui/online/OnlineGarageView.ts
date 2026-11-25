@@ -12,6 +12,7 @@ import { PREPARATION_TREES } from '../../game/online/preparation';
 import { h } from '../dom';
 import { specRows } from '../garage/GarageDialog';
 import { GarageVehiclePreview } from '../garage/GarageVehiclePreview';
+import { workshopPartHeading } from '../workshop/WorkshopPartHeading';
 
 export type OnlineCar = Garage['cars'][number];
 type Action = GarageRequest['operation'];
@@ -96,8 +97,12 @@ export function workshop(garage: Garage, car: OnlineCar, mutate: Operate, openNo
   const tree = PREPARATION_TREES.get(car.base_car_id)!;
   const base = findCampaignCar(car.base_car_id)!;
   const unlocked = new Set(car.unlocks);
+  const nodeNames = new Map(tree.nodes.map((node) => [node.id, node.name]));
   const nodes = new Map(tree.nodes.flatMap((node) => node.unlocksPartIds.map((id) => [id, node] as const)));
   const installed = new Set(car.parts);
+  const occupiedSlots = new Set(car.parts.map((id) => physicalSlotOf(findPart(id)!)));
+  const factoryCategories = [...new Set(ALL_PARTS.filter((part) => nodes.has(part.id) && !occupiedSlots.has(physicalSlotOf(part)))
+    .map((part) => CATEGORY_LABEL[part.category]))];
   const stock = new Map(garage.inventory.filter((item) => item.base_car_id === car.base_car_id).map((item) => [item.part_id, item.quantity]));
   const parts = h('div', { class: 'online-grid' });
   const filter = h('input', { type: 'search', placeholder: 'Buscar na oficina', 'aria-label': 'Buscar na oficina' });
@@ -111,6 +116,7 @@ export function workshop(garage: Garage, car: OnlineCar, mutate: Operate, openNo
       const isInstalled = installed.has(part.id);
       const quantity = stock.get(part.id) ?? 0;
       const ready = !!node && unlocked.has(node.id);
+      const requirements = node?.prerequisites.filter((id) => !unlocked.has(id)).map((id) => nodeNames.get(id)) ?? [];
       let blockers: string[] = [];
       if (ready && !isInstalled) {
         const slot = physicalSlotOf(part);
@@ -120,10 +126,13 @@ export function workshop(garage: Garage, car: OnlineCar, mutate: Operate, openNo
         const candidate = resolveBuild(base, next, tune, version);
         if (!candidate.ok) blockers = candidate.errors;
       }
-      const reason = isInstalled ? 'Instalada' : !node ? 'Incompatível' : !ready ? 'Bloqueada por preparação' :
-        blockers.length ? 'Requisito mecânico pendente' : quantity ? 'Adquirida' : garage.profile.cr_balance < part.price ? 'Créditos insuficientes' : 'Disponível';
-      return h('article', { class: 'online-card' }, h('h3', {}, part.name), h('p', {}, `${CATEGORY_LABEL[part.category]} · ${reason} · ${money(part.price)}`),
+      const [state, label] = isInstalled ? ['installed', 'Instalada'] as const : !node ? ['locked', 'Incompatível'] as const :
+        !ready ? ['locked', 'Bloqueada por preparação'] as const : blockers.length ? ['locked', 'Requisito mecânico pendente'] as const :
+        quantity ? ['owned', 'Adquirida'] as const : garage.profile.cr_balance < part.price ? ['unaffordable', 'Créditos insuficientes'] as const :
+          ['available', 'Disponível'] as const;
+      return h('article', { class: 'online-card' }, workshopPartHeading(h('h3', {}, part.name), state, label), h('p', {}, `${CATEGORY_LABEL[part.category]} · ${money(part.price)}`),
         !ready && node && h('p', {}, `${node.name} · ${node.costPP} PP · ${car.pp_balance} PP disponíveis`),
+        requirements.length > 0 && h('p', {}, `Requer ${requirements.join(', ')}`),
         blockers.length > 0 && h('p', {}, blockers.join('. ')),
         quantity > 0 && h('p', {}, `${quantity} em estoque`),
         h('div', { class: 'row' }, isInstalled ? button('Remover', () => { void mutate({ kind: 'remove', carId: car.id, partId: part.id, buildRevision: car.build_revision }); }) :
@@ -136,5 +145,7 @@ export function workshop(garage: Garage, car: OnlineCar, mutate: Operate, openNo
   incompatible.addEventListener('change', redraw);
   redraw();
   return h('section', {}, h('h2', {}, car.config.name), h('p', {}, `Configuração de fábrica · ${transmissionKindOf(base)} · ${car.parts.length} alterações instaladas`),
+    factoryCategories.length > 0 && h('article', { class: 'online-card' },
+      workshopPartHeading(h('h3', {}, 'Componentes de fábrica'), 'stock', 'Original'), h('p', {}, factoryCategories.join(' · '))),
     h('div', { class: 'online-filters' }, filter, h('label', { class: 'row' }, incompatible, 'Mostrar incompatíveis')), parts);
 }

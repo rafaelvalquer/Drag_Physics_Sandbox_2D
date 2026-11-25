@@ -5,6 +5,7 @@
 .online-card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
 .online-card h2, .online-card h3 { margin: 0 0 .4rem; font-size: 1.03rem; }
 .online-card p { margin: .45rem 0; }
+.online-card .pill { white-space: normal; line-height: 1.3; text-align: center; }
 .online-match-reference { color: var(--muted); font-size: .85rem; overflow-wrap: anywhere; }
 .online-card header { display: flex; justify-content: space-between; gap: 1rem; align-items: baseline; }
 .online-card header span { color: var(--accent); white-space: nowrap; }

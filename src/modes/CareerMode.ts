@@ -52,6 +52,7 @@ import type { AppContext, Mode } from '../app/Mode';
 import type { AppSettings } from '../app/settings';
 import { VehicleViews } from '../app/vehicleView';
 import { clear, downloadText, h, pickTextFile, toast } from '../ui/dom';
+import { workshopPartHeading } from '../ui/workshop/WorkshopPartHeading';
 import { Hud } from '../ui/Hud';
 import { GarageVehiclePreview } from '../ui/garage/GarageVehiclePreview';
 import { openGarage } from '../ui/garage/GarageDialog';
@@ -853,9 +854,7 @@ export class CareerMode implements Mode {
             if (e instanceof KeyboardEvent && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); this.selectedPart = p.id; this.show('workshop'); }
           },
         },
-          h('div', { class: 'ws-part-head' },
-            h('span', { class: 'ws-part-name' }, p.name),
-            h('span', { class: `pill ${st.state}`, 'data-testid': `ws-pill-${p.id}` }, st.label)),
+          workshopPartHeading(h('span', { class: 'ws-part-name' }, p.name), st.state, st.label, `ws-pill-${p.id}`),
           h('small', { class: 'ws-part-meta' },
             `CAP. ${partChapter(p)} · ${cr(p.price)} · `,
             progression ? `Stage ${progression.tier} · ${progression.specialization} · ` : null,
@@ -941,7 +940,7 @@ export class CareerMode implements Mode {
           this.show('workshop');
         },
       },
-      h('div', { class: 'ws-part-head' }, h('span', {}, `${CATEGORY_LABEL[cat]} original`), h('span', { class: `pill ${st.state}`, 'data-testid': `ws-stock-pill-${cat}` }, st.label)),
+      workshopPartHeading(h('span', {}, `${CATEGORY_LABEL[cat]} original`), st.state, st.label, `ws-stock-pill-${cat}`),
       h('small', {}, 'De fábrica · grátis'),
     );
   }

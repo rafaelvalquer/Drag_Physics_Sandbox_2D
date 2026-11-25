@@ -103,6 +103,15 @@ async function checkProgress(page: Page, won: boolean, pilot: string, rival: str
   await expect(screen.getByText(credits, { exact: true })).toBeVisible();
   await expect(screen.getByText(new RegExp(`^${pp} PP · Árvore .* · 1 corridas`))).toBeVisible();
 
+  await screen.getByRole('button', { name: 'Oficina', exact: true }).click();
+  await expect(screen.getByRole('heading', { name: 'Componentes de fábrica', exact: true })).toBeVisible();
+  await expect(screen.getByText('Original', { exact: true })).toBeVisible();
+  const blocked = screen.getByRole('article').filter({ hasText: 'Bloqueada por preparação' }).filter({ hasText: /Requer / }).first();
+  await expect(blocked.getByText(/PP disponíveis/)).toBeVisible();
+  await blocked.getByRole('button', { name: 'Ver preparação', exact: true }).click();
+  await expect(screen.getByRole('heading', { name: 'Preparação', exact: true })).toBeVisible();
+  await expect(screen.locator('.online-focused')).toHaveCount(1);
+
   const nav = screen.getByRole('navigation', { name: 'Modo online' });
   await nav.getByRole('button', { name: 'Ranking', exact: true }).click();
   const position = won ? '1' : '2';
