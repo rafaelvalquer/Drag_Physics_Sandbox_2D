@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { CHAPTER1_CARS, CAREER_CARS } from '../../../src/data/cars/campaign';
 import { TRACKS } from '../../../src/data/tracks';
+import { transmissionKindOf } from '../../../src/game/career/tuning/BuildResolverV2';
 import { careerResolverVersion } from '../../../src/game/career/tuning/resolverVersion';
 import { AuthoritativeRace } from '../../../src/game/online/AuthoritativeRace';
 import { RaceInputSchema, type RaceInput } from '../../../src/game/online/contracts';
@@ -13,6 +14,17 @@ function newRace() {
     stockOnlineBuild(ONLINE_STARTERS[0], 'Piloto A'),
     stockOnlineBuild(ONLINE_STARTERS[1], 'Piloto B'),
   ], TRACKS[0]!, 17);
+}
+
+function driveRace(race: AuthoritativeRace, command: (lane: 0 | 1) => Pick<RaceInput, 'throttle' | 'shift'>): void {
+  while (race.race.phase !== 'finished' && race.tick < 6_000) {
+    if (race.tick % 4 === 0) {
+      for (const lane of [0, 1] as const) {
+        race.submit(lane, { matchId: race.matchId, sequence: race.tick, observedTick: race.tick, ...command(lane) });
+      }
+    }
+    race.step();
+  }
 }
 
 describe('catálogo da prova online', () => {
@@ -44,22 +56,64 @@ describe('corrida autoritativa', () => {
 
   it('recebe comandos independentes e calcula o resultado do quarto de milha', () => {
     const race = newRace();
-    while (race.race.phase !== 'finished' && race.tick < 6_000) {
-      if (race.tick % 4 === 0) {
-        for (const lane of [0, 1] as const) {
-          const sim = race.race.raceLanes[lane]!.sim;
-          const launch = race.race.greenAt !== null && race.race.time >= race.race.greenAt + 0.12 * lane;
-          const shift = launch && (sim.gear === 0 || sim.engine.rpm >= 5_750) ? 1 : undefined;
-          race.submit(lane, { matchId: race.matchId, sequence: race.tick, observedTick: race.tick, throttle: launch ? 1 : 0, shift });
-        }
-      }
-      race.step();
-    }
+    expect(race.race.raceLanes.map(({ sim }) => [transmissionKindOf(sim.car), sim.car.drivenAxle, !!sim.car.engine.turbo]))
+      .toEqual([['manual', 'front', false], ['manual', 'rear', false]]);
+    driveRace(race, (lane) => {
+      const sim = race.race.raceLanes[lane]!.sim;
+      const launch = race.race.greenAt !== null && race.race.time >= race.race.greenAt + 0.12 * lane;
+      const shift = launch && (sim.gear === 0 || sim.engine.rpm >= 5_750) ? 1 : undefined;
+      return { throttle: launch ? 1 : 0, shift };
+    });
     const result = race.snapshot();
     expect(result.phase).toBe('finished');
     expect(result.lanes.every((lane) => lane.result.et !== null && !lane.result.redLight)).toBe(true);
     expect(result.lanes[0].result.rt).not.toBe(result.lanes[1].result.rt);
     expect(result.winner).toBe(result.lanes[0].result.total! < result.lanes[1].result.total! ? 0 : 1);
+  });
+
+  it('completa o quarto de milha com automático RWD e dupla embreagem AWD de fábrica', () => {
+    const converter = stockOnlineBuild('mercedes-c200-w205-2015', 'Conversor');
+    const dualClutch = stockOnlineBuild('nissan-gtr-r35-2015', 'Dupla embreagem');
+    expect([transmissionKindOf(converter.car), converter.car.drivenAxle]).toEqual(['torque-converter-auto', 'rear']);
+    expect([transmissionKindOf(dualClutch.car), dualClutch.car.drivenAxle]).toEqual(['dual-clutch', 'awd']);
+    const race = new AuthoritativeRace(randomUUID(), [converter, dualClutch], TRACKS[0]!, 17);
+    const peakBoost = [0, 0];
+    driveRace(race, (lane) => {
+      const sim = race.race.raceLanes[lane]!.sim;
+      peakBoost[lane] = Math.max(peakBoost[lane]!, sim.engine.turbo?.boostPa ?? 0);
+      const launch = race.race.greenAt !== null && race.race.time >= race.race.greenAt + 0.12 * lane;
+      const shift = launch && !sim.shift.active && (sim.gear === 0 ||
+        (sim.gearboxMode === 'M' && sim.engine.rpm >= sim.car.engine.redlineRpm)) ? 1 : undefined;
+      return { throttle: launch ? 1 : 0, shift };
+    });
+    const snapshot = race.snapshot();
+    expect(snapshot.phase).toBe('finished');
+    for (const lane of snapshot.lanes) {
+      expect(lane.result).toMatchObject({ finished: true, redLight: false, dnf: false });
+      expect(lane.result.et).toBeGreaterThan(0);
+      expect(lane.gear).toBeGreaterThan(1);
+    }
+    expect(peakBoost.every((boost) => boost > 0)).toBe(true);
+  });
+
+  it('registra queima de largada e quebra mecânica a partir dos comandos dos pilotos', () => {
+    const weak = stockOnlineBuild(ONLINE_STARTERS[1], 'Motor de teste');
+    // Deliberately fragile engine so this scenario reaches a real over-rev failure in seconds.
+    weak.failureSpec = { recommendedSafeRpm: 1_800, maxSafeRpm: 3_000, enduranceS: 0.35, recoveryPerS: 0 };
+    const race = new AuthoritativeRace(randomUUID(), [stockOnlineBuild(ONLINE_STARTERS[0], 'Largada antecipada'), weak], TRACKS[0]!, 17);
+    driveRace(race, (lane) => {
+      const sim = race.race.raceLanes[lane]!.sim;
+      const greenAt = race.race.greenAt;
+      const throttle = greenAt !== null && race.race.time >= greenAt - (lane === 0 ? 0.9 : 0) ? 1 : 0;
+      const shift = lane === 0 && throttle > 0 && !sim.shift.active && (sim.gear === 0 || sim.engine.rpm >= 5_750) ? 1 : undefined;
+      return { throttle, shift };
+    });
+    const snapshot = race.snapshot();
+    expect(snapshot.phase).toBe('finished');
+    expect(snapshot.lanes[0].result.redLight).toBe(true);
+    expect(snapshot.lanes[0].result.rt).toBeLessThan(0);
+    expect(snapshot.lanes[1].result).toMatchObject({ dnf: true, dnfReason: 'engine-blown' });
+    expect(snapshot.lanes[1].result.blownAtRpm).toBeGreaterThan(weak.failureSpec.recommendedSafeRpm);
   });
 
   it.each([20, 80, 150, 250])('termina com %i ms de RTT, jitter e descarte de comandos', (rttMs) => {
