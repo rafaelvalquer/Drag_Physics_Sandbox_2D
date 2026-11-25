@@ -165,10 +165,16 @@ export class OnlineMode implements Mode {
 
   private status(message: string): void { this.show('Online', h('p', { role: 'status' }, message)); }
 
+  private policyLinks(): HTMLElement {
+    return h('div', { class: 'row' },
+      h('a', { href: './online/privacidade.html', target: '_blank', rel: 'noopener' }, 'Privacidade'),
+      h('a', { href: './online/termos.html', target: '_blank', rel: 'noopener' }, 'Termos de uso'));
+  }
+
   private login(message?: string): void {
     this.show('Online', h('section', { class: 'online-card online-small' },
       h('p', {}, message ?? 'Entre com sua conta Google para acessar sua garagem e disputar corridas 1 contra 1.'),
-      this.client && this.button('Continuar com Google', () => { void this.run(() => this.client!.login()); }, true)));
+      this.client && this.button('Continuar com Google', () => { void this.run(() => this.client!.login()); }, true), this.policyLinks()));
   }
 
   private onboarding(): void {
@@ -184,8 +190,7 @@ export class OnlineMode implements Mode {
         this.dashboard();
       });
     } }, h('label', {}, 'Nickname público', nickname), h('label', {}, 'Primeiro carro', car),
-    h('details', {}, h('summary', {}, 'Termos de uso do modo online'),
-      h('p', {}, 'Use sua própria conta Google e dispute partidas sem manipular resultados, saldos ou recompensas. O nickname e os resultados competitivos aparecem no ranking. O jogo vincula garagem, acertos e histórico à sua conta. A imagem de perfil é opcional.')),
+    this.policyLinks(),
     h('label', { class: 'row' }, terms, 'Aceito os termos de uso'), h('label', { class: 'row' }, avatar, 'Usar imagem de perfil do Google'),
     h('div', { class: 'row' }, h('button', { type: 'submit', class: 'primary' }, 'Criar garagem'),
       h('button', { type: 'button', onclick: () => { void this.run(() => this.client!.logout()); } }, 'Sair'))));

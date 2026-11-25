@@ -13,6 +13,16 @@ async function login(page: Page, account: number): Promise<void> {
   await page.getByRole('combobox').filter({ has: page.getByRole('option', { name: 'baixa (menos CPU)', exact: true }) }).selectOption('low');
   await page.getByRole('button', { name: 'Fechar', exact: true }).click();
   await page.getByRole('button', { name: 'Online', exact: true }).click();
+  const loginScreen = page.getByTestId('online-screen');
+  for (const [label, url, heading] of [
+    ['Privacidade', '/online/privacidade.html', 'Privacidade do modo online'],
+    ['Termos de uso', '/online/termos.html', 'Termos de uso do modo online'],
+  ]) {
+    await expect(loginScreen.getByRole('link', { name: label, exact: true })).toHaveAttribute('href', `.${url}`);
+    const info = await page.request.get(url);
+    expect(info.ok()).toBe(true);
+    expect(await info.text()).toContain(`<h1>${heading}</h1>`);
+  }
   await page.getByRole('button', { name: 'Continuar com Google' }).click();
 }
 
