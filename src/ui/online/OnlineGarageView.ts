@@ -79,17 +79,39 @@ export function market(credits: number, mutate: Operate): HTMLElement {
 export function preparationTree(car: OnlineCar, mutate: Operate, focusNode?: string): HTMLElement {
   const tree = PREPARATION_TREES.get(car.base_car_id)!;
   const unlocked = new Set(car.unlocks);
-  return h('section', {}, h('h2', {}, car.config.name), h('p', {}, `${car.pp_balance} PP disponíveis · ${car.pp_earned_total} ganhos · ${car.pp_spent_total} utilizados`),
+  const nodes = new Map(tree.nodes.map((node) => [node.id, node]));
+  const original = nodes.get('original')!;
+  const completed = tree.nodes.filter((node) => node.tier > 0 && unlocked.has(node.id)).length;
+  const focus = (id: string): void => {
+    const target = document.getElementById(id);
+    target?.focus({ preventScroll: true });
+    target?.scrollIntoView({ block: 'nearest' });
+  };
+  return h('section', {},
+    h('h2', {}, car.config.name),
+    h('p', {}, `${car.pp_balance} PP disponíveis · ${car.pp_earned_total} ganhos · ${car.pp_spent_total} utilizados`),
+    h('p', {}, `${completed} de ${tree.nodes.length - 1} preparações desbloqueadas · Árvore v${tree.version}`),
+    h('nav', { class: 'row online-tree-navigation', 'aria-label': 'Ramos da preparação' }, tree.branches.map((branch) =>
+      button(branch.name, () => focus(`online-branch-${branch.id}`)))),
+    h('article', { class: 'online-card', id: 'online-node-original', tabindex: -1, 'aria-label': original.name },
+      h('strong', {}, original.name), h('p', {}, original.description)),
     h('div', { class: 'online-tree' }, tree.branches.map((branch) => h('section', { class: 'online-tree-branch' },
-      h('h3', {}, branch.name), tree.nodes.filter((node) => node.branchId === branch.id).map((node) => {
+      h('h3', { id: `online-branch-${branch.id}`, tabindex: -1 }, branch.name),
+      tree.nodes.filter((node) => node.branchId === branch.id).map((node) => {
         const have = unlocked.has(node.id);
         const required = node.prerequisites.filter((id) => !unlocked.has(id));
-        return h('article', { class: `online-card${focusNode === node.id ? ' online-focused' : ''}`, id: `online-node-${node.id}` },
-          h('strong', {}, node.name), h('p', {}, node.unlocksPartIds.map((id) => findPart(id)?.name).join(', ')),
-          required.length > 0 && h('p', {}, `Requer ${required.map((id) => tree.nodes.find((item) => item.id === id)?.name).join(', ')}`),
+        const missingPP = Math.max(0, node.costPP - car.pp_balance);
+        return h('article', { class: `online-card${focusNode === node.id ? ' online-focused' : ''}`,
+          id: `online-node-${node.id}`, tabindex: -1, 'aria-label': node.name },
+          h('strong', {}, node.name), h('p', {}, node.description), h('p', {}, node.unlocksPartIds.map((id) => findPart(id)?.name).join(', ')),
+          required.length > 0 && h('ul', { class: 'online-tree-prerequisites', 'aria-label': 'Pré-requisitos pendentes' }, required.map((id) => {
+            const name = nodes.get(id)!.name;
+            return h('li', {}, h('button', { type: 'button', 'aria-label': `Ir para ${name}`, onclick: () => focus(`online-node-${id}`) }, name));
+          })),
+          !have && missingPP > 0 && h('p', {}, `Faltam ${missingPP} PP`),
           button(have ? 'Desbloqueado' : `Desbloquear por ${node.costPP} PP`, () => {
             if (window.confirm(`Usar ${node.costPP} PP para desbloquear ${node.name}?`)) void mutate({ kind: 'unlock', carId: car.id, nodeId: node.id });
-          }, have || required.length > 0 || car.pp_balance < node.costPP));
+          }, have || required.length > 0 || missingPP > 0));
       })))));
 }
 

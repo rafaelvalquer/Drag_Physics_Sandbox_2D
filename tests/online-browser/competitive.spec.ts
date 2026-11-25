@@ -147,7 +147,16 @@ async function checkProgress(page: Page, won: boolean, pilot: string, rival: str
   await expect(blocked.getByText(/PP disponíveis/)).toBeVisible();
   await blocked.getByRole('button', { name: 'Ver preparação', exact: true }).click();
   await expect(screen.getByRole('heading', { name: 'Preparação', exact: true })).toBeVisible();
-  await expect(screen.locator('.online-focused')).toHaveCount(1);
+  const focused = screen.locator('.online-focused');
+  await expect(focused).toHaveCount(1);
+  await expect(focused.getByText(/^Faltam \d+ PP$/)).toBeVisible();
+  const prerequisite = focused.getByRole('button', { name: /^Ir para / }).first();
+  const prerequisiteName = await prerequisite.innerText();
+  await prerequisite.click();
+  await expect(screen.getByRole('article', { name: prerequisiteName, exact: true })).toBeFocused();
+  const branches = screen.getByRole('navigation', { name: 'Ramos da preparação' });
+  await branches.getByRole('button', { name: 'Pneus e aderência', exact: true }).click();
+  await expect(screen.getByRole('heading', { name: 'Pneus e aderência', exact: true })).toBeFocused();
 
   await nav.getByRole('button', { name: 'Ranking', exact: true }).click();
   const position = won ? '1' : '2';
