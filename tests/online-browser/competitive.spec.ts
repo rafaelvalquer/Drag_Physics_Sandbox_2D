@@ -125,23 +125,6 @@ test('duas sessões de navegador completam PKCE, garagem e corrida 1v1', async (
   const contexts = await Promise.all([browser.newContext(options), browser.newContext(options)]);
   try {
     const [left, right] = await Promise.all(contexts.map((context) => context.newPage()));
-    await right!.routeWebSocket('ws://127.0.0.1:54752/**', (socket) => {
-      const upstream = socket.connectToServer();
-      let count = 0;
-      let delivery = Promise.resolve();
-      let closed = false;
-      upstream.onMessage((message) => {
-        const ready = new Promise<void>((resolve) => setTimeout(resolve, ++count % 12 === 0 ? 140 : 40));
-        delivery = delivery.then(async () => {
-          await ready;
-          if (!closed) socket.send(message);
-        });
-      });
-      socket.onClose(() => {
-        closed = true;
-        upstream.close();
-      });
-    });
     await Promise.all([login(left!, 0), login(right!, 1)]);
     await Promise.all([enroll(left!, 'Piloto Azul', 'fiat-uno-mille-1995'), enroll(right!, 'Piloto Ouro', 'gm-chevette-sl-1988')]);
     // Voltar a entrar com a mesma conta preserva a garagem e o saldo.

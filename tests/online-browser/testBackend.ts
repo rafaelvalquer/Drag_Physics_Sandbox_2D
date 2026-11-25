@@ -1,6 +1,7 @@
 import { createHash, generateKeyPairSync, randomUUID, sign } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
+import { connect, createServer as createTcpServer } from 'node:net';
 import { PGlite } from '@electric-sql/pglite';
 import { PGLiteSocketServer } from '@electric-sql/pglite-socket';
 import { startOnlineServer } from '../../src/server/online/server';
@@ -79,7 +80,29 @@ const server = await startOnlineServer({
   SUPABASE_URL: auth, SUPABASE_SECRET_KEY: 'test-secret-only-for-local-auth',
   DATABASE_URL: `postgresql://postgres@${database.getServerConn()}/postgres`, PORT: '54752', ALLOWED_ORIGINS: ui,
 });
+
+// Keep the browser's native WebSocket and simulate jitter on ordered TCP deliveries to it.
+const jitter = createTcpServer((client) => {
+  const upstream = connect(54752, '127.0.0.1');
+  let packets = 0;
+  let delivery = Promise.resolve();
+  client.pipe(upstream);
+  upstream.on('data', (packet) => {
+    const ready = new Promise<void>((resolve) => setTimeout(resolve, ++packets % 12 === 0 ? 140 : 40));
+    delivery = delivery.then(async () => {
+      await ready;
+      if (!client.destroyed) client.write(packet);
+    });
+  });
+  upstream.on('end', () => { void delivery.then(() => client.end()); });
+  upstream.on('error', () => client.destroy());
+  client.on('close', () => upstream.destroy());
+  client.on('error', () => upstream.destroy());
+});
+await new Promise<void>((resolve) => jitter.listen(54753, '127.0.0.1', resolve));
+
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => { void (async () => {
+  jitter.close();
   await server.gracefullyShutdown(false);
   await database.stop();
   await db.close();
