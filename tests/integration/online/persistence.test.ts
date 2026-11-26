@@ -132,6 +132,41 @@ it('protege cadastro, inventário, saldos, PP, histórico e liquidação da corr
   })).rejects.toThrow('permission denied');
 });
 
+it('liquida uma corrida realmente empatada uma única vez', async () => {
+  const tiedUsers: [string, string] = [randomUUID(), randomUUID()];
+  await sql`insert into auth.users values (${tiedUsers[0]}), (${tiedUsers[1]})`;
+  await Promise.all(tiedUsers.map((user, lane) => garage.create(identity(user), { ...onboarding, nickname: `Empate ${lane}` })));
+  const matchId = randomUUID();
+  const seed = 17;
+  const builds = await matches.start(matchId, TRACKS[0]!.id, seed, tiedUsers, [undefined, undefined]);
+  const race = new AuthoritativeRace(matchId, builds, TRACKS[0]!, seed);
+  while (race.race.phase !== 'finished' && race.tick < 6_000) {
+    if (race.tick % 4 === 0) {
+      const sim = race.race.raceLanes[0]!.sim;
+      const launch = race.race.greenAt !== null && race.race.time >= race.race.greenAt;
+      const shift = launch && (sim.gear === 0 || sim.engine.rpm >= 5_750) ? 1 : undefined;
+      const input = { matchId, sequence: race.tick, observedTick: race.tick, throttle: Number(launch), shift } as const;
+      race.submit(0, input);
+      race.submit(1, input);
+    }
+    race.step();
+  }
+  const result = race.snapshot();
+  expect(result.phase).toBe('finished');
+  expect(result.winner).toBeNull();
+  expect(result.lanes.every((lane) => lane.result.finished && !lane.result.redLight)).toBe(true);
+  expect(result.lanes[0].result.total).toBe(result.lanes[1].result.total);
+  const [first, retry] = await Promise.all([matches.finish(matchId, result, null), matches.finish(matchId, result, null)]);
+  expect(retry).toEqual(first);
+  expect(first.map(({ outcome, cr, rp, pp }) => [outcome, cr, rp, pp])).toEqual([['draw', 450, 0, 4], ['draw', 450, 0, 4]]);
+  for (const user of tiedUsers) {
+    const saved = await garage.get(user);
+    expect(saved?.profile).toMatchObject({ cr_balance: 4_950, rp: 1_000 });
+    expect(saved?.cars[0]).toMatchObject({ pp_balance: 4, total_races: 1, wins: 0, losses: 0 });
+    expect(await matches.history(user, 0, undefined)).toMatchObject([{ id: matchId, outcome: 'draw', cr_reward: 450, rp_delta: 0, pp_reward: 4 }]);
+  }
+});
+
 it('valida tokens pelo JWKS e completa um lobby competitivo com reconexão', async () => {
   const users = [randomUUID(), randomUUID(), randomUUID()] as const;
   await sql`insert into auth.users (id) values (${users[0]}), (${users[1]}), (${users[2]})`;

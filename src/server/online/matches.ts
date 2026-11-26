@@ -99,7 +99,7 @@ export class OnlineMatches {
       for (const player of players) {
         const { lane, car_id: carId, user_id: userId } = player;
         const outcome: Outcome = cancelled ? 'cancelled' : forfeitLane === lane ? 'forfeit' : winner === null ? 'draw' : winner === lane ? 'win' : 'loss';
-        const rp = lane === 0 ? change : -change;
+        const rp = lane === 1 && change !== 0 ? -change : change;
         const hold = holds.find((item) => item.user_id === userId);
         const suppressed = !participated(lane) && outcome !== 'forfeit';
         const reason = cancelled ? cancellationReason : suppressed ? 'sem participação efetiva' : hold?.reason ?? null;
