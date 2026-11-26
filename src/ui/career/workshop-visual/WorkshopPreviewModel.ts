@@ -89,7 +89,7 @@ export function previewSelection(save: CareerSave, car: OwnedCar, selected: stri
   if (!installed && !after.ok) {
     plan = planInstall({ base, car, save, partId: part.id, versionOf: (parts) => buildVersionFor(car, parts) });
     const planned = resolveOwned(car, plan.parts);
-    if (planned.ok && plan.steps.length > 1) {
+    if (planned.ok && (plan.steps.length > 1 || plan.substitutes)) {
       // the part needs other parts: the preview shows the build the plan would install
       after = planned;
       nextParts = plan.parts;

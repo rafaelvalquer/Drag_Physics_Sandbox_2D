@@ -104,7 +104,9 @@ function partDetail(m: InspectorModel, a: InspectorActions, cmp: ComparisonView)
   const fam = familyOf(findCampaignCar(car.baseCarId)!);
   const visual = resolvePartVisual(part as unknown as { category: PartDef['category'] } & Record<string, unknown>);
   const singleOk = p.state === 'equipped' || p.state === 'preview';
-  cmp.render(p.before, p.after, p.installed ? 'Sem a peça' : p.state === 'preview-pending' ? 'Com a peça e o que falta' : L.versionWith, { removing: p.installed });
+  // with a substitute plan the red "incompatible" line is replaced by the explanation in the checklist
+  const hideIncompatible = !!p.plan?.substitutes && !p.after.ok;
+  if (!hideIncompatible) cmp.render(p.before, p.after, p.installed ? 'Sem a peça' : p.state === 'preview-pending' ? 'Com a peça e o que falta' : L.versionWith, { removing: p.installed });
   const reqs = partRequirements(part, fam).map((u) => `${UNLOCK_LABEL[u]}${unlocksOf(save).has(u) ? ' ✓' : ''}`);
   const pc = p.before.ok && p.after.ok ? prosAndCons(p.before, p.after) : { pros: [] as string[], cons: [] as string[] };
   const plan = p.plan;
@@ -138,12 +140,12 @@ function partDetail(m: InspectorModel, a: InspectorActions, cmp: ComparisonView)
           h('ul', { class: 'wv-cons' }, pc.cons.map((t) => h('li', {}, t))),
           p.external.length ? h('p', { class: 'wv-external', 'data-testid': 'ws-external' }, `${L.externalChanges} ${p.external.map((e) => EXTERNAL_CHANGE_LABEL[e]).join(', ')}.`) : '')
       : h('section', { class: 'wv-sec' }, h('h4', {}, L.whatChanges), h('p', { class: 'wv-sub' }, p.state === 'equipped' ? 'Esta peça já está instalada.' : 'Veja os números no quadro abaixo.')),
-    h('section', { class: 'wv-sec' }, h('h4', {}, L.beforeAfter), cmp.root),
+    h('section', { class: 'wv-sec' }, h('h4', {}, L.beforeAfter), hideIncompatible ? '' : cmp.root),
     h('section', { class: 'wv-sec' }, h('h4', {}, L.whatYouNeed),
       h('div', { class: 'hint', 'data-testid': 'ws-requirements' }, `Requisitos: ${reqs.join(' · ')}`),
       h('div', { class: 'hint', 'data-testid': 'ws-compat' }, `${L.works} ${worksText}`)),
-    plan && (plan.steps.length > 1 || plan.openIssues.length) ? requirementsPanel(plan, a, save) : '',
-    issues.length && p.state === 'unavailable'
+    plan && (plan.steps.length > 1 || plan.openIssues.length || plan.substitutes) ? requirementsPanel(plan, a, save) : '',
+    issues.length && p.state === 'unavailable' && !plan?.substitutes
       ? h('section', { class: 'wv-sec wv-issues', 'data-testid': 'ws-issues' }, h('h4', {}, L.needsAdjust), h('ul', {}, issues.map((i) => h('li', {}, i.friendly))))
       : '',
     part.category === 'nitrous'
@@ -169,9 +171,10 @@ function partDetail(m: InspectorModel, a: InspectorActions, cmp: ComparisonView)
  * purchase). Settings the player must change (pressure, knock) are listed as open issues.
  */
 function requirementsPanel(plan: InstallPlan, a: InspectorActions, save: CareerSave): HTMLElement {
-  const extra = plan.steps.slice(1);
-  const rows = extra.map((st) => {
-    const why = st.resolves ? ISSUE_LABEL[st.resolves.code] : 'Requisito';
+  // with a substitute the first step is the part that works on this car, so it is listed too
+  const extra = plan.substitutes ? plan.steps : plan.steps.slice(1);
+  const rows = extra.map((st, i) => {
+    const why = plan.substitutes && i === 0 ? 'Alternativa para o motor turbo' : st.resolves ? ISSUE_LABEL[st.resolves.code] : 'Requisito';
     const where = st.source === 'stock' ? 'no seu estoque (grátis)' : st.state === 'locked' ? st.status.detail : cr(st.price);
     return h('div', { class: 'ws-req-row', 'data-testid': `ws-req-${st.partId}`, 'data-state': st.state, 'data-source': st.source },
       h('span', { class: 'ws-req-mark', 'aria-hidden': 'true' }, st.source === 'stock' ? '✓' : '✗'),
@@ -184,7 +187,8 @@ function requirementsPanel(plan: InstallPlan, a: InspectorActions, save: CareerS
     : '';
   void save;
   return h('section', { class: 'ws-req wv-sec', 'data-testid': 'ws-req-list' },
-    h('h4', { class: 'ws-req-title' }, L.whatIsMissing),
+    h('h4', { class: 'ws-req-title' }, plan.substitutes ? 'Este remap é para motor aspirado' : L.whatIsMissing),
+    plan.substitutes ? h('div', { class: 'hint', 'data-testid': 'ws-req-substitute' }, `${plan.substitutes.reason} Para o seu motor turbo, a lista abaixo troca o remap aspirado pelo Mapa turbo equivalente e traz o que ele pede.`) : '',
     ...rows, ...open,
     plan.blockers.length ? h('div', { class: 'ws-req-blockers', 'data-testid': 'ws-req-blockers' }, plan.blockers.join(' ')) : '',
     bundle);

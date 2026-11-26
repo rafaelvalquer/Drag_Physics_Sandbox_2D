@@ -57,3 +57,30 @@ test('oficina: lista o que falta e instala com requisitos de uma vez', async ({ 
   expect(spent).toBe(4000 + 900);
   await expect(page.getByTestId('ws-req-list')).toHaveCount(0);
 });
+
+test('oficina: remap aspirado com conversão turbo mostra o Mapa turbo equivalente e instala o pacote', async ({ page }) => {
+  test.setTimeout(240_000);
+  await boot(page);
+  await page.locator('button.tab[data-mode=career]').click();
+  await expect(page.getByTestId('career-menu')).toBeVisible();
+  await mode(page, 'm.ready');
+  await page.getByTestId('career-new').click();
+  await page.getByTestId('choose-gm-chevette-sl-1988').click();
+  await expect(page.getByTestId('career-dialogue')).toBeVisible();
+  for (let i = 0; i < 40 && (await page.getByTestId('dialogue-next').count()); i++) await page.getByTestId('dialogue-next').click();
+  await expect(page.getByTestId('career-garage-screen')).toBeVisible();
+  // an in-memory Civic Si with the Stage 1 turbo conversion (the unlocks are the player's progress, not tested here)
+  await mode(
+    page,
+    `(() => { const s = m.controller.save; const c = s.ownedCars[0]; c.baseCarId = 'honda-civic-si-2008'; c.buildVersion = 2; c.installedParts = ['conversion-turbo-honda-k20-s1','conversion-compression-honda-k20','conversion-oil-honda-k20','fuel-honda-k20-s1','ignition-honda-k20-s1','rotating-assembly-honda-k20-s1','clutch-honda-k20-s3']; s.credits = 500000; })()`,
+  );
+  await mode(page, `(m.workshopState.patch({ selected: 'ecu-map-honda-k20-s2', tab: 'electronics' }), m.show('workshop'))`);
+  await expect(page.getByTestId('ws-detail')).toContainText('Remap');
+  await expect(page.getByTestId('ws-req-list')).toBeVisible();
+  await expect(page.getByTestId('ws-req-substitute')).toBeVisible();
+  await expect(page.getByTestId('ws-req-ecu-conversion-honda-k20-s2')).toBeVisible();
+  // the red "incompatible" line is replaced by the explanation
+  await expect(page.getByTestId('ws-incompatible')).toHaveCount(0);
+  await expect(page.getByTestId('ws-install-bundle')).toBeVisible();
+  await page.getByTestId('ws-detail').screenshot({ path: `${process.env.VISUAL_DIR ?? 'visual-captures'}/workshop-ecu-requirements.png` });
+});

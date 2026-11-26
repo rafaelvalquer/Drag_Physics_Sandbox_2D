@@ -148,6 +148,7 @@ const ISSUE_FRIENDLY: Record<IssueCode, string> = {
   'needs-part': 'Falta uma peça de apoio para esta combinação.',
   knock: 'A pressão escolhida causa detonação. Reduza a pressão ou melhore o resfriamento.',
   range: 'A pressão escolhida está fora da faixa que as peças aceitam. Ajuste no Dyno Lab.',
+  'na-remap-on-conversion': 'Este remap é para motor aspirado. Com a conversão turbo, use um Mapa turbo.',
   other: 'Esta combinação precisa de ajustes.',
 };
 

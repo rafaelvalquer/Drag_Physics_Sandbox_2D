@@ -14,6 +14,7 @@ export type IssueCode =
   | 'gearbox-limit'
   | 'compression-limit'
   | 'needs-ecu'
+  | 'na-remap-on-conversion'
   | 'intercooler-limit'
   | 'turbine-limit'
   | 'ignition-limit'
@@ -40,6 +41,7 @@ export const ISSUE_LABEL: Record<IssueCode, string> = {
   'gearbox-limit': 'Câmbio para o torque',
   'compression-limit': 'Taxa de compressão compatível',
   'needs-ecu': 'ECU compatível',
+  'na-remap-on-conversion': 'Mapa turbo no lugar do remap aspirado',
   'intercooler-limit': 'Intercooler de maior capacidade',
   'turbine-limit': 'Turbina de maior fluxo',
   'ignition-limit': 'Ignição mais forte',
@@ -67,6 +69,9 @@ const RULES: { re: RegExp; code: IssueCode; fix: readonly PartCategory[] }[] = [
   { re: /ignição Stage/, code: 'ignition-limit', fix: ['electronics-ignition'] },
   { re: /arrefecimento de óleo/, code: 'oil-cooling', fix: ['cooling-oil'] },
   { re: /exige taxa de compressão/, code: 'compression-limit', fix: ['pistons', 'engine-compression'] },
+  // turbo conversion and ECU maps: a turbo map needs the conversion of its stage; an NA remap does not know the kit
+  { re: /use um Mapa turbo/, code: 'na-remap-on-conversion', fix: ['ecu'] },
+  { re: /exige a conversão turbo/, code: 'needs-turbo-kit', fix: ['turbo'] },
   { re: /^.+ exige .+/, code: 'needs-part', fix: [] }, // ECU `requiresParts`: the ids come from the ECU part
   { re: /detonação/, code: 'knock', fix: [] },
   { re: /pressão fora da faixa/, code: 'range', fix: [] },

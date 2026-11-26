@@ -45,6 +45,11 @@ export interface InstallPlan {
   blockers: string[];
   /** Resolver issues still open after the best plan (settings the player must change). */
   openIssues: BuildIssue[];
+  /**
+   * Set when the requested part cannot work on this car at all (an aspirated remap on a turbo
+   * conversion): the plan is for the part that does (`steps[0]`) and `requested` is the original.
+   */
+  substitutes?: { requested: string; reason: string };
 }
 
 const MAX_STEPS = 8;
@@ -81,10 +86,34 @@ export function planInstall(args: { base: CarConfig; car: PlanCar; save: PlanSav
     return { partId: id, name: p.name, price: p.price, source: inStock ? 'stock' : 'buy', state: status.state, status, replaces, resolves };
   };
 
-  const first = withPartId(car.installedParts, partId);
+  let first = withPartId(car.installedParts, partId);
   let parts = first.parts;
-  const steps: PlanStep[] = [step(partId, first.replaced, null)];
+  let steps: PlanStep[] = [step(partId, first.replaced, null)];
   let open: BuildIssue[] = [];
+  let substitutes: InstallPlan['substitutes'];
+
+  // An aspirated remap on a turbo conversion is refused by design: plan the turbo map of the same
+  // stage instead (the closest one when there is no exact match) and keep going from there.
+  const req = findPart(partId);
+  if (req?.category === 'ecu' && !(req as EcuPart).conversionTier) {
+    const r0 = resolve(parts);
+    if (!r0.ok && issuesOf(r0.errors).some((x) => x.code === 'na-remap-on-conversion')) {
+      const want = ({ stage1: 1, stage2: 2, stage3: 3 } as Record<string, number>)[(req as EcuPart).level] ?? 0;
+      const maps = ALL_PARTS.filter((q): q is EcuPart => q.category === 'ecu' && !!(q as EcuPart).conversionTier && fits(q, car.installedParts));
+      maps.sort((a, b) => Math.abs(a.conversionTier! - want) - Math.abs(b.conversionTier! - want) || a.conversionTier! - b.conversionTier!);
+      const conflicts = (ps: readonly string[]): boolean => {
+        const rr = resolve(ps);
+        return !rr.ok && issuesOf(rr.errors).some((x) => x.code === 'na-remap-on-conversion');
+      };
+      const pick = maps.find((m) => !conflicts(withPartId(car.installedParts, m.id).parts));
+      if (pick) {
+        first = withPartId(car.installedParts, pick.id);
+        parts = first.parts;
+        steps = [step(pick.id, first.replaced, null)];
+        substitutes = { requested: partId, reason: `${req.name} é um remap para motor aspirado e não funciona com a conversão turbo.` };
+      }
+    }
+  }
 
   for (let i = 0; i < MAX_STEPS; i++) {
     const r = resolve(parts);
@@ -100,9 +129,10 @@ export function planInstall(args: { base: CarConfig; car: PlanCar; save: PlanSav
     const ecu = parts.map(findPart).find((p) => p?.category === 'ecu') as EcuPart | undefined;
     const wanted = new Set<string>(target.code === 'needs-part' ? (ecu?.requiresParts ?? []).flatMap((q) => q.ids) : []);
     const cands = ALL_PARTS.filter(
-      (p) => !parts.includes(p.id) && (target.fixCategories.includes(p.category) || wanted.has(p.id)) && fits(p, parts) && p.id !== partId,
+      (p) => !parts.includes(p.id) && (target.fixCategories.includes(p.category) || wanted.has(p.id)) && fits(p, parts) && p.id !== steps[0]!.partId && (target.code !== 'na-remap-on-conversion' || !!(p as EcuPart).conversionTier),
     ).filter((p) => {
-      // never swap out an installed part for a cheaper one
+      // the NA remap goes to the stock whatever it cost; otherwise never swap out an installed part for a cheaper one
+      if (target.code === 'na-remap-on-conversion') return true;
       const cur = parts.map(findPart).find((q) => q?.category === p.category);
       return !cur || p.price > cur.price;
     });
@@ -143,5 +173,5 @@ export function planInstall(args: { base: CarConfig; car: PlanCar; save: PlanSav
     if (s.state === 'locked') blockers.push(`${s.name}: ${s.status.detail}`);
   }
   if (cost > save.credits) blockers.push(`Créditos insuficientes: faltam ${(cost - save.credits).toLocaleString('pt-BR')} CR.`);
-  return { ok: final.ok && blockers.length === 0, parts, steps, cost, blockers, openIssues: open };
+  return { ok: final.ok && blockers.length === 0, parts, steps, cost, blockers, openIssues: open, ...(substitutes ? { substitutes } : {}) };
 }
