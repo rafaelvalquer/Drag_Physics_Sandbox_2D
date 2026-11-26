@@ -73,7 +73,7 @@ async function drive(page: Page, touch = false): Promise<void> {
     ? accelerator.dispatchEvent(pressed ? 'pointerdown' : 'pointerup', { pointerType: 'touch', pointerId: 101 })
     : driveKey(page, pressed ? 'keydown' : 'keyup', 'KeyW');
   const upshift = async () => {
-    if (touch) await page.getByTestId('touch-upshift').tap();
+    if (touch) await page.getByTestId('touch-upshift').tap({ timeout: 2_000 });
     else {
       await driveKey(page, 'keydown', 'KeyE');
       await driveKey(page, 'keyup', 'KeyE');
@@ -98,11 +98,17 @@ async function drive(page: Page, touch = false): Promise<void> {
   try {
     await checkClock(page);
     for (;;) {
+      await page.waitForTimeout(130);
       const renderer = await currentSnapshot(page);
       const lane = renderer && renderer.newest?.lanes[renderer.lane];
       if (!lane || lane.result.finished || lane.result.dnf) return;
-      await page.waitForTimeout(130);
-      if (lane.rpm >= 5_750 && !lane.shifting) await upshift();
+      if (lane.rpm >= 5_750 && !lane.shifting) {
+        try { await upshift(); }
+        catch (error) {
+          if (await page.getByRole('button', { name: 'Buscar nova partida' }).isVisible()) return;
+          throw error;
+        }
+      }
     }
   } finally {
     // Keep the touch press held to verify that leaving the race clears it.
