@@ -54,7 +54,7 @@ export const CAR_MITSUBISHI_EVO_X_2012: CarConfig = {
   tires: { radiusM: rollingRadiusM(245, 40, 18), wheelInertiaKgM2: 1.02, muPeak: 1.12, B: 11, C: 1.52, E: 0.32, rollingResistance: 0.012, optimalTempC: 65, tempSensitivityPerC: 0.0015 },
   exhaust: modernStockExhaust({ layout: 'single', headerLengthM: 0.18, headerDiameterMm: 44, collectorDiameterMm: 70, tailpipeDiameterMm: 89, mufflerAbsorption: 0.5, mufflerChambersM: [0.14, 0.22, 0.3], outputGain: 1.05 }),
   acoustic: modernAcoustic({ intakeGain: 0.72, blockGain: 0.6, exhaustGain: 1.0, turboGain: 0.48, mechanicalNoise: 0.5, transmissionGain: 0.42, gearTeeth: 25 }),
-  visual: { bodyStyle: 'lancerEvoX', color: '#f2f3f4', accent: '#141414', lengthM: 4.495, heightM: 1.48, frontOverhangM: 0.96, rideHeightM: 0.13 },
+  visual: { bodyStyle: 'lancerEvoX', color: '#f2f3f4', accent: '#141414', lengthM: 4.495, heightM: 1.48, frontOverhangM: 0.96, rideHeightM: 0.13, engineMount: { position: 'front', orientation: 'transverse' } },
 };
 
 export const EVO_X_2012_PROVENANCE: Record<string, Provenance> = {

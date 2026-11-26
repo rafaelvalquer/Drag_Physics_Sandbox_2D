@@ -1,4 +1,5 @@
 import { gsap } from 'gsap';
+import { WorkshopAnimationController } from '../workshop-visual/WorkshopAnimationController';
 
 /**
  * Screen transitions of the campaign. The new screen is rendered synchronously by
@@ -9,6 +10,7 @@ import { gsap } from 'gsap';
 export class CareerTransitionManager {
   private ctx: gsap.Context | null = null;
   private offs: (() => void)[] = [];
+  private workshop: WorkshopAnimationController | null = null;
 
   /** Click feedback for buttons (does not delay the click). Installed once on the overlay root. */
   bindPress(root: HTMLElement, reduced: boolean): void {
@@ -58,9 +60,24 @@ export class CareerTransitionManager {
     }
   }
 
+  /**
+   * Opens the visual workshop: the generic fade is replaced by the workshop's own entrance (catalog,
+   * car and details). The returned controller animates selections and installs while the screen is
+   * open; the next transition (or leaving the screen) cancels it and reverts every tween.
+   */
+  enterWorkshop(el: HTMLElement, reduced: boolean): WorkshopAnimationController {
+    this.cancel();
+    const anim = new WorkshopAnimationController(el, reduced);
+    this.workshop = anim;
+    anim.enter();
+    return anim;
+  }
+
   cancel(): void {
     this.ctx?.revert();
     this.ctx = null;
+    this.workshop?.dispose();
+    this.workshop = null;
   }
 
   dispose(): void {

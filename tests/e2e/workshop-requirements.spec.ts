@@ -32,7 +32,7 @@ test('oficina: lista o que falta e instala com requisitos de uma vez', async ({ 
   await mode(page, `m.controller.commit((s) => void (s.credits = 20000))`);
 
   // the turbo kit alone does not fit (clutch): the panel says what is missing
-  await mode(page, `(m.selectedPart = 'turbo-basic', m.workshopTab = 'turbo', m.show('workshop'))`);
+  await mode(page, `(m.workshopState.patch({ selected: 'turbo-basic', tab: 'turbo' }), m.show('workshop'))`);
   await expect(page.getByTestId('ws-detail')).toContainText('Kit turbo básico');
   await expect(page.getByTestId('ws-buy')).toBeDisabled();
   await expect(page.getByTestId('ws-req-list')).toBeVisible();
@@ -42,7 +42,7 @@ test('oficina: lista o que falta e instala com requisitos de uma vez', async ({ 
   // "Ver peça" goes to the clutch (another system tab)
   await page.getByTestId('ws-req-go-clutch-reinforced').click();
   await expect(page.getByTestId('ws-detail')).toContainText('Embreagem reforçada');
-  await mode(page, `(m.selectedPart = 'turbo-basic', m.workshopTab = 'turbo', m.show('workshop'))`);
+  await mode(page, `(m.workshopState.patch({ selected: 'turbo-basic', tab: 'turbo' }), m.show('workshop'))`);
 
   // install with requirements: confirmation, one purchase
   await page.getByTestId('ws-install-bundle').click();

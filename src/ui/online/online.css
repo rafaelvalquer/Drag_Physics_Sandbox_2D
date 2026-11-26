@@ -40,3 +40,4 @@
 .online-dyno-comparison { width: 100%; border-collapse: collapse; margin-bottom: .75rem; }
 .online-dyno-comparison th, .online-dyno-comparison td { padding: .35rem .5rem; border-bottom: 1px solid var(--line); text-align: end; }
 .online-dyno-comparison th:first-child { text-align: start; }
+.online-card .ws-part-head { display: flex; align-items: start; justify-content: space-between; gap: 8px; }

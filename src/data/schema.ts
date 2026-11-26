@@ -422,6 +422,11 @@ export const VisualSchema = z.object({
   heightM: finite(1, 1.6),
   frontOverhangM: finite(0.5, 1.3),
   rideHeightM: finite(0.08, 0.25),
+  /**
+   * Where the engine sits and how it is mounted (workshop technical view only; no physics). Absent =
+   * front engine, mounted across the car on front-wheel drive and lengthwise otherwise.
+   */
+  engineMount: z.object({ position: z.enum(['front', 'mid', 'rear']), orientation: z.enum(['transverse', 'longitudinal']) }).optional(),
   /** Parts that show on the body (career builds). Absent on catalogue cars. */
   mods: z
     .object({
