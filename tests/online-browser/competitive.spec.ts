@@ -173,11 +173,13 @@ async function checkProgress(page: Page, won: boolean, pilot: string, rival: str
   await expect(rankingRow.getByRole('cell').nth(3)).toHaveText(rp);
 
   await nav.getByRole('button', { name: 'Histórico', exact: true }).click();
+  await expect(screen.getByRole('columnheader', { name: 'Motivo', exact: true })).toBeVisible();
   const historyRow = screen.getByRole('row').filter({ has: page.getByRole('cell', { name: rival, exact: true }) });
   await expect(historyRow.getByRole('cell').nth(2)).toHaveText(outcome);
   await expect(historyRow.getByRole('cell').nth(3)).toHaveText(won ? '600' : '300');
   await expect(historyRow.getByRole('cell').nth(4)).toHaveText(won ? '16' : '-16');
   await expect(historyRow.getByRole('cell').nth(5)).toHaveText(pp);
+  await expect(historyRow.getByRole('cell').nth(6)).toHaveText('—');
 }
 
 test('duas sessões de navegador completam PKCE, garagem e corrida 1v1', async ({ browser, baseURL }) => {

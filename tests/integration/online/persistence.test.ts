@@ -120,6 +120,9 @@ it('protege cadastro, inventário, saldos, PP, histórico e liquidação da corr
   await matches.start(interrupted, TRACKS[0]!.id, 1, users, [undefined, undefined]);
   await matches.recoverInterrupted();
   expect((await matches.finish(interrupted, null, null)).map((award) => award.rp)).toEqual([0, 0]);
+  expect(await matches.history(users[0], 0, undefined)).toContainEqual(expect.objectContaining({
+    id: interrupted, outcome: 'cancelled', reward_reason: 'reinicialização',
+  }));
   await sql.begin(async (tx) => {
     await tx`select set_config('request.jwt.claim.sub', ${users[0]}, true)`;
     await tx`set local role authenticated`;
@@ -165,6 +168,46 @@ it('liquida uma corrida realmente empatada uma única vez', async () => {
     expect(saved?.cars[0]).toMatchObject({ pp_balance: 4, total_races: 1, wins: 0, losses: 0 });
     expect(await matches.history(user, 0, undefined)).toMatchObject([{ id: matchId, outcome: 'draw', cr_reward: 450, rp_delta: 0, pp_reward: 4 }]);
   }
+});
+
+it('registra o motivo de recompensas suspensas, reduzidas ou perdidas por desistência', async () => {
+  const pilots: [string, string] = [randomUUID(), randomUUID()];
+  await sql`insert into auth.users values (${pilots[0]}), (${pilots[1]})`;
+  await Promise.all(pilots.map((pilot, lane) => garage.create(identity(pilot), { ...onboarding, nickname: `Recompensa ${lane}` })));
+  const start = async () => {
+    const id = randomUUID();
+    const builds = await matches.start(id, TRACKS[0]!.id, 17, pilots, [undefined, undefined]);
+    return new AuthoritativeRace(id, builds, TRACKS[0]!, 17).snapshot();
+  };
+  const noStart = await start();
+  noStart.phase = 'finished';
+  expect(await matches.finish(noStart.matchId, noStart, null)).toMatchObject([
+    { cr: 0, rp: 0, pp: 0, reason: 'Sem participação efetiva' },
+    { cr: 0, rp: 0, pp: 0, reason: 'Sem participação efetiva' },
+  ]);
+
+  const abandoned = await start();
+  abandoned.lanes[0].result.rt = 0.2;
+  expect(await matches.finish(abandoned.matchId, abandoned, 1)).toMatchObject([
+    { outcome: 'win', cr: 600, rp: 16, pp: 5 },
+    { outcome: 'forfeit', cr: 0, rp: -16, pp: 0, reason: 'Desistência da partida' },
+  ]);
+  expect(await matches.history(pilots[1], 0, undefined)).toContainEqual(expect.objectContaining({
+    id: abandoned.matchId, outcome: 'forfeit', reward_reason: 'Desistência da partida',
+  }));
+
+  await sql`insert into online_reward_holds (user_id, reward_percent, reason, expires_at)
+    values (${pilots[1]}, 50, 'Revisão de homologação', now() + interval '1 hour')`;
+  const faults = await start();
+  faults.phase = 'finished';
+  faults.lanes[0].result.rt = -0.1;
+  faults.lanes[0].result.redLight = true;
+  faults.lanes[1].result.dnf = true;
+  faults.lanes[1].result.dnfReason = 'engine-blown';
+  expect(await matches.finish(faults.matchId, faults, null)).toMatchObject([
+    { outcome: 'draw', cr: 450, pp: 4, reason: null },
+    { outcome: 'draw', cr: 225, pp: 2, reason: 'Revisão de homologação' },
+  ]);
 });
 
 it('valida tokens pelo JWKS e completa um lobby competitivo com reconexão', async () => {

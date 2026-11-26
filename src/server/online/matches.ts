@@ -102,7 +102,8 @@ export class OnlineMatches {
         const rp = lane === 1 && change !== 0 ? -change : change;
         const hold = holds.find((item) => item.user_id === userId);
         const suppressed = !participated(lane) && outcome !== 'forfeit';
-        const reason = cancelled ? cancellationReason : suppressed ? 'sem participação efetiva' : hold?.reason ?? null;
+        const reason = cancelled ? cancellationReason : outcome === 'forfeit' ? 'Desistência da partida' :
+          suppressed ? 'Sem participação efetiva' : hold?.reason ?? null;
         const percent = cancelled || suppressed ? 0 : hold?.reward_percent ?? 100;
         const reward = ONLINE_REWARD_POLICY.rewards[outcome];
         const cr = Math.floor(reward.cr * percent / 100);
@@ -151,7 +152,7 @@ export class OnlineMatches {
 
   async history(userId: string, offset: number, carId: string | undefined) {
     return this.sql`select m.id, m.finished_at, m.track_id, m.distance_id, p.car_id, p.outcome, p.details,
-      p.cr_reward, p.rp_delta, p.pp_reward, p.reward_reason, p.build_snapshot->>'name' as nickname,
+      p.cr_reward, p.rp_delta, p.pp_reward, coalesce(p.reward_reason, m.cancellation_reason) as reward_reason, p.build_snapshot->>'name' as nickname,
       rival.build_snapshot->>'name' as opponent from online_match_players p join online_matches m on m.id = p.match_id
       left join online_match_players rival on rival.match_id = m.id and rival.lane <> p.lane
       where p.user_id = ${userId} and m.status <> 'running' and (${carId ?? null}::uuid is null or p.car_id = ${carId ?? null}::uuid)

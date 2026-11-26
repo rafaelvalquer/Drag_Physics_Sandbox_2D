@@ -289,14 +289,14 @@ export class OnlineMode implements Mode {
     const row = (headers: boolean, values: (string | number)[], mine = false) => h('tr', { class: mine ? 'online-focused' : '' },
       values.map((value) => headers ? h('th', { scope: 'col' }, value) : h('td', {}, value)));
     const heading = rank ? ['Posição', 'Piloto', 'Categoria', 'RP', 'V', 'D', 'Corridas', 'Vitórias %', 'Sequência', 'Melhor RP'] :
-      ['Quando', 'Adversário', 'Resultado', 'CR', 'RP', 'PP'];
+      ['Quando', 'Adversário', 'Resultado', 'CR', 'RP', 'PP', 'Motivo'];
     const rows = rank ? this.ranking?.entries.map((entry) => row(false, [entry.position, entry.nickname, entry.category, entry.rp,
       entry.wins, entry.losses, entry.total_races, entry.total_races ? `${(entry.wins * 100 / entry.total_races).toFixed(1)}%` : '—', entry.win_streak, entry.highest_rp], entry.mine)) :
       this.history?.map((entry) => row(false, [new Date(entry.finished_at).toLocaleString('pt-BR'), entry.opponent ?? '—',
-        outcomes[entry.outcome], entry.cr_reward, entry.rp_delta, entry.pp_reward]));
+        outcomes[entry.outcome], entry.cr_reward, entry.rp_delta, entry.pp_reward, entry.reward_reason ?? '—']));
     return h('section', { class: 'online-records' }, rank && this.ranking?.ownPosition != null && h('p', {}, `Sua posição global: ${this.ranking.ownPosition}`),
       !entries ? h('p', { role: 'status' }, 'Carregando…') : entries.length === 0 ? h('p', {}, 'Nenhum registro nesta página.') :
-        h('div', { class: 'online-table' }, h('table', {}, h('thead', {}, row(true, heading)), h('tbody', {}, rows ?? []))),
+        h('div', { class: 'online-table' }, h('table', { class: rank ? '' : 'online-history-table' }, h('thead', {}, row(true, heading)), h('tbody', {}, rows ?? []))),
       h('div', { class: 'row' }, this.button('Anterior', () => { this.page--; void this.fetchPage(); }, false, this.page === 0),
         this.button('Próxima', () => { this.page++; void this.fetchPage(); }, false, entries?.length !== 25)));
   }
