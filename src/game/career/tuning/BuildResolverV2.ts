@@ -1,5 +1,6 @@
 import { validateCar, type CarConfig, type TransmissionKind } from '../../../data/schema';
 import { exhaustPreset } from '../../../data/exhaustPresets';
+import { turboAcousticHints } from './turboAcousticHints';
 import { applyEngineParts, curvePeakCv, engineFuel, powerPeakRpm, TURBO_MAX_COMPRESSION, withStockBreathing, type EngineParts } from './breathingModel';
 import { applyCoolingHardware, applyGenericChassisMods, applyTyre, CLUTCH_TORQUE_MARGIN, combineMods, deepFreeze, fmtBar, workshopFinalDrive, workshopGearRatios, MAX_KNOCK_LOSS, type BuildResult, type BuildTune } from './buildCommon';
 import { ENGINE_FAMILIES } from './chapter2Parts';
@@ -541,6 +542,9 @@ export function resolveV2(base: CarConfig, partIds: readonly string[], key: stri
   }
   if (knockLoss > MAX_KNOCK_LOSS)
     errors.push(`detonação: este motor perde ${(knockLoss * 100).toFixed(0)} % do torque em atraso de ignição nesta pressão; baixe a pressão`);
+  // Turbo Acoustics 2.0: descriptive hardware hints for the sound (never read by the physics)
+  const turboHints = turboAcousticHints(car, partIds, (id) => { const part = parts.find((x) => x.id === id); return part && 'volumeAddL' in part ? (part.volumeAddL as number) : undefined; });
+  if (turboHints) car.acoustic = { ...car.acoustic, turbo: turboHints };
   const v = validateCar(car);
   if (!v.ok) errors.push(...v.errors);
   if (errors.length) return { ok: false, errors };

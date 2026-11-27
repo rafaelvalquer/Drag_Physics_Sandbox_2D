@@ -1,5 +1,6 @@
 import { validateCar, type CarConfig } from '../../../data/schema';
 import { exhaustPreset } from '../../../data/exhaustPresets';
+import { turboAcousticHints } from './turboAcousticHints';
 import { applyEngineParts, curvePeakCv, engineFuel, powerPeakRpm, TURBO_MAX_COMPRESSION, withStockBreathing, type EngineParts } from './breathingModel';
 import { CATEGORY_LABEL, CATEGORY_ORDER_V1, findPart, findPartForVersion, type PartCategory, type PartDef, type TirePart, type FilterPart, type ManifoldPart, type CamPart, type ExhaustPart, type TurboPart, type MechanicalMods } from './parts';
 import { applyTuneOverlay, needsOverlay } from './TuningCapabilities';
@@ -317,6 +318,9 @@ function resolveUncached(base: CarConfig, partIds: readonly string[], key: strin
       `detonação: a ${fmtBar(Math.max(...steadyBoostBar.map((b) => b.bar)))} bar este motor precisa de tanto atraso de ignição que perde ${(knockLoss * 100).toFixed(0)} % do torque; baixe a pressão`,
     );
   }
+  // Turbo Acoustics 2.0: descriptive hardware hints for the sound (never read by the physics)
+  const turboHints = turboAcousticHints(car, partIds, (id) => { const part = parts.find((x) => x.id === id); return part && 'volumeAddL' in part ? (part.volumeAddL as number) : undefined; });
+  if (turboHints) car.acoustic = { ...car.acoustic, turbo: turboHints };
   const v = validateCar(car);
   if (!v.ok) errors.push(...v.errors);
   if (errors.length) return { ok: false, errors };

@@ -374,6 +374,22 @@ export const AcousticSchema = z.object({
   /** Straight-cut gear teeth for whine (first gear / reverse style gears). */
   gearTeeth: z.number().int().min(8).max(60),
   mechanicalNoise: finite(0, 2),
+  /**
+   * Turbo Acoustics 2.0 hardware hints, written by the build resolvers (absent = the car as
+   * delivered). Acoustic only: the physics never reads them.
+   */
+  turbo: z
+    .object({
+      profile: z.string().min(1).max(48).optional(),
+      kit: z.enum(['basic', 'street', 'medium', 'strong', 'conversion', 'factory']).optional(),
+      stage: z.number().int().min(0).max(3).optional(),
+      turbine: z.enum(['small', 'medium', 'medium-high', 'large']).optional(),
+      intake: z.enum(['airbox', 'sport-element', 'cone', 'open']).optional(),
+      intakeExposure: finite(0, 1).optional(),
+      chargeVolumeAddL: finite(0, 20).optional(),
+      wastegate: z.enum(['internal', 'external-recirculated', 'external-open']).optional(),
+    })
+    .optional(),
 });
 export type AcousticConfig = z.infer<typeof AcousticSchema>;
 
