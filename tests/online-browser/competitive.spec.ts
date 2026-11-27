@@ -262,7 +262,9 @@ test('oficina compartilhada confirma PP, compra, conjunto e restauração pelo s
   await expect(workshop.getByTestId('ws-overview')).toContainText('20.000 CR');
   await expect(workshop.getByTestId('ws-buy')).toBeDisabled();
   await open();
-  await expect(workshop.getByTestId('ws-req-clutch-reinforced')).toBeVisible();
+  const clutchRequirement = workshop.getByTestId('ws-req-clutch-reinforced');
+  await expect(clutchRequirement).toBeVisible();
+  await clutchRequirement.scrollIntoViewIfNeeded();
   await shot('02-requisitos-mecanicos');
   await close();
 
