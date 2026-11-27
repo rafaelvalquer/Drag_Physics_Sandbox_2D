@@ -9,7 +9,7 @@ O som roda em um AudioWorklet (`vehicle-audio.worklet.ts`), com uma voz por veí
 | admissão | runner + ressonador de Helmholtz da caixa de ar, chiado da borboleta |
 | bloco | forças de inércia, ruído de combustão, ressonâncias estruturais, batidas de válvula, motor de partida |
 | escape | rede de guias de onda (coletores, câmaras do abafador, ponteira) |
-| turbo | assobio do compressor, chiado, válvula de alívio, surge |
+| turbo | Turbo Acoustics 2.0: ordens do rotor (1X/2X/3X/BPF), fluxo multibanda, válvula de alívio, flutter, wastegate, ressonâncias de duto |
 | pneus | chiado de patinagem, ronco de rolagem |
 | transmissão | assobio de engrenagens, patinagem da embreagem, batida de engate |
 | ambiente | vento |
@@ -65,11 +65,15 @@ A física roda a 120 Hz e o áudio a 44,1 ou 48 kHz. O `TelemetryStream` reconst
 
 ## 4. Fontes auxiliares (código novo)
 
-- **Turbo:**
-  - assobio de passagem das pás f = N_eixo/60 · nº de pás, desligado com fade antes de Nyquist para nunca gerar aliasing;
-  - chiado do compressor ∝ boost;
-  - ruído de alívio da BOV ∝ vazão da válvula;
-  - flutter de surge quando não há BOV.
+- **Turbo (Turbo Acoustics 2.0, `src/audio/dsp/turbo/`):** detalhes em [audio-turbo/README.md](audio-turbo/README.md).
+  - ordens do rotor 1X, 2X, 3X e passagem de pás (BPF) com fase contínua e fade anti-aliasing por parcial; biturbo paralelo = dois rotores independentes, twin-scroll = um rotor;
+  - fluxo do compressor em bandas móveis que seguem vazão, rotação e pressão (não só o boost);
+  - válvula de alívio atmosférica, recirculada ou ausente, guiada apenas pelo `bovFlow` da física;
+  - flutter como máquina de estados com decaimento limitado, dependente do hardware (válvula, pressão, rotor);
+  - wastegate interna, externa recirculada ou externa aberta, estimada a partir do limite de eixo da física;
+  - ressonâncias de duto e atenuação da admissão por perfil;
+  - perfis por dados (13 bases + família do motor + peças) resolvidos por `TurboProfileResolver`;
+  - o modelo anterior continua disponível (`turboModel: 'legacy'`) para a comparação A/B no Sandbox.
 - **Pneus:** chiado de patinagem (stick–slip, ruído de banda estreita) a partir da velocidade de escorregamento e da carga das rodas motrizes; ronco de rolagem ∝ v^1,5.
 - **Transmissão:**
   - assobio de engrenamento na rotação do eixo de entrada × dentes, ∝ √|torque|;
@@ -132,7 +136,8 @@ Não houve comparação com gravações de carros reais. Os itens abaixo são es
 - **Absorção dos abafadores, perda de parede e radiação da ponteira:** a radiação é um modelo de um polo, não a impedância de radiação completa de um pistão em tubo.
 - **Ressonâncias estruturais do bloco:** frequências e fatores Q escalados por tamanho, não medidos.
 - **Parâmetros de Wiebe e variação ciclo a ciclo:** valores típicos da literatura.
-- **Turbo, pneus, transmissão e vento:** níveis e espectros escolhidos para soar plausíveis; não há medição de referência.
+- **Turbo:** perfis calibrados por métricas objetivas e coerência física; a fidelidade auditiva depende da validação em [audio-turbo/listening-validation.md](audio-turbo/listening-validation.md), ainda pendente.
+- **Pneus, transmissão e vento:** níveis e espectros escolhidos para soar plausíveis; não há medição de referência.
 - **EGT e seu resfriamento ao longo do tubo:** modelo simples de primeira ordem.
 - **Ambiente:** não há reverberação nem reflexões do chão ou de muros, e a diretividade não é modelada.
 
