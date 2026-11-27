@@ -1,0 +1,56 @@
+{
+ "arco-1600/stock": {
+  "intake": "68c3e154",
+  "block": "c6cad37d",
+  "exhaust": "ed22fb1a",
+  "turbo": "57ef9c5",
+  "tire": "8245c4fb",
+  "transmission": "fb12c80e",
+  "environment": "2f08ae4c"
+ },
+ "vw-gol-gts-1988/stock": {
+  "intake": "131adf78",
+  "block": "2100a694",
+  "exhaust": "c1b45f1e",
+  "turbo": "57ef9c5",
+  "tire": "30b17706",
+  "transmission": "9b0b3c37",
+  "environment": "f05c2157"
+ },
+ "nissan-370z-2014/stock": {
+  "intake": "4009947c",
+  "block": "4635a1a4",
+  "exhaust": "589dfe5d",
+  "turbo": "57ef9c5",
+  "tire": "c9f09fde",
+  "transmission": "3ec18b9a",
+  "environment": "4c9442eb"
+ },
+ "vw-gol-gts-1988/preset:vw-gol-ap-turbo-sandbox": {
+  "intake": "dace63ca",
+  "block": "973a4651",
+  "exhaust": "411fc594",
+  "turbo": "e460d421",
+  "tire": "fddf3395",
+  "transmission": "93f2971e",
+  "environment": "1c88adee"
+ },
+ "bmw-320i-f30-2014/stock": {
+  "intake": "d37bde0",
+  "block": "19e99977",
+  "exhaust": "8b764ff9",
+  "turbo": "900b8dc2",
+  "tire": "39eb8a2b",
+  "transmission": "42fcd5e7",
+  "environment": "8b77a723"
+ },
+ "nissan-gtr-r35-2015/stock": {
+  "intake": "ed962ee8",
+  "block": "9906478f",
+  "exhaust": "28b70313",
+  "turbo": "69f4c466",
+  "tire": "a71426fe",
+  "transmission": "bd4c88d5",
+  "environment": "1fade702"
+ }
+}

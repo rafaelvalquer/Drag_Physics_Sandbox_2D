@@ -1,0 +1,317 @@
+{
+ "vetra-rs/stock": {
+  "partIds": [],
+  "tune": {},
+  "config": "7306d3ce",
+  "frames": "fefc7ffb",
+  "maxBoostPa": 139999.73426909134,
+  "maxShaftRpm": 166640.9107718559,
+  "distanceM": 322.8220910289288
+ },
+ "orion-xr/stock": {
+  "partIds": [],
+  "tune": {},
+  "config": "38372d65",
+  "frames": "2fa7d32a",
+  "maxBoostPa": 119995.86906906062,
+  "maxShaftRpm": 140327.45017344374,
+  "distanceM": 348.2494090767425
+ },
+ "vw-gol-gts-1988/preset:vw-gol-ap-turbo-sandbox": {
+  "partIds": [
+   "turbo-basic",
+   "clutch-reinforced",
+   "exhaust-sport",
+   "tires-sport"
+  ],
+  "tune": {
+   "boostBar": 0.5
+  },
+  "config": "a08d283e",
+  "frames": "f9ad6129",
+  "maxBoostPa": 49998.108528076926,
+  "maxShaftRpm": 149097.55056275812,
+  "distanceM": 289.82615688790526
+ },
+ "fiat-uno-mille-1995/turbo-medium": {
+  "partIds": [
+   "clutch-ceramic-race",
+   "fuel-pump",
+   "forged-kit",
+   "ecu-race",
+   "ignition-race",
+   "turbo-medium"
+  ],
+  "tune": {},
+  "config": "bbb1166e",
+  "frames": "b4c078e8",
+  "maxBoostPa": 104940.18182485539,
+  "maxShaftRpm": 149063.62431695405,
+  "distanceM": 250.3151122435388
+ },
+ "gm-chevette-sl-1988/turbo-medium": {
+  "partIds": [
+   "clutch-ceramic-race",
+   "fuel-pump",
+   "forged-kit",
+   "ecu-race",
+   "ignition-race",
+   "turbo-medium"
+  ],
+  "tune": {},
+  "config": "1b3025f4",
+  "frames": "fb4e279b",
+  "maxBoostPa": 104938.28714220537,
+  "maxShaftRpm": 149061.7864138044,
+  "distanceM": 290.0104712284185
+ },
+ "gm-celta-2003/turbo-medium": {
+  "partIds": [
+   "clutch-ceramic-race",
+   "fuel-pump",
+   "forged-kit",
+   "ecu-race",
+   "ignition-race",
+   "compression-celta-turbo-s3",
+   "turbo-medium"
+  ],
+  "tune": {},
+  "config": "514dc93e",
+  "frames": "c9fcb8cb",
+  "maxBoostPa": 104941.51141276797,
+  "maxShaftRpm": 149066.1524567488,
+  "distanceM": 251.15234908893402
+ },
+ "gm-corsa-gl-1996/turbo-medium": {
+  "partIds": [
+   "clutch-ceramic-race",
+   "fuel-pump",
+   "forged-kit",
+   "ecu-race",
+   "ignition-race",
+   "turbo-medium"
+  ],
+  "tune": {},
+  "config": "aa28d096",
+  "frames": "bb9e956b",
+  "maxBoostPa": 104944.08797222681,
+  "maxShaftRpm": 149066.4505138731,
+  "distanceM": 263.9203294923254
+ },
+ "gm-kadett-sl-1992/turbo-medium": {
+  "partIds": [
+   "clutch-ceramic-race",
+   "fuel-pump",
+   "forged-kit",
+   "ecu-race",
+   "ignition-race",
+   "turbo-medium"
+  ],
+  "tune": {},
+  "config": "79fbe093",
+  "frames": "2d0cca1b",
+  "maxBoostPa": 104930.10105452663,
+  "maxShaftRpm": 149056.36060085037,
+  "distanceM": 293.9008862463118
+ },
+ "vw-saveiro-gl-1994/preset:vw-saveiro-marcos-turbo-sandbox": {
+  "partIds": [
+   "turbo-basic",
+   "manifold-sport",
+   "exhaust-sport",
+   "clutch-reinforced",
+   "tires-sport"
+  ],
+  "tune": {},
+  "config": "32c2c7de",
+  "frames": "c681a599",
+  "maxBoostPa": 59997.24222601471,
+  "maxShaftRpm": 149097.02012687453,
+  "distanceM": 286.38426054788044
+ },
+ "gm-astra-2011/conversion-s2": {
+  "partIds": [
+   "conversion-compression-gm-familia2",
+   "conversion-oil-gm-familia2",
+   "fuel-gm-familia2-s3",
+   "ignition-gm-familia2-s3",
+   "rotating-assembly-gm-familia2-s3",
+   "clutch-gm-familia2-s3",
+   "conversion-turbo-gm-familia2-s2"
+  ],
+  "tune": {},
+  "config": "f8f6c4f0",
+  "frames": "247b2d32",
+  "maxBoostPa": 49999.91157629696,
+  "maxShaftRpm": 143837.4175400264,
+  "distanceM": 297.86381787409266
+ },
+ "peugeot-208-gt-2017/stock": {
+  "partIds": [],
+  "tune": {},
+  "config": "dcd90bdf",
+  "frames": "d431ab9c",
+  "maxBoostPa": 99999.99999014879,
+  "maxShaftRpm": 192952.76424357182,
+  "distanceM": 289.0070886005112
+ },
+ "vw-golf-gti-mk4-2003/stock": {
+  "partIds": [],
+  "tune": {},
+  "config": "9131b13c",
+  "frames": "1e12e4f0",
+  "maxBoostPa": 79999.99606982253,
+  "maxShaftRpm": 175411.60242364855,
+  "distanceM": 278.2426758390695
+ },
+ "audi-a3-18t-2005/stock": {
+  "partIds": [],
+  "tune": {},
+  "config": "9465bfbc",
+  "frames": "ed44a3ed",
+  "maxBoostPa": 79999.99731114444,
+  "maxShaftRpm": 175411.60242364855,
+  "distanceM": 277.09141282177734
+ },
+ "mercedes-c200-w205-2015/stock": {
+  "partIds": [],
+  "tune": {},
+  "config": "68c44c57",
+  "frames": "5d94726e",
+  "maxBoostPa": 99999.99991389975,
+  "maxShaftRpm": 184182.18401783815,
+  "distanceM": 310.4205549041212
+ },
+ "bmw-320i-f30-2014/stock": {
+  "partIds": [],
+  "tune": {},
+  "config": "b29aa778",
+  "frames": "7dd72248",
+  "maxBoostPa": 89999.9999987171,
+  "maxShaftRpm": 192952.76424689312,
+  "distanceM": 318.0343435650322
+ },
+ "honda-civic-si-2008/conversion-s2": {
+  "partIds": [
+   "conversion-compression-honda-k20",
+   "conversion-oil-honda-k20",
+   "fuel-honda-k20-s3",
+   "ignition-honda-k20-s3",
+   "rotating-assembly-honda-k20-s3",
+   "clutch-honda-k20-s3",
+   "conversion-turbo-honda-k20-s2"
+  ],
+  "tune": {},
+  "config": "37a14eb5",
+  "frames": "a2719933",
+  "maxBoostPa": 44982.55346561196,
+  "maxShaftRpm": 143813.54149998323,
+  "distanceM": 308.7299506302064
+ },
+ "vw-jetta-tsi-2012/stock": {
+  "partIds": [],
+  "tune": {},
+  "config": "5cd24133",
+  "frames": "146e2d07",
+  "maxBoostPa": 89999.99996522196,
+  "maxShaftRpm": 188567.47412994766,
+  "distanceM": 299.9121669842933
+ },
+ "mitsubishi-evo-x-2012/stock": {
+  "partIds": [],
+  "tune": {},
+  "config": "ade46a31",
+  "frames": "ce42c3a9",
+  "maxBoostPa": 124999.92555172359,
+  "maxShaftRpm": 166640.98705215112,
+  "distanceM": 365.4977881408105
+ },
+ "bmw-335i-f30-2013/stock": {
+  "partIds": [],
+  "tune": {},
+  "config": "19b763e6",
+  "frames": "5a7ada1c",
+  "maxBoostPa": 84999.99987659458,
+  "maxShaftRpm": 175411.6037807519,
+  "distanceM": 367.07771611336483
+ },
+ "nissan-350z-2006/conversion-s2": {
+  "partIds": [
+   "conversion-compression-nissan-vq35de",
+   "conversion-oil-nissan-vq35de",
+   "fuel-nissan-vq35de-s3",
+   "ignition-nissan-vq35de-s3",
+   "rotating-assembly-nissan-vq35de-s3",
+   "clutch-nissan-vq35de-s3",
+   "conversion-turbo-nissan-vq35de-s2"
+  ],
+  "tune": {},
+  "config": "6fb6960c",
+  "frames": "2d9543fa",
+  "maxBoostPa": 43998.01964221574,
+  "maxShaftRpm": 143834.746342851,
+  "distanceM": 352.8406695648223
+ },
+ "nissan-370z-2014/conversion-s2": {
+  "partIds": [
+   "conversion-compression-nissan-vq37vhr",
+   "conversion-oil-nissan-vq37vhr",
+   "fuel-nissan-vq37vhr-s3",
+   "ignition-nissan-vq37vhr-s3",
+   "rotating-assembly-nissan-vq37vhr-s3",
+   "clutch-nissan-vq37vhr-s3",
+   "conversion-turbo-nissan-vq37vhr-s2"
+  ],
+  "tune": {},
+  "config": "4753cb70",
+  "frames": "743c2b8d",
+  "maxBoostPa": 41993.20564601922,
+  "maxShaftRpm": 143827.34574171627,
+  "distanceM": 369.15796287393846
+ },
+ "mercedes-amg-c43-2017/stock": {
+  "partIds": [],
+  "tune": {},
+  "config": "af536d4b",
+  "frames": "acdcc300",
+  "maxBoostPa": 89999.99999995613,
+  "maxShaftRpm": 201723.34444059816,
+  "distanceM": 436.08379986679336
+ },
+ "kia-stinger-gt-2019/stock": {
+  "partIds": [],
+  "tune": {},
+  "config": "bc131551",
+  "frames": "c717a9d9",
+  "maxBoostPa": 89999.99999853219,
+  "maxShaftRpm": 192952.76424693936,
+  "distanceM": 412.55021309261076
+ },
+ "maserati-ghibli-sq4-2015/stock": {
+  "partIds": [],
+  "tune": {},
+  "config": "117649ac",
+  "frames": "64158bb6",
+  "maxBoostPa": 94999.99999726797,
+  "maxShaftRpm": 192952.76424631383,
+  "distanceM": 431.3409463261783
+ },
+ "alfa-giulia-qv-2017/stock": {
+  "partIds": [],
+  "tune": {},
+  "config": "89f7389e",
+  "frames": "85b59d86",
+  "maxBoostPa": 119999.99999974477,
+  "maxShaftRpm": 210493.9246335905,
+  "distanceM": 459.3688293828216
+ },
+ "nissan-gtr-r35-2015/stock": {
+  "partIds": [],
+  "tune": {},
+  "config": "4783b2ad",
+  "frames": "c973887",
+  "maxBoostPa": 99999.99981916,
+  "maxShaftRpm": 192952.7641520186,
+  "distanceM": 481.5271564262502
+ }
+}
