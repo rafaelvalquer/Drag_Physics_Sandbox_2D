@@ -1,4 +1,4 @@
-import type { AcousticQuality, AcousticVehicleConfig } from '../dsp/AcousticConfig';
+import type { AcousticQuality, AcousticVehicleConfig, TurboAudioOptions } from '../dsp/AcousticConfig';
 
 /** Name under which the vehicle voice processor is registered. */
 export const VEHICLE_PROCESSOR = 'vehicle-audio';
@@ -13,7 +13,8 @@ export interface VehicleProcessorOptions {
 export type ToWorklet =
   | { type: 'frames'; count: number; data: Float64Array }
   | { type: 'config'; config: AcousticVehicleConfig }
-  | { type: 'quality'; quality: AcousticQuality }
+  | { type: 'turbo-comparison'; options: TurboAudioOptions }
+  | { type: 'quality'; quality: AcousticQuality; turboComparisonGain?: number }
   | { type: 'ambient'; ambientK: number }
   | { type: 'reset' }
   | { type: 'dispose' };

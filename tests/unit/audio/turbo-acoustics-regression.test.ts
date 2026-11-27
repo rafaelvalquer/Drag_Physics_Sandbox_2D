@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { CH, CHANNELS } from '../../../src/audio/dsp/AcousticConfig';
+import type { TurboAcousticModel } from '../../../src/audio/dsp/turbo/TurboAcousticTypes';
 import { turboMetrics } from '../../../src/audio/analysis/turboLab';
 import { referenceTurboBuilds } from '../../../src/audio/analysis/turboBuilds';
 import { fnvFloat32, HASH_CARS, HASH_PHASES, HASH_TURBO_BUILDS, physicsFingerprint, renderTurboPhysics } from '../../../src/audio/analysis/turboPhysics';
@@ -21,9 +22,9 @@ const hashBefore = JSON.parse(readFileSync(join(BEFORE, 'channel-hash.json'), 'u
 /** The transmission noise used the old shared turbo PRNG on turbo cars; v2 gives the turbo its own streams. */
 const TURBO_DEPENDENT = new Set<number>([CH.turbo, CH.transmission]);
 
-const render = (car: ReturnType<typeof carById>, model: 'legacy' | 'v2') =>
+const render = (car: ReturnType<typeof carById>, model: TurboAcousticModel) =>
   renderTurboPhysics(car, 48000, { phases: HASH_PHASES, acoustic: (c) => ({ ...c, turboModel: model }) });
-const hashes = (car: ReturnType<typeof carById>, model: 'legacy' | 'v2', keep?: (r: ReturnType<typeof render>) => void): Record<string, string> => {
+const hashes = (car: ReturnType<typeof carById>, model: TurboAcousticModel, keep?: (r: ReturnType<typeof render>) => void): Record<string, string> => {
   const r = render(car, model);
   keep?.(r);
   return Object.fromEntries(CHANNELS.map((c, k) => [c, fnvFloat32(r.ch[k]!)]));
@@ -45,7 +46,7 @@ describe('Turbo Acoustics 2.0 — physics and channel regression', () => {
     it(`NA car ${id}: every channel bit-identical to main`, { timeout: 60_000 }, () => {
       const car = carById(id);
       expect(car.engine.induction).not.toBe('turbo');
-      expect(hashes(car, 'v2')).toEqual(hashBefore[`${id}/stock`]);
+      expect(hashes(car, 'hybrid')).toEqual(hashBefore[`${id}/stock`]);
     });
   }
 
@@ -56,7 +57,10 @@ describe('Turbo Acoustics 2.0 — physics and channel regression', () => {
       let legacyTurbo: Float32Array = new Float32Array(0);
       const legacy = hashes(b.car, 'legacy', (r) => (legacyTurbo = r.ch[CH.turbo]!));
       const v2 = hashes(b.car, 'v2');
+      const hybrid = hashes(b.car, 'hybrid');
+      expect(hybrid.turbo).not.toBe(v2.turbo);
       CHANNELS.forEach((c, k) => {
+        if (k !== CH.turbo) expect(hybrid[c], `${c} (hybrid vs 2.0)`).toBe(v2[c]);
         if (!TURBO_DEPENDENT.has(k)) {
           expect(legacy[c], `${c} (legacy)`).toBe(before[c]);
           expect(v2[c], `${c} (v2)`).toBe(before[c]);

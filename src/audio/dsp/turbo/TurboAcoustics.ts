@@ -4,7 +4,7 @@ import { BlowOffAcoustics } from './BlowOffAcoustics';
 import { CompressorFlutter } from './CompressorFlutter';
 import { CompressorWhoosh, type WhooshInput } from './CompressorWhoosh';
 import { TurboAcousticMixer, TWIN_ROTOR_GAIN } from './TurboAcousticMixer';
-import { TURBO_LAYER, type ResolvedTurboProfile, type TurboAcousticControl, type TurboAcousticEstimates } from './TurboAcousticTypes';
+import { TURBO_LAYER, type ResolvedTurboProfile, type TurboAcousticControl, type TurboAcousticEstimates, type TurboDiagnostics } from './TurboAcousticTypes';
 import { TurboDuctResonance } from './TurboDuctResonance';
 import { resolveTurboProfile } from './TurboProfileResolver';
 import { smoothstep, TurboRotorWhine, type RotorTargets } from './TurboRotorWhine';
@@ -60,6 +60,9 @@ export class TurboAcoustics {
   private readonly redlineOmega: number;
   private readonly cylinders: number;
   private readonly lowQuality: boolean;
+  private readonly diagnostics: TurboDiagnostics;
+  private readonly reduced: boolean;
+  private readonly hybrid: boolean;
   private counter = 0;
   private prevShaft = 0;
   private prevBoost = 0;
@@ -83,6 +86,9 @@ export class TurboAcoustics {
     const p = profile ?? turboProfileOf(cfg);
     if (!p) throw new Error('TurboAcoustics needs a turbocharged engine');
     this.profile = p;
+    this.hybrid = cfg.turboModel === undefined || cfg.turboModel === 'hybrid';
+    this.reduced = this.hybrid || cfg.turboModel === 'reduced';
+    const d = this.diagnostics = cfg.turboDiagnostics ?? {};
     this.sampleRate = sampleRate;
     this.blockS = TURBO_BLOCK / sampleRate;
     this.lowQuality = cfg.quality === 'low';
@@ -90,15 +96,22 @@ export class TurboAcoustics {
     this.cylinders = cfg.engine.cylinders;
     const seed = cfg.seed * 7027 + 101;
     const lq = this.lowQuality;
-    this.rotorA = new TurboRotorWhine(sampleRate, p.blades, new Prng(seed + 1), p.rotor.modulationDepth, lq, 0);
+    const am = d.amplitude ?? 1;
+    const texture = this.hybrid ? { ...p.texture, ...d.texture } : undefined;
+    if (texture) texture.amplitudeVariation *= am;
+    const makeRotor = (sourceSeed: number, phase: number) => new TurboRotorWhine(
+      sampleRate, p.blades, new Prng(sourceSeed), p.rotor.modulationDepth * am, lq, phase,
+      texture, d.coherent, d.narrowband, !lq || (d.exhaustPulse ?? 0) > 0,
+    );
+    this.rotorA = makeRotor(seed + 1, 0);
     // the second rotor starts at an unrelated phase: two real rotors are never phase-aligned
-    this.rotorB = p.twin ? new TurboRotorWhine(sampleRate, p.blades, new Prng(seed + 2), p.rotor.modulationDepth, lq, 0.37) : null;
+    this.rotorB = p.twin ? makeRotor(seed + 2, 0.37) : null;
     this.whoosh = new CompressorWhoosh(sampleRate, p, new Prng(seed + 3), lq);
     this.bov = new BlowOffAcoustics(sampleRate, p, new Prng(seed + 4), lq);
     this.flutter = new CompressorFlutter(sampleRate, p, new Prng(seed + 5), lq);
     this.wastegate = new WastegateAcoustics(sampleRate, p, new Prng(seed + 6), lq);
-    this.duct = new TurboDuctResonance(sampleRate, p, lq);
-    this.mixer = new TurboAcousticMixer(cfg.turboLayers ?? TURBO_LAYER.all, p.overallGain);
+    this.duct = new TurboDuctResonance(sampleRate, p, lq, this.hybrid, d.resonances);
+    this.mixer = new TurboAcousticMixer(cfg.turboLayers ?? TURBO_LAYER.all, p.overallGain, d.whoosh);
     this.kAccel = 1 - Math.exp(-2 * Math.PI * 6 * this.blockS);
     this.kRate = 1 - Math.exp(-2 * Math.PI * 20 * this.blockS);
     this.kFlow = 1 - Math.exp(-this.blockS / 0.04);
@@ -109,13 +122,15 @@ export class TurboAcoustics {
     const onset = smoothstep(r.onsetShaft * 0.45, r.onsetShaft * 1.5, s);
     const a = r.level * Math.pow(Math.min(1.25, s), 2.2) * (0.22 + 0.78 * work) * onset;
     const exposure = 1 + 0.35 * this.profile.intakeExposure;
-    t.g1 = a * r.order1Gain * (0.7 + 0.3 * s);
-    t.g2 = a * r.order2Gain * (0.55 + 0.45 * work) * (1 + 0.5 * spool);
-    t.g3 = a * r.order3Gain * (0.45 + 0.55 * work) * (1 + 0.6 * spool);
-    t.gB = a * r.bladePassGain * (0.35 + 0.65 * work) * (1 + 0.4 * spool) * exposure;
+    const [g1, g2, g3, gB] = this.profile.reducedOrders;
+    const d = this.diagnostics;
+    t.g1 = a * (this.reduced ? g1 : r.order1Gain) * (0.7 + 0.3 * s) * (d.order1 ?? 1);
+    t.g2 = a * (this.reduced ? g2 : r.order2Gain) * (0.55 + 0.45 * work) * (this.reduced ? 1 : 1 + 0.5 * spool) * (d.order2 ?? 1);
+    t.g3 = a * (this.reduced ? g3 : r.order3Gain) * (0.45 + 0.55 * work) * (this.reduced ? 1 : 1 + 0.6 * spool) * (d.order3 ?? 1);
+    t.gB = a * (this.reduced ? gB : r.bladePassGain) * (0.35 + 0.65 * work) * (1 + 0.4 * spool) * exposure * (d.bladePass ?? 1);
     // four-stroke: cylinders/2 exhaust pulses per crank revolution
     t.pulseHz = (Math.abs(omega) / (2 * Math.PI)) * (this.cylinders / 2);
-    t.pulseDepth = r.pulseModulation * Math.min(1, load);
+    t.pulseDepth = r.pulseModulation * Math.min(1, load) * (this.hybrid ? .24 : 1) * (d.exhaustPulse ?? 1);
     t.am = 1;
   }
 
@@ -184,7 +199,8 @@ export class TurboAcoustics {
     const bov = this.bov.process(c.bovFlow, this.estimates.boostNorm, c.boostPa);
     const wg = this.wastegate.process();
     const recirc = this.profile.ventType === 'recirculating';
-    const inlet = this.mixer.inlet(rotor, this.flutter.rotorAm, whoosh, flutter, recirc ? bov : 0);
+    const rotorAm = 1 + (this.flutter.rotorAm - 1) * (this.diagnostics.amplitude ?? 1);
+    const inlet = this.mixer.inlet(rotor, rotorAm, whoosh, flutter, recirc ? bov : 0);
     const ducted = this.duct.process(inlet);
     this.rotorOut = rotor;
     this.whooshOut = whoosh;

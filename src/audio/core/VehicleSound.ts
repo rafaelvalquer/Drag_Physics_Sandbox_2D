@@ -206,12 +206,16 @@ export class VehicleSound {
     this.panner.pan.setTargetAtTime(pan, t, 0.03);
   }
 
-  setQuality(q: AcousticQuality): void {
-    this.post({ type: 'quality', quality: q });
+  setQuality(q: AcousticQuality, turboComparisonGain?: number): void {
+    this.post({ type: 'quality', quality: q, turboComparisonGain });
   }
 
   setConfig(config: AcousticVehicleConfig): void {
     this.post({ type: 'config', config });
+  }
+
+  compareTurbo({ turboModel, turboLayers, turboDiagnostics, turboComparisonGain }: AcousticVehicleConfig): void {
+    this.post({ type: 'turbo-comparison', options: { turboModel, turboLayers, turboDiagnostics, turboComparisonGain } });
   }
 
   setAmbient(ambientK: number): void {

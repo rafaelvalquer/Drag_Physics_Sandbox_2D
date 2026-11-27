@@ -36,6 +36,7 @@ export interface PhysicsTurboRender extends TurboRender {
   maxBoostPa: number;
   maxShaftRpm: number;
   maxBovFlow: number;
+  voiceMsPerAudioSecond: number;
 }
 
 export function renderTurboPhysics(
@@ -61,6 +62,8 @@ export function renderTurboPhysics(
   let maxBoostPa = 0;
   let maxShaftRpm = 0;
   let maxBovFlow = 0;
+  let voiceMs = 0;
+  let measuredSamples = 0;
   const redline = car.engine.redlineRpm;
   const gears = car.transmission.gearRatios.length;
   const run = (seconds: number, pedal: number, autoShift: boolean, engage = false): void => {
@@ -71,7 +74,6 @@ export function renderTurboPhysics(
       if (autoShift && !sim.shift.active && sim.clutchCtl.mode === 'LOCKED' && sim.engine.rpm > redline - 250 && sim.gear < gears) sim.requestShift(1);
       sim.step(H);
       const a = sim.audioFrame;
-      voice.pushFrame(a);
       maxBoostPa = Math.max(maxBoostPa, a[AF.boostPressure]!);
       maxShaftRpm = Math.max(maxShaftRpm, a[AF.turboShaftRpm]!);
       maxBovFlow = Math.max(maxBovFlow, a[AF.bovFlow]!);
@@ -87,8 +89,15 @@ export function renderTurboPhysics(
       acc += sampleRate * H;
       const m = Math.min(Math.floor(acc), total - written);
       acc -= Math.floor(acc);
+      const measure = written >= startupS * sampleRate;
+      const start = measure ? performance.now() : 0;
+      voice.pushFrame(a);
       if (m > 0) {
         voice.render(tmp, m);
+        if (measure) {
+          voiceMs += performance.now() - start;
+          measuredSamples += m;
+        }
         for (let k = 0; k < CHANNEL_COUNT; k++) ch[k]!.set(tmp[k]!.subarray(0, m), written);
         written += m;
       }
@@ -99,7 +108,7 @@ export function renderTurboPhysics(
     phaseStart[p.name] = written;
     run(p.seconds, p.pedal, p.autoShift === true, p.engage === true);
   }
-  return { ch, meta, voice, sampleRate, phaseStart, maxBoostPa, maxShaftRpm, maxBovFlow };
+  return { ch, meta, voice, sampleRate, phaseStart, maxBoostPa, maxShaftRpm, maxBovFlow, voiceMsPerAudioSecond: voiceMs * sampleRate / measuredSamples };
 }
 
 /**

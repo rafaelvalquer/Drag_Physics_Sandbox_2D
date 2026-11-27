@@ -1,5 +1,5 @@
 import type { AcousticConfig, CarConfig, EngineConfig, ExhaustConfig } from '../../data/schema';
-import type { TurboAcousticModel } from './turbo/TurboAcousticTypes';
+import type { TurboAcousticModel, TurboDiagnostics } from './turbo/TurboAcousticTypes';
 
 /** Mixer channels produced by each vehicle voice (one mono AudioWorklet output each). */
 export const CHANNELS = ['intake', 'block', 'exhaust', 'turbo', 'tire', 'transmission', 'environment'] as const;
@@ -17,12 +17,17 @@ export const CHANNEL_COUNT = CHANNELS.length;
 
 export type AcousticQuality = 'high' | 'low';
 
-/**
- * Everything the acoustic model needs about a vehicle, as plain serializable data (sent to the
- * AudioWorklet in `processorOptions` / config messages). Derived from the same CarConfig the
- * physics uses, so geometry, firing order, cam timing and exhaust are shared, not duplicated.
- */
-export interface AcousticVehicleConfig {
+export interface TurboAudioOptions {
+  /** Absent = hybrid. */
+  turboModel?: TurboAcousticModel;
+  turboLayers?: number;
+  turboDiagnostics?: TurboDiagnostics;
+  /** Listening comparison only. Applies to the turbo channel of any model. */
+  turboComparisonGain?: number;
+}
+
+/** Serializable voice configuration derived from the same CarConfig used by the simulation. */
+export interface AcousticVehicleConfig extends TurboAudioOptions {
   engine: Pick<
     EngineConfig,
     | 'id'
@@ -56,23 +61,6 @@ export interface AcousticVehicleConfig {
   quality: AcousticQuality;
   /** Seed of the noise generators (deterministic rendering for tests). */
   seed: number;
-  /** Turbo sound model (A/B comparison). Absent = 'v2'. */
-  turboModel?: TurboAcousticModel;
-  /** Dev isolation of the Turbo Acoustics 2.0 layers (TURBO_LAYER bits). Absent = all. */
-  turboLayers?: number;
-}
-
-let defaultTurboModel: TurboAcousticModel = 'v2';
-let defaultTurboLayers: number | undefined;
-
-/** Dev A/B switch: the turbo model (and layer mask) every new voice configuration uses. */
-export function setTurboAcousticDefaults(model: TurboAcousticModel, layers?: number): void {
-  defaultTurboModel = model;
-  defaultTurboLayers = layers;
-}
-
-export function turboAcousticDefaults(): { model: TurboAcousticModel; layers: number | undefined } {
-  return { model: defaultTurboModel, layers: defaultTurboLayers };
 }
 
 export function carToAcousticConfig(car: CarConfig, quality: AcousticQuality = 'high', seed = 1): AcousticVehicleConfig {
@@ -109,7 +97,5 @@ export function carToAcousticConfig(car: CarConfig, quality: AcousticQuality = '
     tireRadiusM: car.tires.radiusM,
     quality,
     seed,
-    turboModel: defaultTurboModel,
-    ...(defaultTurboLayers !== undefined ? { turboLayers: defaultTurboLayers } : {}),
   };
 }

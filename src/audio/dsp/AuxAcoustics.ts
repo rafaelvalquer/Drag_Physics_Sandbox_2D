@@ -3,6 +3,12 @@ import type { AcousticVehicleConfig } from './AcousticConfig';
 import { Biquad, OnePole, ParamSmoother } from './Filters';
 import { LegacyTurboAcoustics } from './turbo/LegacyTurboAcoustics';
 import { TurboAcoustics } from './turbo/TurboAcoustics';
+import type { TurboAcousticControl } from './turbo/TurboAcousticTypes';
+
+interface TurboVoice {
+  source: TurboAcoustics | LegacyTurboAcoustics;
+  gain: number;
+}
 
 const TWO_PI = 2 * Math.PI;
 
@@ -112,10 +118,19 @@ export class AuxAcoustics {
   private readonly rng: Prng;
   /** Separate stream for the tyre/wind noise so retuning them never changes the clunk and turbo randomness. */
   private readonly noiseRng: Prng;
-  /** Turbo Acoustics 2.0 voice (null without turbo or in legacy mode). */
-  readonly turbo: TurboAcoustics | null;
-  /** Legacy turbo model (A/B comparison only). */
-  readonly legacyTurbo: LegacyTurboAcoustics | null;
+  private turboVoice: TurboVoice | null = null;
+  private oldTurboVoice: TurboVoice | null = null;
+  private queuedTurboVoice: TurboVoice | null = null;
+  private turboOldGain = 0;
+  private readonly turboFadeStep: number;
+  get turbo(): TurboAcoustics | null {
+    const source = this.turboVoice?.source;
+    return source instanceof TurboAcoustics ? source : null;
+  }
+  get legacyTurbo(): LegacyTurboAcoustics | null {
+    const source = this.turboVoice?.source;
+    return source instanceof LegacyTurboAcoustics ? source : null;
+  }
   private readonly turboCtl = { shaftRpm: 0, shaftRpm2: 0, boostPa: 0, throttle: 0, engineLoad: 0, bovFlow: 0, omega: 0, exhaustTempK: 700, engineRunning: true };
   private readonly teeth: number;
   private readonly mech: number;
@@ -162,6 +177,7 @@ export class AuxAcoustics {
   tireSlipOut = 0;
 
   constructor(sampleRate: number, cfg: AcousticVehicleConfig, tuning: Partial<NoiseTuning> = {}) {
+    this.turboFadeStep = 1 / (.04 * sampleRate);
     this.tune = { ...DEFAULT_NOISE_TUNING, ...tuning };
     // equal band-limited noise power at every sample rate (white PSD ∝ σ²/fs)
     this.noiseScale = Math.sqrt(sampleRate / 48000);
@@ -177,12 +193,7 @@ export class AuxAcoustics {
     this.nyq = sampleRate / 2;
     this.rng = new Prng(cfg.seed * 104729 + 3);
     this.noiseRng = new Prng(cfg.seed * 7919 + 11);
-    const t = cfg.engine.induction === 'turbo' ? cfg.engine.turbo : undefined;
-    const legacy = !!t && cfg.turboModel === 'legacy';
-    this.turbo = t && !legacy ? new TurboAcoustics(sampleRate, cfg) : null;
-    this.legacyTurbo = t && legacy
-      ? new LegacyTurboAcoustics(sampleRate, cfg.seed * 104729 + 17, t.compressorBlades, t.layout === 'parallel-twin', t.bovEnabled, t.bovVent === 'recirculating')
-      : null;
+    this.turboVoice = this.buildTurbo(cfg);
     this.teeth = cfg.acoustic.gearTeeth;
     this.mech = cfg.acoustic.mechanicalNoise;
     this.gearRatios = cfg.gearRatios;
@@ -198,6 +209,37 @@ export class AuxAcoustics {
     this.windLp = new Biquad(sampleRate).setLowpass(this.tune.windLpMinHz, 0.6);
     this.windLp2 = new OnePole(sampleRate, this.tune.windLpMinHz * 2);
     this.windHp = new OnePole(sampleRate, 45);
+  }
+
+  private buildTurbo(cfg: AcousticVehicleConfig): TurboVoice | null {
+    const t = cfg.engine.induction === 'turbo' ? cfg.engine.turbo : undefined;
+    if (!t) return null;
+    const rate = 2 * this.nyq;
+    const source = cfg.turboModel === 'legacy'
+      ? new LegacyTurboAcoustics(rate, cfg.seed * 104729 + 17, t.compressorBlades, t.layout === 'parallel-twin', t.bovEnabled, t.bovVent === 'recirculating')
+      : new TurboAcoustics(rate, cfg);
+    return { source, gain: cfg.turboComparisonGain ?? 1 };
+  }
+
+  /** Reconfigure the turbo while keeping the same telemetry and the other acoustic channels. */
+  compareTurbo(cfg: AcousticVehicleConfig): void {
+    const next = this.buildTurbo(cfg);
+    if (!next) return;
+    if (this.oldTurboVoice) this.queuedTurboVoice = next;
+    else this.fadeTurboTo(next);
+  }
+
+  private fadeTurboTo(next: TurboVoice): void {
+    this.oldTurboVoice = this.turboVoice;
+    this.turboVoice = next;
+    this.turboOldGain = 1;
+  }
+
+  private renderTurbo(voice: TurboVoice, c: TurboAcousticControl): number {
+    const source = voice.source;
+    return voice.gain * (source instanceof TurboAcoustics
+      ? source.process(c)
+      : source.process(c.shaftRpm, c.shaftRpm2, c.boostPa, c.throttle, c.bovFlow));
   }
 
   process(c: AuxControl): void {
@@ -239,8 +281,8 @@ export class AuxAcoustics {
     const ns = this.noiseScale;
 
     // ---- turbo
-    let turbo = 0;
-    if (this.turbo) {
+    this.turboOut = 0;
+    if (this.turboVoice) {
       const tc = this.turboCtl;
       tc.shaftRpm = c.turboShaftRpm;
       tc.shaftRpm2 = c.turboShaftRpm2 ?? 0;
@@ -251,9 +293,19 @@ export class AuxAcoustics {
       tc.omega = c.omega;
       tc.exhaustTempK = c.exhaustTempK ?? 700;
       tc.engineRunning = c.combustion ?? true;
-      turbo = this.turbo.process(tc);
-    } else if (this.legacyTurbo) turbo = this.legacyTurbo.process(c.turboShaftRpm, c.turboShaftRpm2, c.boostPa, c.throttle, c.bovFlow);
-    this.turboOut = turbo;
+      this.turboOut = this.renderTurbo(this.turboVoice, tc);
+      if (this.oldTurboVoice) {
+        const past = this.renderTurbo(this.oldTurboVoice, tc);
+        this.turboOut += this.turboOldGain * (past - this.turboOut);
+        this.turboOldGain = Math.max(0, this.turboOldGain - this.turboFadeStep);
+        if (this.turboOldGain === 0) {
+          this.oldTurboVoice = null;
+          const queued = this.queuedTurboVoice;
+          this.queuedTurboVoice = null;
+          if (queued) this.fadeTurboTo(queued);
+        }
+      }
+    }
 
     // ---- tyres: continuous rolling noise + (separate) skid squeal
     let roll = 0;

@@ -8,6 +8,48 @@ const ids = [
 
 test.afterEach(() => expect(errors, errors.join('\n')).toEqual([]));
 
+test('Sandbox switches four turbo models and controls each diagnostic without restarting the car', async ({ page }) => {
+  await boot(page);
+  await page.getByTestId('car-select').selectOption('vw-gol-ap-turbo-sandbox');
+  await waitEngineRunning(page);
+  const panel = page.getByTestId('turbo-ab');
+  await panel.locator('summary').click();
+  const select = panel.getByTestId('turbo-model');
+  await expect(select.locator('option')).toHaveCount(4);
+  await expect(select).toHaveValue('hybrid');
+  const mask = panel.locator('[data-turbo-layer="order3"]');
+  await select.selectOption('legacy');
+  await expect(mask).toBeDisabled();
+  for (const model of ['v2', 'reduced', 'hybrid']) {
+    await select.selectOption(model);
+    await expect(mask).toBeEnabled();
+    await expect.poll(() => mode(page, 'm.turboComparison.model')).toBe(model);
+  }
+  await mask.uncheck();
+  await expect(panel.locator('[data-turbo-gain="order3"]')).toHaveValue('0');
+  await expect.poll(() => mode(page, 'm.turboComparison.diagnostics.order3')).toBe(0);
+  await panel.locator('[data-turbo-layer="resonance-1"]').uncheck();
+  await panel.locator('[data-turbo-layer="exhaustPulse"]').uncheck();
+  await expect.poll(() => mode(page, 'm.turboComparison.diagnostics.resonances[0]')).toBe(0);
+  await expect.poll(() => mode(page, 'm.turboComparison.diagnostics.exhaustPulse')).toBe(0);
+  await expect.poll(async () => (await debug(page)).liveVoices).toBe(1);
+  await waitEngineRunning(page);
+  await expect.poll(() => mode(page, 'm.runner.player.sim.car.engine.induction')).toBe('turbo');
+
+  await page.getByTestId('compare-select').selectOption('nissan-gtr-r35-2015');
+  await expect.poll(async () => (await debug(page)).liveVoices).toBe(2);
+  await waitEngineRunning(page);
+  await page.locator('#game').click({ position: { x: 50, y: 50 } });
+  await page.keyboard.press('e');
+  await page.keyboard.down('w');
+  try {
+    await expect.poll(() => mode(page, `m.runner.vehicles.every((v) =>
+      v.sound?.lastStats?.peak[3] > 0 && v.sound.lastStats.nanResets === 0)`), { timeout: 20_000 }).toBe(true);
+  } finally {
+    await page.keyboard.up('w');
+  }
+});
+
 test('main Sandbox vehicle selector lists all factory and prepared cars', async ({ page }) => {
   await boot(page);
   const select = page.getByTestId('car-select');

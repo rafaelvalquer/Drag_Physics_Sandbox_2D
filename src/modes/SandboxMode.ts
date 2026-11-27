@@ -1,6 +1,8 @@
 import { VehicleSound, DEFAULT_MIX, type ChannelMix } from '../audio/core/VehicleSound';
-import { CHANNELS as AUDIO_CHANNELS, carToAcousticConfig, setTurboAcousticDefaults, turboAcousticDefaults } from '../audio/dsp/AcousticConfig';
+import { CHANNELS as AUDIO_CHANNELS, carToAcousticConfig, type AcousticQuality, type AcousticVehicleConfig } from '../audio/dsp/AcousticConfig';
 import { TURBO_LAYER } from '../audio/dsp/turbo/TurboAcousticTypes';
+import { turboComparisonPanel, type TurboComparison } from '../ui/TurboComparison';
+import { comparisonGain } from '../audio/dsp/turbo/TurboComparisonGain';
 import { CAR_GROUPS, LAB_CARS, cloneCar } from '../data/cars/index';
 import { BUILT_IN_SANDBOX_PRESETS, findSandboxPreset } from '../data/cars/sandboxPresets';
 import { validateCar, type CarConfig, type TrackConfig } from '../data/schema';
@@ -65,6 +67,7 @@ export class SandboxMode implements Mode {
   private failures = false;
   private editor: CarEditor | null = null;
   private lab: DevLab | null = null;
+  private readonly turboComparison: TurboComparison = { model: 'hybrid', layers: TURBO_LAYER.all, diagnostics: {}, matchLevel: true };
   private mix: ChannelMix = { ...DEFAULT_MIX };
   private offs: (() => void)[] = [];
   private presetList: HTMLElement | null = null;
@@ -126,7 +129,7 @@ export class SandboxMode implements Mode {
     this.runner.simTime = 0;
     const p = this.runner.add(cloneCar(this.car), { id: 'player', lane: 0, isPlayer: true, sound: playerSound });
     if (playerSound) {
-      playerSound.setConfig(carToAcousticConfig(p.sim.car, this.ctx.settings.audioQuality, 11));
+      playerSound.setConfig(this.sandboxAcousticConfig(p.sim.car, this.ctx.settings.audioQuality, 11));
       playerSound.reset();
     }
     p.sim.controls.autoStart = this.engineOn; // ignition is automatic on entering the track
@@ -248,7 +251,7 @@ export class SandboxMode implements Mode {
       if (v.sound) continue;
       const q = v.isPlayer || !this.ctx.settings.opponentLowQuality ? this.ctx.settings.audioQuality : 'low';
       try {
-        v.sound = new VehicleSound(a, carToAcousticConfig(v.sim.car, q, v.isPlayer ? 11 : 23), v.id, 0.05, ambientK);
+        v.sound = new VehicleSound(a, this.sandboxAcousticConfig(v.sim.car, q, v.isPlayer ? 11 : 23), v.id, 0.05, ambientK);
         v.sound.setMix(this.mix);
       } catch (e) {
         toast(`Falha ao criar voz de áudio: ${e instanceof Error ? e.message : String(e)}`, 'error');
@@ -261,7 +264,7 @@ export class SandboxMode implements Mode {
     if (key === 'audioQuality' || key === 'opponentLowQuality') {
       for (const v of this.runner.vehicles) {
         const q = v.isPlayer || !this.ctx.settings.opponentLowQuality ? this.ctx.settings.audioQuality : 'low';
-        v.sound?.setQuality(q);
+        if (v.sound) v.sound.setQuality(q, this.sandboxAcousticConfig(v.sim.car, q, v.isPlayer ? 11 : 23).turboComparisonGain);
       }
     }
   }
@@ -419,63 +422,31 @@ export class SandboxMode implements Mode {
       this.presetList,
       h('h3', {}, 'Mixer de áudio'),
       this.mixerUi(),
-      h('details', { class: 'fold', 'data-testid': 'turbo-ab' }, h('summary', {}, 'Turbo: comparação A/B (dev)'), this.turboAbUi()),
+      h('details', { class: 'fold', 'data-testid': 'turbo-ab' }, h('summary', {}, 'Turbo: comparação A/B/C/D (dev)'), this.turboAbUi()),
       this.lab!.el,
     );
     void this.refreshPresets();
   }
 
-  /**
-   * A/B of the turbo voice (legacy model vs Turbo Acoustics 2.0) and isolation of each v2 layer, for
-   * listening validation. Only the sound changes: the physics, boost and rotor speed are untouched.
-   * Levels of the two models are matched by A-weighted level (docs/audio-turbo/calibration-matrix.md).
-   */
-  private turboAbUi(): HTMLElement {
-    const layers: [keyof typeof TURBO_LAYER, string][] = [
-      ['rotor', 'Rotor (1X/2X/3X/BPF)'],
-      ['whoosh', 'Fluxo (whoosh)'],
-      ['bov', 'Blow-off'],
-      ['flutter', 'Flutter'],
-      ['wastegate', 'Wastegate'],
-      ['resonance', 'Ressonâncias de duto'],
-    ];
-    const cur = turboAcousticDefaults();
-    let model = cur.model;
-    let mask = cur.layers ?? TURBO_LAYER.all;
-    const apply = (): void => {
-      setTurboAcousticDefaults(model, mask === TURBO_LAYER.all ? undefined : mask);
-      for (const v of this.runner.vehicles) {
-        const q = v.isPlayer || !this.ctx.settings.opponentLowQuality ? this.ctx.settings.audioQuality : 'low';
-        v.sound?.setConfig(carToAcousticConfig(v.sim.car, q, v.isPlayer ? 11 : 23));
-      }
-      this.flash(model === 'legacy' ? 'Turbo: modelo antigo (A)' : 'Turbo: Turbo Acoustics 2.0 (B)');
+  private sandboxAcousticConfig(car: CarConfig, quality: AcousticQuality, seed: number): AcousticVehicleConfig {
+    const config = carToAcousticConfig(car, quality, seed);
+    const comparison = this.turboComparison;
+    return {
+      ...config,
+      turboModel: comparison.model,
+      turboLayers: comparison.layers,
+      turboDiagnostics: comparison.diagnostics,
+      turboComparisonGain: comparison.matchLevel ? comparisonGain(config, comparison.model) : 1,
     };
-    const boxes = layers.map(([k, label]) =>
-      h('label', { class: 'row' }, h('input', {
-        type: 'checkbox',
-        checked: (mask & TURBO_LAYER[k]) !== 0,
-        'data-turbo-layer': k,
-        onchange: (e: Event) => {
-          const on = (e.target as HTMLInputElement).checked;
-          mask = on ? mask | TURBO_LAYER[k] : mask & ~TURBO_LAYER[k];
-          apply();
-        },
-      }), ' ', label),
-    );
-    const sel = h('select', {
-      'data-testid': 'turbo-model',
-      onchange: (e: Event) => {
-        model = (e.target as HTMLSelectElement).value === 'legacy' ? 'legacy' : 'v2';
-        for (const b of boxes) b.classList.toggle('disabled', model === 'legacy');
-        apply();
-      },
-    }, h('option', { value: 'v2', selected: model === 'v2' }, 'B — Turbo Acoustics 2.0'), h('option', { value: 'legacy', selected: model === 'legacy' }, 'A — modelo antigo'));
-    return h('div', {},
-      h('div', { class: 'row' }, h('label', {}, 'Modelo do turbo'), sel),
-      h('p', { class: 'hint' }, 'Camadas do modelo 2.0 (isolar para escuta):'),
-      ...boxes,
-      h('p', { class: 'hint' }, 'Validação auditiva pendente — aprovação final do responsável pelo jogo.'),
-    );
+  }
+
+  private turboAbUi(): HTMLElement {
+    return turboComparisonPanel(this.turboComparison, () => {
+      for (const v of this.runner.vehicles) {
+        const quality = v.isPlayer || !this.ctx.settings.opponentLowQuality ? this.ctx.settings.audioQuality : 'low';
+        v.sound?.compareTurbo(this.sandboxAcousticConfig(v.sim.car, quality, v.isPlayer ? 11 : 23));
+      }
+    });
   }
 
   private mixerUi(): HTMLElement {
@@ -561,7 +532,7 @@ export class SandboxMode implements Mode {
       // acoustic / visual only: keep the run going, rebuild the sound model (cross-faded)
       Object.assign(p.sim.car, { exhaust: car.exhaust, acoustic: car.acoustic, visual: car.visual, name: car.name });
       const q = this.ctx.settings.audioQuality;
-      p.sound?.setConfig(carToAcousticConfig(p.sim.car, q, 11));
+      p.sound?.setConfig(this.sandboxAcousticConfig(p.sim.car, q, 11));
       this.flash('Som atualizado');
       return;
     }

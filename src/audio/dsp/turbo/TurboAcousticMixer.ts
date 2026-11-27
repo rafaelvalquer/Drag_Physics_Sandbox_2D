@@ -20,13 +20,14 @@ export class TurboAcousticMixer {
   constructor(
     public mask: number = TURBO_LAYER.all,
     private readonly overall = 1,
+    private readonly whooshGain = 1,
   ) {}
 
   inlet(rotor: number, rotorAm: number, whoosh: number, flutter: number, recirculatedBov: number): number {
     const m = this.mask;
     return (
       (m & TURBO_LAYER.rotor ? rotor * rotorAm : 0) +
-      (m & TURBO_LAYER.whoosh ? whoosh : 0) +
+      (m & TURBO_LAYER.whoosh ? whoosh * this.whooshGain : 0) +
       (m & TURBO_LAYER.flutter ? flutter : 0) +
       (m & TURBO_LAYER.bov ? recirculatedBov : 0)
     );

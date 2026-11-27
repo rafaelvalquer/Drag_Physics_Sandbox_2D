@@ -7,7 +7,7 @@
  *   npx tsx scripts/audio-turbo-lab.ts --scenario=tip-out        (steady|spool-sweep|tip-out|gear-shift|twin|stress|idle|engine-off|physics|all)
  *   npx tsx scripts/audio-turbo-lab.ts --rate=44100 | --rate=48000 | --rate=96000
  *   npx tsx scripts/audio-turbo-lab.ts --quality=low
- *   npx tsx scripts/audio-turbo-lab.ts --model=legacy|v2|both
+ *   npx tsx scripts/audio-turbo-lab.ts --model=legacy|v2|reduced|hybrid|all
  *   npx tsx scripts/audio-turbo-lab.ts --car=vw-gol-gts-1988 --wav=docs/audio-turbo/after --layers
  *   npx tsx scripts/audio-turbo-lab.ts --all --json=docs/audio-turbo/after/metrics.json
  *
@@ -24,6 +24,10 @@ import { encodeWavMono } from '../src/audio/core/wav';
 import { TURBO_SCENARIOS, envelope, mixChannels, modulationRate, orderTracking, renderTurboScenario, turboMetrics, type TurboRender, type TurboScenarioId } from '../src/audio/analysis/turboLab';
 import { renderTurboPhysics } from '../src/audio/analysis/turboPhysics';
 import { referenceTurboBuilds, turboBuildMatrix, type TurboBuild } from '../src/audio/analysis/turboBuilds';
+import { TURBO_MODELS } from '../src/audio/dsp/turbo/TurboAcousticTypes';
+import { TWIN_ROTOR_GAIN } from '../src/audio/dsp/turbo/TurboAcousticMixer';
+import type { AuxAcoustics } from '../src/audio/dsp/AuxAcoustics';
+import type { TurboRotorWhine } from '../src/audio/dsp/turbo/TurboRotorWhine';
 
 const args = process.argv.slice(2);
 const opt = (name: string): string | undefined => args.find((a) => a.startsWith(`--${name}=`))?.split('=')[1];
@@ -31,8 +35,9 @@ const flag = (name: string): boolean => args.includes(`--${name}`);
 const cars = opt('car')?.split(',');
 const rate = Number(opt('rate') ?? 48000);
 const quality = (opt('quality') ?? 'high') as AcousticQuality;
-const modelArg = opt('model') ?? 'both';
-const models = (modelArg === 'both' ? ['legacy', 'v2'] : [modelArg]) as ('legacy' | 'v2')[];
+const modelArg = opt('model') ?? 'all';
+const models = TURBO_MODELS.filter((model, i) => modelArg === 'all' || modelArg === model || (modelArg === 'both' && i < 2));
+if (models.length === 0) throw new Error(`Modelo acústico desconhecido: ${modelArg}`);
 const scenarioArg = opt('scenario') ?? 'all';
 const scenarios: (TurboScenarioId | 'physics')[] = scenarioArg === 'all' ? [...TURBO_SCENARIOS, 'physics'] : (scenarioArg.split(',') as (TurboScenarioId | 'physics')[]);
 const wavDir = opt('wav');
@@ -64,10 +69,18 @@ const fullMix = CHANNELS.map((c) => DEFAULT_MIX[c]);
 const f = (x: number, d = 3): string => (Number.isFinite(x) ? x.toFixed(d) : '  -  ').padStart(7);
 const rows: Record<string, unknown>[] = [];
 
-const LAYER_FILES: [string, (aux: any) => number][] = [
-  ['rotor-1x', (a) => a.turbo?.rotorA.out1 ?? 0],
-  ['rotor-harmonics', (a) => a.turbo?.rotorA.outH ?? 0],
-  ['blade-pass', (a) => a.turbo?.rotorA.outB ?? 0],
+function rotorStem(a: AuxAcoustics, key: keyof Pick<TurboRotorWhine, 'out1' | 'out2' | 'out3' | 'outB' | 'narrowbandOut'>): number {
+  const turbo = a.turbo;
+  if (!turbo) return 0;
+  return turbo.rotorB ? (turbo.rotorA[key] + turbo.rotorB[key]) * TWIN_ROTOR_GAIN : turbo.rotorA[key];
+}
+
+const LAYER_FILES: [string, (aux: AuxAcoustics) => number][] = [
+  ['rotor-1x', (a) => rotorStem(a, 'out1')],
+  ['rotor-2x', (a) => rotorStem(a, 'out2')],
+  ['rotor-3x', (a) => rotorStem(a, 'out3')],
+  ['rotor-bpf', (a) => rotorStem(a, 'outB')],
+  ['rotor-narrowband', (a) => rotorStem(a, 'narrowbandOut')],
   ['rotor-full', (a) => a.turbo?.rotorOut ?? 0],
   ['compressor-whoosh', (a) => a.turbo?.whooshOut ?? 0],
   ['blowoff', (a) => a.turbo?.bovOut ?? 0],
@@ -90,9 +103,9 @@ for (const b of builds) {
   for (const model of models) {
     for (const sc of scenarios) {
       const cfg = { ...carToAcousticConfig(b.car, quality, 1), turboModel: model };
-      const taps: Float32Array[] | null = layers && model === 'v2' && wavDir ? LAYER_FILES.map(() => new Float32Array(0)) : null;
+      const taps = layers && model !== 'legacy' && wavDir;
       const tapBuf: number[][] = LAYER_FILES.map(() => []);
-      const tap = taps ? (aux: unknown) => LAYER_FILES.forEach(([, get], i) => tapBuf[i]!.push(get(aux))) : undefined;
+      const tap = taps ? (aux: AuxAcoustics) => LAYER_FILES.forEach(([, get], i) => tapBuf[i]!.push(get(aux))) : undefined;
       const t0 = performance.now();
       let r: TurboRender;
       let from = Math.round(0.3 * rate);

@@ -7,9 +7,37 @@
  * (docs/audio-turbo/calibration-matrix.md): they are not measured dimensions or acoustic data of
  * the real cars, and no real-car dimension is invented here.
  */
-import type { TurboAcousticProfile, TurboProfileId, TurboProfilePatch } from './TurboAcousticTypes';
+import type { RotorTextureConfig, TurboAcousticProfile, TurboProfileId, TurboProfilePatch } from './TurboAcousticTypes';
 
 export const TURBO_PROFILE_VERSION = 1;
+
+/** Relative order levels and texture candidates for the 2.1 listening comparison. */
+export const ROTOR_CALIBRATION: Readonly<Record<TurboProfileId, {
+  orders: readonly [number, number, number, number];
+  texture: RotorTextureConfig;
+}>> = {
+  'classic-small-turbo': calibration([.22, .10, .03, .55], .65, .76, .025),
+  'classic-medium-turbo': calibration([.25, .11, .035, .51], .62, .78, .032),
+  'classic-large-turbo': calibration([.26, .12, .04, .45], .57, .82, .038),
+  'modern-small-oem': calibration([.18, .07, .018, .47], .67, .74, .023),
+  'modern-medium-oem': calibration([.21, .085, .025, .49], .64, .77, .027),
+  'modern-performance-oem': calibration([.23, .10, .03, .54], .63, .78, .028),
+  'modern-twin-scroll': calibration([.18, .078, .018, .53], .66, .75, .024),
+  'modern-hybrid-turbo': calibration([.24, .11, .028, .58], .61, .79, .030),
+  'modern-big-turbo': calibration([.26, .12, .034, .48], .55, .84, .040),
+  'modern-na-conversion': calibration([.23, .10, .026, .54], .60, .80, .031),
+  'v6-single-conversion': calibration([.24, .11, .027, .50], .57, .82, .034),
+  'v6-parallel-twin-oem': calibration([.18, .072, .013, .45], .48, .87, .029),
+  'v6-parallel-twin-upgraded': calibration([.20, .086, .021, .51], .44, .90, .036),
+};
+
+function calibration(orders: readonly [number, number, number, number], coherentToneMix: number,
+  narrowbandNoiseMix: number, bandwidthRatio: number) {
+  return {
+    orders,
+    texture: { coherentToneMix, narrowbandNoiseMix, bandwidthRatio, amplitudeVariation: .10, phaseNoiseDepth: .12 },
+  };
+}
 
 const p = (id: TurboProfileId, x: Omit<TurboAcousticProfile, 'id' | 'version'>): TurboAcousticProfile => ({ ...x, id, version: TURBO_PROFILE_VERSION });
 

@@ -52,7 +52,7 @@ function viaSnapshots(frames: Float64Array[]): Float64Array[] {
 }
 
 function render(frames: Float64Array[], quality: AcousticQuality): { turbo: Float32Array; voice: VehicleAcoustics } {
-  const voice = new VehicleAcoustics(FS, { ...carToAcousticConfig(golTurbo(), quality, 61), turboModel: 'v2' });
+  const voice = new VehicleAcoustics(FS, carToAcousticConfig(golTurbo(), quality, 61));
   const per = Math.round(FS * H);
   const tmp = Array.from({ length: CHANNEL_COUNT }, () => new Float32Array(per));
   const turbo = new Float32Array(frames.length * per);
@@ -64,7 +64,7 @@ function render(frames: Float64Array[], quality: AcousticQuality): { turbo: Floa
   return { turbo, voice };
 }
 
-describe('Turbo Acoustics 2.0 — online snapshots (20 Hz, interpolated)', () => {
+describe('Turbo Acoustics 2.1 — online snapshots (20 Hz, interpolated)', () => {
   const full = driveFrames();
   const online = viaSnapshots(full);
 

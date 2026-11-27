@@ -16,7 +16,30 @@ export type IntakePath = 'airbox' | 'sport-element' | 'cone' | 'open';
 /** Turbine housing: twin-scroll is ONE rotor with a divided turbine inlet (not a biturbo). */
 export type TurbineHousing = 'single-scroll' | 'twin-scroll';
 /** Turbo engine selection for A/B comparisons. */
-export type TurboAcousticModel = 'legacy' | 'v2';
+export const TURBO_MODELS = ['legacy', 'v2', 'reduced', 'hybrid'] as const;
+export type TurboAcousticModel = (typeof TURBO_MODELS)[number];
+
+export interface RotorTextureConfig {
+  coherentToneMix: number;
+  narrowbandNoiseMix: number;
+  bandwidthRatio: number;
+  amplitudeVariation: number;
+  phaseNoiseDepth: number;
+}
+
+export interface TurboDiagnostics {
+  order1?: number;
+  order2?: number;
+  order3?: number;
+  bladePass?: number;
+  narrowband?: number;
+  coherent?: number;
+  amplitude?: number;
+  exhaustPulse?: number;
+  whoosh?: number;
+  resonances?: readonly number[];
+  texture?: Partial<RotorTextureConfig>;
+}
 
 export const TURBO_PROFILE_IDS = [
   'classic-small-turbo',
@@ -117,6 +140,8 @@ export type TurboProfilePatch = {
 
 /** Profile + the installed hardware it was resolved for: everything the DSP needs. */
 export interface ResolvedTurboProfile extends TurboAcousticProfile {
+  reducedOrders: readonly [number, number, number, number];
+  texture: RotorTextureConfig;
   baseId: TurboProfileId;
   /** Human readable resolution chain (for reports and the dev panel). */
   chain: string[];

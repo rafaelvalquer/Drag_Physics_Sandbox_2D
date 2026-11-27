@@ -22,10 +22,10 @@ export class TurboDuctResonance {
   /** Consecutive near-silent samples (input and output); after the filter tails die the path idles. */
   private quiet = 0;
 
-  constructor(sampleRate: number, p: ResolvedTurboProfile, lowQuality: boolean, enabled = true) {
-    const list = enabled ? p.resonance.slice(0, lowQuality ? 1 : 3) : [];
-    this.res = list.map((r) => new Biquad(sampleRate).setBandpass(r.frequencyHz, r.q));
-    this.gains = list.map((r) => r.gain);
+  constructor(sampleRate: number, p: ResolvedTurboProfile, lowQuality: boolean, hybrid = false, gains?: readonly number[]) {
+    const list = p.resonance.slice(0, lowQuality && !gains ? 1 : 3);
+    this.res = list.map((r) => new Biquad(sampleRate).setBandpass(r.frequencyHz, hybrid ? Math.max(.7, r.q * .56) : r.q));
+    this.gains = list.map((r, i) => r.gain * (gains?.[i] ?? 1) * (hybrid ? .46 + .14 * p.intakeExposure : 1));
     const att = Math.min(1, Math.max(0, p.intakeAttenuation));
     // corner: 14 kHz with no attenuation → ≈ 3 kHz for the strongest airbox
     const fc = 14000 * Math.pow(3000 / 14000, att);

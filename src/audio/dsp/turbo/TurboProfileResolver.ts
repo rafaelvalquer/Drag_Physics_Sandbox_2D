@@ -15,7 +15,7 @@
  * CarConfig that every mode already shares.
  */
 import type { TurboConfig } from '../../../data/schema';
-import { BASE_TURBO_PROFILES, FAMILY_ACOUSTICS, patchProfile, type FamilyAcoustics } from './TurboAcousticProfiles';
+import { BASE_TURBO_PROFILES, FAMILY_ACOUSTICS, ROTOR_CALIBRATION, patchProfile, type FamilyAcoustics } from './TurboAcousticProfiles';
 import type { BovVentType, IntakePath, ResolvedTurboProfile, TurboAcousticHints, TurboProfileId, TurboProfilePatch, WastegateType } from './TurboAcousticTypes';
 
 export interface TurboResolverInput {
@@ -85,8 +85,12 @@ export function resolveTurboProfile(input: TurboResolverInput): ResolvedTurboPro
   const vent: BovVentType = !turbo.bovEnabled ? 'none' : turbo.bovVent === 'recirculating' ? 'recirculating' : 'atmosphere';
   const intakePath: IntakePath = hints.intake ?? 'airbox';
   const wastegateType: WastegateType = hints.wastegate ?? 'internal';
+  const base = BASE_TURBO_PROFILES[baseId];
+  const calibration = ROTOR_CALIBRATION[baseId];
   let r: ResolvedTurboProfile = {
-    ...BASE_TURBO_PROFILES[baseId],
+    ...base,
+    reducedOrders: calibration.orders,
+    texture: calibration.texture,
     baseId,
     chain,
     ventType: vent,
@@ -134,5 +138,13 @@ export function resolveTurboProfile(input: TurboResolverInput): ResolvedTurboPro
   if (wastegateType !== 'internal') chain.push(`wastegate ${wastegateType}`);
   if (twin) chain.push('biturbo paralelo (2 rotores)');
   else if (r.housing === 'twin-scroll') chain.push('twin-scroll (1 rotor)');
+  // Keep the relative changes from the engine family and installed hardware.
+  const [g1, g2, g3, gB] = calibration.orders;
+  r.reducedOrders = [
+    g1 * r.rotor.order1Gain / base.rotor.order1Gain,
+    g2 * r.rotor.order2Gain / base.rotor.order2Gain,
+    g3 * r.rotor.order3Gain / base.rotor.order3Gain,
+    gB * r.rotor.bladePassGain / base.rotor.bladePassGain,
+  ];
   return r;
 }

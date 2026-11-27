@@ -1,5 +1,6 @@
 import type { Prng } from '../../../core/prng';
 import { OnePole } from '../Filters';
+import type { RotorTextureConfig } from './TurboAcousticTypes';
 
 const TWO_PI = 2 * Math.PI;
 
@@ -38,6 +39,40 @@ export interface RotorTargets {
   am: number;
 }
 
+/** Two low-passed quadrature coefficients, translated around an order by its own carrier.
+ * Interpolation keeps the control stream continuous. No independent oscillator changes shaft pitch.
+ */
+class NarrowbandOrder {
+  private i1 = 0;
+  private i2 = 0;
+  private q1 = 0;
+  private q2 = 0;
+  private i = 0;
+  private q = 0;
+  private di = 0;
+  private dq = 0;
+
+  block(hz: number, samples: number, dt: number, rng: Prng): void {
+    const r = Math.exp(-TWO_PI * hz * samples * dt);
+    const a = 1 - r;
+    this.i1 += a * (rng.bipolar() - this.i1);
+    this.i2 += a * (this.i1 - this.i2);
+    this.q1 += a * (rng.bipolar() - this.q1);
+    this.q2 += a * (this.q1 - this.q2);
+    // White uniform input variance = 1/3. Normalize the two-pole baseband to unit variance.
+    const norm = Math.sqrt(3 * (1 + r) ** 3 / (a * (1 + r * r)));
+    this.di = (this.i2 * norm - this.i) / samples;
+    this.dq = (this.q2 * norm - this.q) / samples;
+  }
+
+  process(sin: number, cos: number, phaseNoiseDepth: number): number {
+    this.i += this.di;
+    this.q += this.dq;
+    // Common RNG bandwidth, with a small independently varying quadrature contribution.
+    return this.i * sin * .7071067811865476 + this.q * cos * (.7071067811865476 + phaseNoiseDepth);
+  }
+}
+
 /**
  * One compressor rotor: additive synthesis of the shaft orders 1X, 2X, 3X and the blade-pass
  * order, all phase-locked to one phase accumulator (the orders of a rotor ARE locked to its
@@ -68,14 +103,20 @@ export class TurboRotorWhine {
   private dAm = 0;
   private pulseHz = 0;
   private pulseDepth = 0;
+  private dPulseDepth = 0;
+  private readonly noise: NarrowbandOrder[] | null;
+  private readonly pulsing: boolean;
   // slow per-order drift (random walk through a low-pass)
   private readonly drift: OnePole[];
   private readonly driftVal = new Float64Array(4);
   out = 0;
   /** Last partial outputs (lab exports: 1X alone, harmonics, blade-pass). */
   out1 = 0;
+  out2 = 0;
+  out3 = 0;
   outH = 0;
   outB = 0;
+  narrowbandOut = 0;
 
   constructor(
     sampleRate: number,
@@ -84,6 +125,10 @@ export class TurboRotorWhine {
     private readonly modulationDepth: number,
     private readonly lowQuality: boolean,
     initialPhase = 0,
+    private readonly texture?: RotorTextureConfig,
+    private readonly coherent = 1,
+    private readonly narrowband = 1,
+    pulsing = !lowQuality,
   ) {
     this.dt = 1 / sampleRate;
     this.nyq = sampleRate / 2;
@@ -91,6 +136,8 @@ export class TurboRotorWhine {
     this.freqK = 1 - Math.exp(-1 / (0.012 * sampleRate));
     this.phase = initialPhase;
     this.drift = [0, 1, 2, 3].map(() => new OnePole(sampleRate / 32, 3));
+    this.noise = texture && narrowband > 0 ? Array.from({ length: lowQuality ? 3 : 4 }, () => new NarrowbandOrder()) : null;
+    this.pulsing = pulsing;
   }
 
   reset(): void {
@@ -105,12 +152,13 @@ export class TurboRotorWhine {
    */
   setBlock(shaftHz: number, t: RotorTargets, n: number): void {
     const f = Math.max(this.freq, shaftHz);
-    const d = this.modulationDepth;
+    const d = this.texture?.amplitudeVariation ?? this.modulationDepth;
     for (let k = 0; k < 4; k++) this.driftVal[k] = 1 + d * 4 * this.drift[k]!.lowpass(this.rng.bipolar());
-    const g1 = t.g1 * lowGain(f) * partialGain(f, this.nyq) * this.driftVal[0]!;
-    const g2 = t.g2 * lowGain(2 * f) * partialGain(2 * f, this.nyq) * this.driftVal[1]!;
-    const g3 = this.lowQuality ? 0 : t.g3 * lowGain(3 * f) * partialGain(3 * f, this.nyq) * this.driftVal[2]!;
-    const gB = t.gB * lowGain(this.blades * f) * partialGain(this.blades * f, this.nyq) * this.driftVal[3]!;
+    const guard = this.texture ? 600 : 0;
+    const g1 = t.g1 * lowGain(f) * partialGain(f + guard, this.nyq) * this.driftVal[0]!;
+    const g2 = t.g2 * lowGain(2 * f) * partialGain(2 * f + guard, this.nyq) * this.driftVal[1]!;
+    const g3 = this.lowQuality ? 0 : t.g3 * lowGain(3 * f) * partialGain(3 * f + guard, this.nyq) * this.driftVal[2]!;
+    const gB = t.gB * lowGain(this.blades * f) * partialGain(this.blades * f + guard, this.nyq) * this.driftVal[3]!;
     const inv = 1 / Math.max(1, n);
     this.d1 = (g1 - this.a1) * inv;
     this.d2 = (g2 - this.a2) * inv;
@@ -118,7 +166,16 @@ export class TurboRotorWhine {
     this.dB = (gB - this.aB) * inv;
     this.dAm = (t.am - this.am) * inv;
     this.pulseHz = t.pulseHz;
-    this.pulseDepth = this.lowQuality ? 0 : t.pulseDepth;
+    const pulseDepth = this.pulsing ? t.pulseDepth : 0;
+    if (this.texture) this.dPulseDepth = (pulseDepth - this.pulseDepth) * inv;
+    else this.pulseDepth = pulseDepth;
+    if (this.noise && this.texture) {
+      for (let k = 0; k < this.noise.length; k++) {
+        const order = k === this.noise.length - 1 ? this.blades : k + 1;
+        const hz = Math.max(8, Math.min(145, order * f * this.texture.bandwidthRatio));
+        this.noise[k]!.block(hz, Math.max(1, n), this.dt, this.rng);
+      }
+    }
   }
 
   process(shaftHz: number): number {
@@ -131,9 +188,10 @@ export class TurboRotorWhine {
     this.a3 += this.d3;
     this.aB += this.dB;
     this.am += this.dAm;
+    this.pulseDepth += this.dPulseDepth;
     if (this.a1 + this.a2 + this.a3 + this.aB < 1e-9 && this.d1 <= 0 && this.d2 <= 0 && this.d3 <= 0 && this.dB <= 0) {
       // all partials silent (idle, engine off, faded above Nyquist): keep the phase, skip the trig
-      this.out1 = this.outH = this.outB = this.out = 0;
+      this.out1 = this.out2 = this.out3 = this.outH = this.outB = this.narrowbandOut = this.out = 0;
       return 0;
     }
     const x = TWO_PI * this.phase;
@@ -165,11 +223,32 @@ export class TurboRotorWhine {
       const q = this.pulsePhase;
       // (half-sine lobes approximated by parabolas 4u(1 − u): same shape within 5%, no trig per sample)
       const u = q < 0.3 ? q / 0.3 : (q - 0.3) / 0.7;
-      const lobe = 4 * u * (1 - u);
+      const parabola = 4 * u * (1 - u);
+      const lobe = this.texture ? parabola * parabola : parabola;
       pulse = 1 + this.pulseDepth * (q < 0.3 ? lobe : -0.25 * lobe);
     }
     const g = this.am * pulse;
+    if (this.texture) {
+      const tone = this.texture.coherentToneMix * this.coherent;
+      const tex = this.texture.narrowbandNoiseMix * this.narrowband;
+      const depth = this.texture.phaseNoiseDepth;
+      const noise = this.noise;
+      const n1 = noise ? tex * noise[0]!.process(s1, c1, depth) : 0;
+      const n2 = noise ? tex * noise[1]!.process(s2, 1 - 2 * s1 * s1, depth) : 0;
+      const n3 = noise?.length === 4 ? tex * noise[2]!.process(s3, c1 * (4 * c1 * c1 - 3), depth) : 0;
+      const nB = noise ? tex * noise[noise.length - 1]!.process(sB, br, depth) : 0;
+      this.out1 = this.a1 * (tone * s1 + n1) * g;
+      this.out2 = this.a2 * (tone * s2 + n2) * g;
+      this.out3 = this.a3 * (tone * s3 + n3) * g;
+      this.outB = this.aB * (tone * sB + nB) * g;
+      this.narrowbandOut = (this.a1 * n1 + this.a2 * n2 + this.a3 * n3 + this.aB * nB) * g;
+      this.outH = this.out2 + this.out3;
+      this.out = this.out1 + this.outH + this.outB;
+      return this.out;
+    }
     this.out1 = this.a1 * s1 * g;
+    this.out2 = this.a2 * s2 * g;
+    this.out3 = this.a3 * s3 * g;
     this.outH = (this.a2 * s2 + this.a3 * s3) * g;
     this.outB = this.aB * sB * g;
     this.out = this.out1 + this.outH + this.outB;

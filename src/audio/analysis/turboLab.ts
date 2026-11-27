@@ -328,6 +328,91 @@ export function orderTracking(r: TurboRender, blades: number, opts: { channel?: 
   return out;
 }
 
+export const ROTOR_ORDER_LABELS = ['1X', '2X', '3X', 'BPF'] as const;
+
+export interface OrderBandMetrics {
+  expectedHz: number;
+  energy: number;
+  width90Hz: number;
+  prominenceDb: number | null;
+}
+
+/** Approximate mean-square energy from a Hann-windowed FFT, 5–95% energy width and local prominence. */
+export function rotorOrderMetrics(
+  spectrum: Float64Array, binHz: number, shaftHz: number, blades: number, sweepHz = 0,
+): Record<(typeof ROTOR_ORDER_LABELS)[number], OrderBandMetrics | null> {
+  const orders = [1, 2, 3, blades];
+  const entries = orders.map((order, i) => {
+    const f = shaftHz * order;
+    if (f < 100 || f >= (spectrum.length - 1) * binHz * .86) return [ROTOR_ORDER_LABELS[i], null];
+    const half = Math.min(shaftHz * .32, Math.max(binHz * 4, f * .045, sweepHz * order / 2 + binHz * 3));
+    const lo = Math.max(1, Math.ceil((f - half) / binHz));
+    const hi = Math.min(spectrum.length - 2, Math.floor((f + half) / binHz));
+    let energy = 0;
+    let peak = 0;
+    let outside = 0;
+    let neighbors = 0;
+    for (let k = lo; k <= hi; k++) {
+      const amplitude = spectrum[k]!;
+      energy += amplitude * amplitude;
+      peak = Math.max(peak, amplitude);
+    }
+    const gap = Math.max(2, Math.floor((hi - lo) / 2));
+    for (let k = Math.max(1, lo - 2 * gap); k <= Math.min(spectrum.length - 2, hi + 2 * gap); k++) {
+      if (k >= lo - gap && k <= hi + gap) continue;
+      outside += spectrum[k]! ** 2;
+      neighbors++;
+    }
+    let width90Hz = 0;
+    if (energy > 1e-24) {
+      let cumulative = 0;
+      let lower = lo;
+      for (let k = lo; k <= hi; k++) {
+        cumulative += spectrum[k]! ** 2;
+        if (cumulative < .05 * energy) lower = k + 1;
+        if (cumulative < .95 * energy) continue;
+        width90Hz = (k - lower + 1) * binHz;
+        break;
+      }
+    }
+    return [ROTOR_ORDER_LABELS[i], {
+      expectedHz: f, energy: energy / 3, width90Hz,
+      prominenceDb: energy > 1e-24 ? dB(peak / Math.sqrt(Math.max(1e-24, outside / Math.max(1, neighbors)))) : null,
+    }];
+  });
+  return Object.fromEntries(entries) as ReturnType<typeof rotorOrderMetrics>;
+}
+
+/** Telemetry-aligned windows. Frequency spread during a ramp expands the measurement band. */
+export function rotorDriveMetrics(r: TurboRender, blades: number, channel = CH.turbo) {
+  const samples = r.ch[channel]!;
+  const n = 4096;
+  const rows = [];
+  for (let start = Math.round(r.sampleRate * .5); start + n <= samples.length; start += Math.round(r.sampleRate * .25)) {
+    const frame = (sample: number) => r.meta[Math.min(r.meta.length - 1, Math.floor(sample / (r.sampleRate * H)))]!;
+    const a = frame(start);
+    const m = frame(start + n / 2);
+    const b = frame(start + n);
+    const spec = magnitudeSpectrum(samples, n, start);
+    const split = tonalSplit(spec);
+    rows.push({
+      seconds: (start + n / 2) / r.sampleRate,
+      engineRpm: m.rpm,
+      boostPa: m.boostPa,
+      throttle: m.throttle,
+      shaftHz: m.shaftRpm / 60,
+      shaftHz2: m.shaftRpm2 / 60,
+      shaftAccelerationHzPerS: (b.shaftRpm - a.shaftRpm) * r.sampleRate / (60 * n),
+      tonalToNoiseDb: 10 * Math.log10((split.tonal + 1e-30) / (split.noise + 1e-30)),
+      orders: rotorOrderMetrics(spec, r.sampleRate / n, m.shaftRpm / 60, blades, Math.abs(b.shaftRpm - a.shaftRpm) / 60),
+      ...(m.shaftRpm2 > 0 ? {
+        ordersRotor2: rotorOrderMetrics(spec, r.sampleRate / n, m.shaftRpm2 / 60, blades, Math.abs(b.shaftRpm2 - a.shaftRpm2) / 60),
+      } : {}),
+    });
+  }
+  return rows;
+}
+
 /** RMS envelope (dB) in `hopS` steps (for flutter-rate and decay analysis). */
 export function envelope(x: Float32Array, sampleRate: number, hopS = 0.005, start = 0, end = x.length): Float64Array {
   const hop = Math.max(1, Math.round(hopS * sampleRate));

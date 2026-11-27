@@ -65,8 +65,15 @@ class VehicleAudioProcessor extends AudioWorkletProcessor {
       case 'config':
         this.replace(m.config);
         break;
+      case 'turbo-comparison':
+        Object.assign(this.voice.config, m.options);
+        this.voice.aux.compareTurbo(this.voice.config);
+        break;
       case 'quality':
-        if (m.quality !== this.voice.config.quality) this.replace({ ...this.voice.config, quality: m.quality });
+        if (m.quality !== this.voice.config.quality) {
+          this.replace({ ...this.voice.config, quality: m.quality,
+            turboComparisonGain: m.turboComparisonGain ?? this.voice.config.turboComparisonGain });
+        }
         break;
       case 'ambient':
         this.ambientK = m.ambientK;

@@ -1,5 +1,8 @@
 # Turbo Acoustics 2.0
 
+Os WAVs A/B/C/D, os espectrogramas e a matriz de homologação mais recentes estão na
+[documentação da revisão 2.1](v21/README.md). As medições abaixo registram a revisão 2.0.
+
 Reconstrução procedural do som de turbo para todos os turbos do jogo: kits clássicos da oficina, turbos
 de fábrica (capítulos 2 e 3), conversões turbo, twin-scroll e biturbo paralelo. Nenhuma gravação é usada.
 Tudo é sintetizado a partir do estado da física (rotação do eixo, boost, vazão da válvula, borboleta,
@@ -94,13 +97,13 @@ npx tsx scripts/audio-turbo-lab.ts --all --scenario=steady,spool-sweep --rate=44
 ```
 
 ```powershell
-npx tsx scripts/audio-turbo-report.ts
+node --import tsx scripts/audio-turbo-report.ts --write-levels
 ```
 
 - `audio-turbo-lab.ts`: cenários sintéticos (`steady`, `spool-sweep`, `tip-out`, `gear-shift`, `twin`,
   `stress`, `idle`, `engine-off`) e `physics` (condução real); `--wav=<dir> --layers` exporta cada camada
   isolada; `--bov=none|atmosphere|recirculating` e `--wastegate=…` trocam o hardware só no laboratório.
-- `audio-turbo-report.ts`: WAVs antes/depois com o mesmo ganho por build, espectrogramas, relatório
+- `audio-turbo-report.ts` na revisão 2.0 (`81ac068`): WAVs antes/depois com o mesmo ganho por build, espectrogramas, relatório
   espectral, matriz de calibração (nível A e custo) e matriz de cobertura.
 - `audio-turbo-baseline.ts` e `audio-turbo-channel-hash.ts`: capturam a linha de base em `main`
   (`before/physics-fingerprint.json`, `before/channel-hash.json`, `before/legacy-turbo-level.json`).

@@ -1,43 +1,70 @@
-/**
- * Turbo Acoustics 2.0 — before/after report of the representative builds.
- *
- * For every build the real VehicleSimulation drives the voice through the same drive (launch, run
- * through the gears, tip-out under boost, re-open, lift) twice: with the legacy turbo model ("before")
- * and with Turbo Acoustics 2.0 ("after"). Writes:
- *  - docs/audio-turbo/{before,after}/<build>-turbo.wav    isolated turbo channel (same gain per build
- *    in before and after, so the A/B keeps the real level difference — no per-file normalization);
- *  - docs/audio-turbo/{before,after}/<build>-vehicle.wav  full vehicle mix (DEFAULT_MIX), selected builds;
- *  - docs/audio-turbo/spectrograms/<build>-{before,after}.png  turbo channel spectrograms;
- *  - docs/audio-turbo/after/report.json  per-phase metrics, events and render cost;
- *  - docs/audio-turbo/spectral-report.md and calibration-matrix.md (generated tables).
- *
- *   npx tsx scripts/audio-turbo-report.ts [--car=id,id] [--rate=32000] [--no-wav]
- */
-import { mkdirSync, writeFileSync } from 'node:fs';
+/** Turbo 2.1: level-matched comparisons, diagnostics, family/rate matrix and WAV stems. */
+import { spawn } from 'node:child_process';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
+import { AF } from '../src/core/contracts';
 import { encodeWavMono } from '../src/audio/core/wav';
-import { CH, CHANNELS, CHANNEL_COUNT, carToAcousticConfig } from '../src/audio/dsp/AcousticConfig';
+import { CH, CHANNELS, carToAcousticConfig, type AcousticQuality } from '../src/audio/dsp/AcousticConfig';
 import { DEFAULT_MIX } from '../src/audio/core/VehicleSound';
-import { VehicleAcoustics } from '../src/audio/dsp/VehicleAcoustics';
 import { turboProfileOf } from '../src/audio/dsp/turbo/TurboAcoustics';
-import { magnitudeSpectrum } from '../src/audio/analysis/spectrum';
-import { H, mixChannels, turboMetrics, type TurboMetrics } from '../src/audio/analysis/turboLab';
-import { renderTurboPhysics, TURBO_DRIVE_PHASES, type PhysicsTurboRender } from '../src/audio/analysis/turboPhysics';
-import { referenceTurboBuilds, type TurboBuild } from '../src/audio/analysis/turboBuilds';
-import { VehicleSimulation } from '../src/physics/vehicle/VehicleSimulation';
-import { TRACKS } from '../src/data/tracks/index';
+import { averagedSpectrum, magnitudeSpectrum } from '../src/audio/analysis/spectrum';
+import { dB, envelope, mixChannels, renderTurboScenario, rotorDriveMetrics, rotorOrderMetrics, turboMetrics } from '../src/audio/analysis/turboLab';
+import { renderTurboPhysics, TURBO_DRIVE_PHASES } from '../src/audio/analysis/turboPhysics';
+import { referenceTurboBuilds, turboBuildMatrix, type TurboBuild } from '../src/audio/analysis/turboBuilds';
+import { TURBO_LAYER, TURBO_MODELS, TURBO_PROFILE_IDS, type TurboAcousticModel, type TurboDiagnostics } from '../src/audio/dsp/turbo/TurboAcousticTypes';
+import { TWIN_ROTOR_GAIN } from '../src/audio/dsp/turbo/TurboAcousticMixer';
 
 const args = process.argv.slice(2);
 const opt = (n: string): string | undefined => args.find((a) => a.startsWith(`--${n}=`))?.split('=')[1];
-const RATE = Number(opt('rate') ?? 32000);
+const rates = (opt('rate') ?? '48000,44100,32000').split(',').map(Number);
+if (new Set(rates).size !== rates.length || rates.some((rate) => ![48000, 44100, 32000].includes(rate))) {
+  throw new Error('Taxas aceitas: 48000, 44100, 32000 Hz, sem repetição');
+}
+const qualities: AcousticQuality[] = args.includes('--high-only') ? ['high'] : ['high', 'low'];
 const WAV = !args.includes('--no-wav');
-const OUT = 'docs/audio-turbo';
-export const REPORT_CARS = ['vw-gol-gts-1988', 'vw-saveiro-gl-1994', 'bmw-320i-f30-2014', 'mitsubishi-evo-x-2012', 'honda-civic-si-2008', 'nissan-370z-2014', 'nissan-gtr-r35-2015'];
-const VEHICLE_WAV = new Set(['vw-gol-gts-1988', 'nissan-gtr-r35-2015']);
-const cars = opt('car')?.split(',') ?? REPORT_CARS;
+const OUT = opt('out') ?? 'docs/audio-turbo/v21';
+const LISTENING_CARS = ['vw-gol-gts-1988', 'bmw-320i-f30-2014', 'nissan-gtr-r35-2015'];
+const only = opt('car')?.split(',');
 const fullMix = CHANNELS.map((c) => DEFAULT_MIX[c]);
-type Model = 'legacy' | 'v2';
+const MODEL_FILES = { legacy: 'a-legado', v2: 'b-turbo-2', reduced: 'c-harmonicos-reduzidos', hybrid: 'd-rotor-hibrido' };
+const DRIVE = [
+  ...TURBO_DRIVE_PHASES.slice(0, -1),
+  { name: 'partial', seconds: 3, pedal: .42, autoShift: true },
+  TURBO_DRIVE_PHASES.at(-1)!,
+];
+const table = `# Turbo Acoustics 2.1
+
+48 kHz é a taxa de referência. 44,1 kHz repete a análise e 32 kHz é a condição adicional.
+Cada comparação usa a mesma condução física. Nos WAVs A/B/C/D o canal turbo é equiparado pela
+medida ponderada A da condução. As faixas de rotor isoladas conservam as diferenças de nível
+entre si. Os espectrogramas usam a mesma escala de intensidade em cada carro.
+
+| Amostras | Qualidade | Build | Perfil | Nível A/B/C/D (dBA antes de equiparar) | Tonal/ruído A/B/C/D em carga (dB) |
+|---|---|---|---|---|---|
+`;
+
+async function runRates(): Promise<void> {
+  const passthrough = args.filter((arg) => !arg.startsWith('--rate='));
+  const primary = rates.includes(48000) ? 48000 : rates[0]!;
+  await Promise.all(rates.map((rate) => new Promise<void>((resolve, reject) => {
+    const child = spawn(process.execPath, ['--import', 'tsx', process.argv[1]!, ...passthrough,
+      `--rate=${rate}`, '--rate-worker', ...(rate === primary ? ['--primary'] : [])], { stdio: 'inherit' });
+    child.on('error', reject);
+    child.on('exit', (code) => code === 0 ? resolve() : reject(new Error(`Falha ao renderizar ${rate} Hz: código ${code}`)));
+  })));
+  const rows = rates.map((rate) => {
+    const file = join(OUT, `report-${rate}.json`);
+    const data = JSON.parse(readFileSync(file, 'utf8')) as { markdownRows: string };
+    return data.markdownRows;
+  });
+  writeFileSync(join(OUT, 'relatorio.md'), table + rows.join(''));
+}
+
+if (rates.length > 1) {
+  await runRates();
+  process.exit(0);
+}
 
 // ------------------------------------------------------------------ PNG spectrogram
 
@@ -119,193 +146,218 @@ function spectrogram(x: Float32Array, fs: number, refDb: number): Buffer {
   return png(cols, rows, rgb);
 }
 
-// ------------------------------------------------------------------ voice-only render cost
+const profileOf = (b: TurboBuild) => turboProfileOf(carToAcousticConfig(b.car))!;
+const builds = referenceTurboBuilds(only);
+const variants = turboBuildMatrix(only).builds;
+if (!only) {
+  for (const id of TURBO_PROFILE_IDS) {
+    if (builds.some((b) => profileOf(b).baseId === id)) continue;
+    const build = variants.find((b) => profileOf(b).baseId === id);
+    if (build) builds.push(build);
+  }
+}
+const exactIds = new Set(referenceTurboBuilds(only).map((b) => b.id));
+if (builds.length === 0) throw new Error('Nenhum build turbo encontrado para o relatório');
+const coverage = variants.map((b) => {
+  const p = profileOf(b);
+  return { id: b.id, profile: p.baseId, chain: p.chain, intake: p.intakePath, layout: p.twin ? 'parallel-twin' : 'single', orders: p.reducedOrders, texture: p.texture };
+});
 
-/** Records the audio frames of the drive once, then times the voice alone (legacy vs v2). */
-function voiceCost(b: TurboBuild, fs: number): Record<Model, number> {
-  const sim = new VehicleSimulation(b.car, TRACKS[0]!);
-  const frames: Float64Array[] = [];
-  const redline = b.car.engine.redlineRpm;
-  const gears = b.car.transmission.gearRatios.length;
-  for (const p of [{ name: 'startup', seconds: 1.5, pedal: 0 }, ...TURBO_DRIVE_PHASES]) {
-    if ('engage' in p && p.engage && sim.gear === 0) sim.requestShift(1);
-    for (let i = 0; i < Math.round(p.seconds / H); i++) {
-      sim.controls.pedal = p.pedal;
-      if ('autoShift' in p && p.autoShift && !sim.shift.active && sim.clutchCtl.mode === 'LOCKED' && sim.engine.rpm > redline - 250 && sim.gear < gears) sim.requestShift(1);
-      sim.step(H);
-      frames.push(Float64Array.from(sim.audioFrame));
-    }
-  }
-  const out = {} as Record<Model, number>;
-  const per = Math.round(fs * H);
-  const tmp = Array.from({ length: CHANNEL_COUNT }, () => new Float32Array(per + 2));
-  const best: Record<Model, number> = { legacy: Infinity, v2: Infinity };
-  // interleaved repetitions (legacy, v2, legacy, …) so machine load affects both alike; best of 7
-  for (let rep = 0; rep < 7; rep++) {
-    for (const model of ['legacy', 'v2'] as Model[]) {
-      const voice = new VehicleAcoustics(fs, { ...carToAcousticConfig(b.car, 'high', 1), turboModel: model });
-      const t0 = performance.now();
-      for (const f of frames) {
-        voice.pushFrame(f);
-        voice.render(tmp, per);
-      }
-      best[model] = Math.min(best[model], performance.now() - t0);
-    }
-  }
-  for (const model of ['legacy', 'v2'] as Model[]) out[model] = best[model] / ((frames.length * per) / fs); // ms of CPU per second of audio
-  return out;
+const STEMS = ['rotor-1x', 'rotor-2x', 'rotor-3x', 'rotor-bpf', 'rotor-narrowband', 'rotor-hybrid', 'rotor-v2-original'] as const;
+const OUT_LEVELS = 'src/audio/dsp/turbo/TurboComparisonLevels.ts';
+const levelGroups = new Map<string, number[][]>();
+const num = (x: number, n = 1) => Number(x.toFixed(n));
+const median = (x: number[]) => x.sort((a, b) => a - b)[Math.floor(x.length / 2)]!;
+
+function saveWav(dir: string, name: string, x: Float32Array, rate: number, gain: number): void {
+  writeFileSync(join(dir, `${name}.wav`), encodeWavMono(x.map((v) => v * gain), rate));
 }
 
-// ------------------------------------------------------------------ report
-
-interface PhaseMetrics { run: TurboMetrics; tipOut: TurboMetrics; reopen: TurboMetrics }
-interface Row {
-  build: string;
-  group: string;
-  layout: string;
-  bov: string;
-  profile?: string;
-  maxBoostBar: number;
-  maxShaftRpm: number;
-  legacy: PhaseMetrics;
-  v2: PhaseMetrics;
-  bovEvents: number;
-  flutterEvents: number;
-  costMsPerS: Record<Model, number>;
+function renderBuild(b: TurboBuild, rate: number, quality: AcousticQuality, model: TurboAcousticModel, stems?: Float32Array[]) {
+  let index = 0;
+  return renderTurboPhysics(b.car, rate, {
+    quality, phases: DRIVE, acoustic: (c) => ({ ...c, turboModel: model }),
+    tap: stems && (({ turbo }) => {
+      if (!turbo) return;
+      const { rotorA: a, rotorB: b } = turbo;
+      const gain = b ? TWIN_ROTOR_GAIN : 1;
+      if (model === 'hybrid') {
+        stems[0]![index] = gain * (a.out1 + (b?.out1 ?? 0));
+        stems[1]![index] = gain * (a.out2 + (b?.out2 ?? 0));
+        stems[2]![index] = gain * (a.out3 + (b?.out3 ?? 0));
+        stems[3]![index] = gain * (a.outB + (b?.outB ?? 0));
+        stems[4]![index] = gain * (a.narrowbandOut + (b?.narrowbandOut ?? 0));
+        stems[5]![index] = turbo.rotorOut;
+      } else stems[6]![index] = turbo.rotorOut;
+      index++;
+    }),
+  });
 }
 
-const seg = (r: PhysicsTurboRender, a: string, b?: string): [number, number] => [r.phaseStart[a]!, b ? r.phaseStart[b]! : r.ch[0]!.length];
-function phases(r: PhysicsTurboRender): PhaseMetrics {
+type Render = ReturnType<typeof renderBuild>;
+const analyze = (r: Render, b: TurboBuild, detailed: boolean) => {
   const x = r.ch[CH.turbo]!;
-  const m = ([s, e]: [number, number]) => turboMetrics(x, r.sampleRate, s, e);
-  // the run segment skips the launch transient; the tip-out segment is the BOV / flutter window
-  return { run: m(seg(r, 'run', 'tip-out')), tipOut: m(seg(r, 'tip-out', 'reopen')), reopen: m(seg(r, 'reopen', 'lift')) };
-}
-
-const rows: Row[] = [];
-for (const dir of ['before', 'after', 'spectrograms']) mkdirSync(join(OUT, dir), { recursive: true });
-for (const b of referenceTurboBuilds(cars)) {
-  const t = b.car.engine.turbo!;
-  const name = b.carId;
-  const r: Record<Model, PhysicsTurboRender> = {
-    legacy: renderTurboPhysics(b.car, RATE, { acoustic: (c) => ({ ...c, turboModel: 'legacy' }) }),
-    v2: renderTurboPhysics(b.car, RATE, { acoustic: (c) => ({ ...c, turboModel: 'v2' }) }),
+  const from = r.phaseStart.launch!;
+  const windows = detailed && rotorDriveMetrics(r, b.car.engine.turbo!.compressorBlades);
+  let highestBoost = 0;
+  for (let i = 1; i < r.meta.length; i++) if (r.meta[i]!.boostPa > r.meta[highestBoost]!.boostPa) highestBoost = i;
+  const peakSample = Math.round(highestBoost * r.sampleRate / 120);
+  const half = Math.round(r.sampleRate * .15);
+  return {
+    launch: turboMetrics(x, r.sampleRate, from, r.phaseStart.run),
+    run: turboMetrics(x, r.sampleRate, r.phaseStart.run, r.phaseStart['tip-out']),
+    tipOut: turboMetrics(x, r.sampleRate, r.phaseStart['tip-out'], r.phaseStart.reopen),
+    partial: turboMetrics(x, r.sampleRate, r.phaseStart.partial, r.phaseStart.lift),
+    maxPressure: turboMetrics(x, r.sampleRate, Math.max(0, peakSample - half), Math.min(x.length, peakSample + half)),
+    comparison: turboMetrics(x, r.sampleRate, from, r.phaseStart.lift),
+    maxBoostPa: r.maxBoostPa,
+    maxShaftRpm: r.maxShaftRpm,
+    voiceMsPerAudioSecond: r.voiceMsPerAudioSecond,
+    ...(windows ? { windows } : {}),
   };
-  const turbo = r.v2.voice.aux.turbo!;
-  const from = r.v2.phaseStart['launch']!;
-  // one gain per build for both models (A/B keeps the real level difference)
-  let peak = 1e-9;
-  let peakMix = 1e-9;
-  const mixes = {} as Record<Model, Float32Array>;
-  for (const m of ['legacy', 'v2'] as Model[]) {
-    for (const v of r[m].ch[CH.turbo]!.subarray(from)) peak = Math.max(peak, Math.abs(v));
-    mixes[m] = mixChannels(r[m].ch, fullMix).subarray(from);
-    for (const v of mixes[m]) peakMix = Math.max(peakMix, Math.abs(v));
-  }
-  const refDb = Math.max(spectralMaxDb(r.legacy.ch[CH.turbo]!.subarray(from), RATE), spectralMaxDb(r.v2.ch[CH.turbo]!.subarray(from), RATE));
-  for (const [m, dir] of [['legacy', 'before'], ['v2', 'after']] as [Model, string][]) {
-    const x = r[m].ch[CH.turbo]!.subarray(from);
+};
+
+function writeComparisons(b: TurboBuild, rate: number, renders: Render[], from: number, levels: number[], stems: Float32Array[]): void {
+  const dir = join(OUT, b.carId);
+  mkdirSync(dir, { recursive: true });
+  const gains = levels.map((db) => 10 ** (db / 20));
+  const turbos = renders.map((r, i) => r.ch[CH.turbo]!.subarray(from).map((v) => v * gains[i]!));
+  const vehicles = renders.map((r, i) => mixChannels(r.ch, fullMix.map((g, k) => k === CH.turbo ? g * gains[i]! : g)).subarray(from));
+  const rawStems = stems.map((x) => x.subarray(from));
+  const maxPeak = (signals: Float32Array[]) => {
+    let peak = 1e-9;
+    for (const x of signals) for (const sample of x) peak = Math.max(peak, Math.abs(sample));
+    return peak;
+  };
+  const turboGain = .82 / maxPeak(turbos);
+  const vehicleGain = .82 / maxPeak(vehicles);
+  const stemGain = .82 / maxPeak(rawStems);
+  const specMax = Math.max(...turbos.map((x) => spectralMaxDb(x, rate)));
+  for (const [i, model] of TURBO_MODELS.entries()) {
+    const name = MODEL_FILES[model];
+    writeFileSync(join(dir, `${name}.png`), spectrogram(turbos[i]!, rate, specMax));
     if (WAV) {
-      writeFileSync(join(OUT, dir, `${name}-turbo.wav`), encodeWavMono(x.map((v) => (v * 0.7) / peak), RATE));
-      if (VEHICLE_WAV.has(name)) writeFileSync(join(OUT, dir, `${name}-vehicle.wav`), encodeWavMono(mixes[m].map((v) => (v * 0.8) / peakMix), RATE));
+      saveWav(dir, name, turbos[i]!, rate, turboGain);
+      saveWav(dir, `${name}-veiculo`, vehicles[i]!, rate, vehicleGain);
     }
-    writeFileSync(join(OUT, 'spectrograms', `${name}-${dir}.png`), spectrogram(x, RATE, refDb));
   }
-  const row: Row = {
-    build: b.id,
-    group: b.group,
-    layout: t.layout ?? 'single',
-    bov: t.bovEnabled ? (t.bovVent ?? 'atmosphere') : 'none',
-    profile: turbo.profile.baseId,
-    maxBoostBar: r.v2.maxBoostPa / 1e5,
-    maxShaftRpm: r.v2.maxShaftRpm,
-    legacy: phases(r.legacy),
-    v2: phases(r.v2),
-    bovEvents: turbo.bov.events,
-    flutterEvents: turbo.flutter.events,
-    costMsPerS: voiceCost(b, 48000),
+  if (!WAV) return;
+  for (const [i, name] of STEMS.entries()) saveWav(dir, name, rawStems[i]!, rate, stemGain);
+  const installedRotor = renderTurboPhysics(b.car, rate, {
+    phases: DRIVE, acoustic: (c) => ({
+      ...c, turboModel: 'hybrid', turboLayers: TURBO_LAYER.rotor | TURBO_LAYER.resonance,
+    }),
+  }).ch[CH.turbo]!.subarray(from);
+  saveWav(dir, 'rotor-v21', installedRotor, rate, .82 / maxPeak([installedRotor]));
+  saveWav(dir, 'turbo-completo', turbos[3]!, rate, turboGain);
+  saveWav(dir, 'veiculo-completo', vehicles[3]!, rate, vehicleGain);
+}
+
+function diagnosticCases(b: TurboBuild, rate: number) {
+  const base = carToAcousticConfig(b.car);
+  const p = profileOf(b);
+  const tc = b.car.engine.turbo!;
+  const shaftRpm = p.maxShaftRpm * .61;
+  const samples = Math.round(1.4 * rate);
+  const ordersOff = { order1: 0, order2: 0, order3: 0, bladePass: 0 };
+  const dry = { amplitude: 0, exhaustPulse: 0, resonances: p.resonance.map(() => 0) };
+  const render = (model: TurboAcousticModel, d: TurboDiagnostics, layers: number, trackRotor = false) => {
+    const rotors = new Float32Array(samples);
+    let index = 0;
+    const r = renderTurboScenario({ ...base, turboModel: model, turboDiagnostics: d, turboLayers: layers }, rate, 'steady', {
+      script: { seconds: 1.4, at: () => ({ rpm: base.engine.redlineRpm * .78, throttle: 1 }) },
+      mutate: (f, _t) => {
+        f[AF.turboShaftRpm] = shaftRpm;
+        f[AF.turboShaftRpm2] = p.twin ? shaftRpm * .985 : 0;
+        f[AF.boostPressure] = tc.maxBoostBar * .80 * 1e5;
+        f[AF.bovFlow] = 0;
+      },
+      tap: trackRotor ? ({ turbo }) => {
+        if (turbo?.rotorB) rotors[index++] = (turbo.rotorA.out1 + turbo.rotorB.out1) * TWIN_ROTOR_GAIN;
+      } : undefined,
+    });
+    const x = r.ch[CH.turbo]!.subarray(Math.round(.4 * rate));
+    const n = 8192;
+    const spec = averagedSpectrum(x, n);
+    const beats = trackRotor && p.twin ? (() => {
+      const hop = .0025;
+      const env = envelope(rotors, rate, hop, Math.round(.4 * rate));
+      const mean = env.reduce((sum, x) => sum + x, 0) / env.length;
+      const n = 512;
+      const spectrum = magnitudeSpectrum(env.map((v) => v - mean), n);
+      const expectedHz = shaftRpm * .015 / 60;
+      const binHz = 1 / (hop * n);
+      const center = Math.round(expectedHz / binHz);
+      const peak = Math.max(...spectrum.subarray(center - 1, center + 2));
+      const adjacent = [...spectrum.subarray(center - 12, center - 3), ...spectrum.subarray(center + 4, center + 13)];
+      return { expectedHz, measuredHz: spectrum.indexOf(peak) * binHz, relativeDepthDb: dB(peak / mean), prominenceDb: dB(peak / median(adjacent)) };
+    })() : undefined;
+    return { ...turboMetrics(x, rate), orders: rotorOrderMetrics(spec, rate / n, shaftRpm / 60, p.blades), ...(beats ? { beats } : {}) };
   };
-  rows.push(row);
-  console.log(`${b.id.padEnd(48)} ${row.profile?.padEnd(26)} run dBA ${row.legacy.run.aLevelDb.toFixed(1)} → ${row.v2.run.aLevelDb.toFixed(1)}  TNR ${Math.max(-60, row.legacy.run.tonalToNoiseDb).toFixed(1)} → ${row.v2.run.tonalToNoiseDb.toFixed(1)}  cent ${row.legacy.run.centroidHz.toFixed(0)} → ${row.v2.run.centroidHz.toFixed(0)}  BOV ${row.bovEvents} flutter ${row.flutterEvents}  ms/s ${row.costMsPerS.legacy.toFixed(1)} → ${row.costMsPerS.v2.toFixed(1)}`);
+  const rotor = TURBO_LAYER.rotor;
+  const duct = rotor | TURBO_LAYER.resonance;
+  return {
+    turbo20: render('v2', {}, duct, true),
+    reduced: render('reduced', {}, duct, true),
+    hybrid: render('hybrid', {}, duct, true),
+    noThird: render('reduced', { order3: 0 }, duct),
+    noModulation: render('hybrid', dry, rotor),
+    periodicReduced: render('hybrid', { ...dry, exhaustPulse: 1 }, rotor),
+    periodicOff: render('hybrid', { ...dry, amplitude: 1 }, rotor),
+    combinedModulation: render('hybrid', { ...dry, amplitude: 1, exhaustPulse: 1 }, rotor),
+    toneHeavy: render('hybrid', { ...dry, texture: { coherentToneMix: .86, narrowbandNoiseMix: .49 } }, rotor),
+    textureHeavy: render('hybrid', { ...dry, texture: { coherentToneMix: .35, narrowbandNoiseMix: .94 } }, rotor),
+    order1: render('v2', { ...dry, ...ordersOff, order1: 1 }, rotor),
+    order2: render('v2', { ...dry, ...ordersOff, order2: 1 }, rotor),
+    order3: render('v2', { ...dry, ...ordersOff, order3: 1 }, rotor),
+    bladePass: render('v2', { ...dry, ...ordersOff, bladePass: 1 }, rotor),
+    whoosh: render('hybrid', {}, TURBO_LAYER.whoosh),
+    noResonances20: render('v2', dry, duct),
+    noResonances21: render('hybrid', dry, duct),
+    filters20: p.resonance.map((_, i) => render('v2', { ...dry, resonances: p.resonance.map((_, j) => Number(i === j)) }, duct)),
+    filters21: p.resonance.map((_, i) => render('hybrid', { ...dry, resonances: p.resonance.map((_, j) => Number(i === j)) }, duct)),
+  };
 }
-writeFileSync(join(OUT, 'after', 'report.json'), JSON.stringify({ rate: RATE, drive: TURBO_DRIVE_PHASES, rows }, null, 1));
 
-// ------------------------------------------------------------------ markdown tables
-
-const f = (x: number, d = 1): string => (Number.isFinite(x) ? x.toFixed(d) : '–');
-const tnr = (x: number): string => (x < -60 ? "< −60" : f(x));
-const hi = (m: TurboMetrics): string => f((m.bands[4] ?? 0) * 100, 0);
-let spectral = `# Relatório espectral — Turbo Acoustics 2.0
-
-> Gerado por \`npx tsx scripts/audio-turbo-report.ts\` (${RATE} Hz, qualidade alta, condução física real:
-> largada, aceleração com trocas, tip-out sob pressão, reabertura, alívio). Canal turbo isolado.
-> "Antes" = modelo legado (mantido idêntico para o A/B); "depois" = Turbo Acoustics 2.0.
-> Métricas são objetivas; **não** comprovam fidelidade — ver [listening-validation.md](listening-validation.md).
-
-## Carga plena (fase *run*)
-
-| Build | Perfil 2.0 | Centroide antes → depois (Hz) | Energia > 8 kHz antes → depois (%) | Tonal/ruído antes → depois (dB) | Planicidade antes → depois |
-|---|---|---|---|---|---|
-`;
-for (const r of rows) spectral += `| ${r.build} | ${r.profile} | ${f(r.legacy.run.centroidHz, 0)} → ${f(r.v2.run.centroidHz, 0)} | ${hi(r.legacy.run)} → ${hi(r.v2.run)} | ${tnr(r.legacy.run.tonalToNoiseDb)} → ${tnr(r.v2.run.tonalToNoiseDb)} | ${f(r.legacy.run.flatness, 2)} → ${f(r.v2.run.flatness, 2)} |\n`;
-spectral += `
-## Tip-out sob pressão (válvula, flutter)
-
-| Build | Válvula | Eventos BOV (2.0) | Eventos de flutter (2.0) | Pico antes → depois | Centroide antes → depois (Hz) |
-|---|---|---|---|---|---|
-`;
-for (const r of rows) spectral += `| ${r.build} | ${r.bov} | ${r.bovEvents} | ${r.flutterEvents} | ${f(r.legacy.tipOut.peak, 3)} → ${f(r.v2.tipOut.peak, 3)} | ${f(r.legacy.tipOut.centroidHz, 0)} → ${f(r.v2.tipOut.centroidHz, 0)} |\n`;
-spectral += `
-## Espectrogramas
-
-Escala linear 0–${RATE / 2000} kHz, 80 dB, mesma referência absoluta para antes e depois de cada build.
-
-`;
-for (const r of rows) {
-  const n = r.build.split('/')[0];
-  spectral += `### ${r.build}\n\n| Antes (legado) | Depois (2.0) |\n|---|---|\n| ![antes](spectrograms/${n}-before.png) | ![depois](spectrograms/${n}-after.png) |\n\n`;
+mkdirSync(OUT, { recursive: true });
+let markdownRows = '';
+const diagnostics: Record<string, ReturnType<typeof diagnosticCases>> = {};
+for (const rate of rates) {
+  const rows = [];
+  for (const b of builds) for (const quality of qualities) {
+    const clips = rate === 48000 && quality === 'high' && LISTENING_CARS.includes(b.carId) && exactIds.has(b.id);
+    const total = Math.round(rate * (1.5 + DRIVE.reduce((sum, p) => sum + p.seconds, 0)));
+    const stems = clips ? STEMS.map(() => new Float32Array(total)) : undefined;
+    const models = TURBO_MODELS.map((model) => renderBuild(b, rate, quality, model, model === 'v2' || model === 'hybrid' ? stems : undefined));
+    const data = models.map((m) => analyze(m, b, LISTENING_CARS.includes(b.carId) && exactIds.has(b.id)));
+    const levels = data.map((m) => m.comparison.aLevelDb);
+    const matchDb = levels.map((level) => num(levels[3]! - level, 2));
+    const profile = profileOf(b).baseId;
+    if (rate === 48000) {
+      const group = `${quality}/${profile}`;
+      const values = levelGroups.get(group) ?? [];
+      values.push(matchDb);
+      levelGroups.set(group, values);
+      if (exactIds.has(b.id)) levelGroups.set(`${group}/${b.car.engine.id}`, [matchDb]);
+    }
+    if (stems) {
+      writeComparisons(b, rate, models, models[0]!.phaseStart.launch!, matchDb, stems);
+      diagnostics[b.id] = diagnosticCases(b, rate);
+    }
+    rows.push({ build: b.id, profile, quality, matchDb, models: Object.fromEntries(TURBO_MODELS.map((model, i) => [model, data[i]])) });
+    markdownRows += `| ${rate} | ${quality} | ${b.id} | ${profile} | ${levels.map((x) => num(x)).join(' / ')} | ${data.map((x) => num(x.run.tonalToNoiseDb)).join(' / ')} |\n`;
+    console.log(`${rate} ${quality} ${b.id}: ${levels.map((x) => num(x)).join(' / ')} dBA`);
+  }
+  writeFileSync(join(OUT, `report-${rate}.json`), JSON.stringify({ rate, drive: DRIVE, rows, markdownRows }));
 }
-writeFileSync(join(OUT, 'spectral-report.md'), spectral);
-
-let cal = `# Matriz de calibração — nível e custo
-
-> Gerado por \`npx tsx scripts/audio-turbo-report.ts\`. Nível ponderado A (dBA relativos, canal turbo
-> isolado antes do mixer). O ganho global \`TURBO_V2_OUTPUT\` alinha o 2.0 ao legado em carga plena nos kits
-> e conversões (± 1 dB), para a comparação A/B no Sandbox não favorecer o modelo mais alto. Turbos de fábrica
-> (caixa de ar, válvula recirculada) ficam de propósito 4–7 dB abaixo: o legado não fazia essa distinção.
-> Custo = ms de CPU por segundo de áudio da voz completa (7 canais, 48 kHz, melhor de 7 intercalado; Node, uma thread).
-
-| Build | Grupo | Layout | Válvula | Boost máx (bar) | Rotor máx (rpm) | dBA run antes → depois | Δ dBA | dBA tip-out antes → depois | Custo antes → depois (ms/s) | Δ custo |
-|---|---|---|---|---|---|---|---|---|---|---|
-`;
-let sumD = 0;
-let sumL = 0;
-let sumV = 0;
-for (const r of rows) {
-  const d = r.v2.run.aLevelDb - r.legacy.run.aLevelDb;
-  sumD += d;
-  sumL += r.costMsPerS.legacy;
-  sumV += r.costMsPerS.v2;
-  cal += `| ${r.build} | ${r.group} | ${r.layout} | ${r.bov} | ${f(r.maxBoostBar, 2)} | ${f(r.maxShaftRpm, 0)} | ${f(r.legacy.run.aLevelDb)} → ${f(r.v2.run.aLevelDb)} | ${d >= 0 ? '+' : ''}${f(d)} | ${f(r.legacy.tipOut.aLevelDb)} → ${f(r.v2.tipOut.aLevelDb)} | ${f(r.costMsPerS.legacy)} → ${f(r.costMsPerS.v2)} | ${f(((r.costMsPerS.v2 / r.costMsPerS.legacy) - 1) * 100, 0)}% |\n`;
+if (!args.includes('--rate-worker')) writeFileSync(join(OUT, 'relatorio.md'), table + markdownRows);
+if (rates.includes(48000)) writeFileSync(join(OUT, 'diagnostico-48000.json'), JSON.stringify(diagnostics, null, 2));
+if (!args.includes('--rate-worker') || args.includes('--primary')) writeFileSync(join(OUT, 'perfis.json'), JSON.stringify(coverage, null, 2));
+if (args.includes('--write-levels') && !only && rates.includes(48000) && qualities.length === 2) {
+  const rows = Object.fromEntries([...levelGroups.entries()].sort().map(([key, values]) => [
+    key, TURBO_MODELS.map((_, i) => num(median(values.map((v) => v[i]!)), 2)),
+  ]));
+  const lines = Object.entries(rows).map(([key, v]) => `  '${key}': [${v.join(', ')}],`);
+  writeFileSync(OUT_LEVELS, '// Generated by scripts/audio-turbo-report.ts --write-levels from the 48 kHz matrix.\n'
+    + `export const TURBO_COMPARISON_DB: Readonly<Record<string, readonly number[]>> = {\n${lines.join('\n')}\n};\n`);
 }
-cal += `\n**Média:** Δ nível ${f(sumD / rows.length)} dBA; custo ${f(sumL / rows.length)} → ${f(sumV / rows.length)} ms/s (${f(((sumV / sumL) - 1) * 100, 0)}%; meta < 15%).\n`;
-writeFileSync(join(OUT, 'calibration-matrix.md'), cal);
-console.log(`\nmean Δ dBA ${f(sumD / rows.length)}; cost ${f(sumL / rows.length)} → ${f(sumV / rows.length)} ms/s (${f(((sumV / sumL) - 1) * 100, 0)}%)`);
-
-// ------------------------------------------------------------------ coverage matrix (every turbo build)
-
-let cov = `# Matriz de cobertura — perfis de turbo por veículo
-
-> Gerado por \`npx tsx scripts/audio-turbo-report.ts\`. Um build de referência por carro: turbo de fábrica
-> (stock), preset turbo do Sandbox, kit clássico médio ou conversão estágio 2 da oficina. Cada linha mostra o
-> perfil base resolvido e a cadeia de modificadores aplicada pelo \`TurboProfileResolver\`.
-
-| Build | Grupo | Rotores | Carcaça | Válvula | Wastegate | Admissão | Perfil base | Cadeia |
-|---|---|---|---|---|---|---|---|---|
-`;
-for (const b of referenceTurboBuilds()) {
-  const p = turboProfileOf(carToAcousticConfig(b.car, 'high', 1));
-  if (!p) continue;
-  cov += `| ${b.id} | ${b.group} | ${p.twin ? 2 : 1} | ${p.housing} | ${p.ventType} | ${p.wastegateType} | ${p.intakePath} | ${p.baseId} | ${p.chain.join(' → ')} |\n`;
-}
-writeFileSync(join(OUT, 'coverage-matrix.md'), cov);
