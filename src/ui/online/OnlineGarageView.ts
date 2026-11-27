@@ -1,10 +1,4 @@
-import { findCampaignCar } from '../../data/cars/campaign';
-import { transmissionKindOf } from '../../game/career/tuning/BuildResolverV2';
-import { ALL_PARTS, CATEGORY_LABEL, findPart } from '../../game/career/tuning/parts';
-import { resolveBuild } from '../../game/career/tuning/BuildResolver';
-import { careerResolverVersion } from '../../game/career/tuning/resolverVersion';
-import { physicalSlotOf } from '../../game/career/tuning/partProgression';
-import { reconcileTune } from '../../game/career/tuning/TuningCapabilities';
+import { findPart } from '../../game/career/tuning/parts';
 import { ONLINE_MARKET } from '../../game/online/catalog';
 import type { GarageRequest } from '../../game/online/contracts';
 import type { Garage } from '../../game/online/OnlineClient';
@@ -12,7 +6,6 @@ import { PREPARATION_TREES } from '../../game/online/preparation';
 import { h } from '../dom';
 import { specRows } from '../garage/GarageDialog';
 import { GarageVehiclePreview } from '../garage/GarageVehiclePreview';
-import { workshopPartHeading } from '../workshop/WorkshopPartHeading';
 
 export type OnlineCar = Garage['cars'][number];
 type Action = GarageRequest['operation'];
@@ -113,61 +106,4 @@ export function preparationTree(car: OnlineCar, mutate: Operate, focusNode?: str
             if (window.confirm(`Usar ${node.costPP} PP para desbloquear ${node.name}?`)) void mutate({ kind: 'unlock', carId: car.id, nodeId: node.id });
           }, have || required.length > 0 || missingPP > 0));
       })))));
-}
-
-export function workshop(garage: Garage, car: OnlineCar, mutate: Operate, openNode: (id: string) => void): HTMLElement {
-  const tree = PREPARATION_TREES.get(car.base_car_id)!;
-  const base = findCampaignCar(car.base_car_id)!;
-  const unlocked = new Set(car.unlocks);
-  const nodeNames = new Map(tree.nodes.map((node) => [node.id, node.name]));
-  const nodes = new Map(tree.nodes.flatMap((node) => node.unlocksPartIds.map((id) => [id, node] as const)));
-  const installed = new Set(car.parts);
-  const occupiedSlots = new Set(car.parts.map((id) => physicalSlotOf(findPart(id)!)));
-  const factoryCategories = [...new Set(ALL_PARTS.filter((part) => nodes.has(part.id) && !occupiedSlots.has(physicalSlotOf(part)))
-    .map((part) => CATEGORY_LABEL[part.category]))];
-  const stock = new Map(garage.inventory.filter((item) => item.base_car_id === car.base_car_id).map((item) => [item.part_id, item.quantity]));
-  const parts = h('div', { class: 'online-grid' });
-  const filter = h('input', { type: 'search', placeholder: 'Buscar na oficina', 'aria-label': 'Buscar na oficina' });
-  const incompatible = h('input', { type: 'checkbox' });
-  const redraw = (): void => {
-    const wanted = filter.value.toLocaleLowerCase('pt-BR');
-    const displayed = ALL_PARTS.filter((part) => (incompatible.checked || nodes.has(part.id) || installed.has(part.id)) &&
-      `${part.name} ${CATEGORY_LABEL[part.category]}`.toLocaleLowerCase('pt-BR').includes(wanted));
-    parts.replaceChildren(...displayed.map((part) => {
-      const node = nodes.get(part.id);
-      const isInstalled = installed.has(part.id);
-      const quantity = stock.get(part.id) ?? 0;
-      const ready = !!node && unlocked.has(node.id);
-      const requirements = node?.prerequisites.filter((id) => !unlocked.has(id)).map((id) => nodeNames.get(id)) ?? [];
-      let blockers: string[] = [];
-      if (ready && !isInstalled) {
-        const slot = physicalSlotOf(part);
-        const next = [...car.parts.filter((id) => physicalSlotOf(findPart(id)!) !== slot), part.id];
-        const version = careerResolverVersion(base.id, next, car.build_version);
-        const tune = reconcileTune(base, next, version, car.tune, { tunersUnlocked: true }).tune;
-        const candidate = resolveBuild(base, next, tune, version);
-        if (!candidate.ok) blockers = candidate.errors;
-      }
-      const [state, label] = isInstalled ? ['installed', 'Instalada'] as const : !node ? ['locked', 'Incompatível'] as const :
-        !ready ? ['locked', 'Bloqueada por preparação'] as const : blockers.length ? ['locked', 'Requisito mecânico pendente'] as const :
-        quantity ? ['owned', 'Adquirida'] as const : garage.profile.cr_balance < part.price ? ['unaffordable', 'Créditos insuficientes'] as const :
-          ['available', 'Disponível'] as const;
-      return h('article', { class: 'online-card' }, workshopPartHeading(h('h3', {}, part.name), state, label), h('p', {}, `${CATEGORY_LABEL[part.category]} · ${money(part.price)}`),
-        !ready && node && h('p', {}, `${node.name} · ${node.costPP} PP · ${car.pp_balance} PP disponíveis`),
-        requirements.length > 0 && h('p', {}, `Requer ${requirements.join(', ')}`),
-        blockers.length > 0 && h('p', {}, blockers.join('. ')),
-        quantity > 0 && h('p', {}, `${quantity} em estoque`),
-        h('div', { class: 'row' }, isInstalled ? button('Remover', () => { void mutate({ kind: 'remove', carId: car.id, partId: part.id, buildRevision: car.build_revision }); }) :
-          ready ? [button('Comprar peça', () => { void mutate({ kind: 'buyPart', carId: car.id, partId: part.id }); }, garage.profile.cr_balance < part.price),
-            button('Instalar', () => { void mutate({ kind: 'install', carId: car.id, partId: part.id, buildRevision: car.build_revision }); }, quantity === 0 || blockers.length > 0)] :
-            node ? button('Ver preparação', () => openNode(node.id)) : null));
-    }));
-  };
-  filter.addEventListener('input', redraw);
-  incompatible.addEventListener('change', redraw);
-  redraw();
-  return h('section', {}, h('h2', {}, car.config.name), h('p', {}, `Configuração de fábrica · ${transmissionKindOf(base)} · ${car.parts.length} alterações instaladas`),
-    factoryCategories.length > 0 && h('article', { class: 'online-card' },
-      workshopPartHeading(h('h3', {}, 'Componentes de fábrica'), 'stock', 'Original'), h('p', {}, factoryCategories.join(' · '))),
-    h('div', { class: 'online-filters' }, filter, h('label', { class: 'row' }, incompatible, 'Mostrar incompatíveis')), parts);
 }

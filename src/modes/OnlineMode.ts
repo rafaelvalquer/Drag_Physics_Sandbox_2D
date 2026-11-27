@@ -12,7 +12,11 @@ import type { CameraMode } from '../game/scenes/CameraController';
 import type { OnlineAward } from '../server/online/matches';
 import { fmt, h, toast } from '../ui/dom';
 import { onlineDyno } from '../ui/online/OnlineDyno';
-import { garageCards, market, preparationTree, workshop } from '../ui/online/OnlineGarageView';
+import { garageCards, market, preparationTree } from '../ui/online/OnlineGarageView';
+import { OnlineWorkshopAdapter, type PendingWorkshopOperation } from '../ui/workshop/OnlineWorkshopAdapter';
+import { buildWorkshop, type WorkshopVisualView } from '../ui/workshop/WorkshopController';
+import { WorkshopAnimationController } from '../ui/workshop/WorkshopAnimationController';
+import { WorkshopVisualState } from '../ui/workshop/WorkshopVisualState';
 import '../ui/online/online.css';
 
 type Screen = 'Garagem' | 'Classificados' | 'Preparação' | 'Oficina' | 'Dinamômetro' | 'Ranking' | 'Histórico';
@@ -61,6 +65,9 @@ export class OnlineMode implements Mode {
   private busy = false;
   private disposeScreen?: () => void;
   private readonly pendingOperations = new Map<string, string>();
+  private readonly pendingWorkshopOperations = new Map<string, PendingWorkshopOperation>();
+  private readonly workshopStates = new Map<string, WorkshopVisualState>();
+  private workshopVisit?: { carId: string; adapter: OnlineWorkshopAdapter; view: WorkshopVisualView };
   private readonly cleanups: (() => void)[] = [];
 
   get usesTrack(): boolean { return this.driving && !!this.renderer; }
@@ -130,6 +137,8 @@ export class OnlineMode implements Mode {
         if (token && this.connected) this.room?.send('session', token);
         if (!token && this.mounted) {
           this.pendingOperations.clear();
+          this.pendingWorkshopOperations.clear();
+          this.workshopStates.clear();
           this.leaveRoom();
           this.garage = undefined;
           this.login();
@@ -154,12 +163,13 @@ export class OnlineMode implements Mode {
     this.disposeScreen?.();
     this.disposeScreen = undefined;
     this.root.hidden = false;
-    this.root.replaceChildren(h('main', { class: 'career-screen' }, h('header', {},
+    this.root.replaceChildren(h('main', { class: 'career-screen', 'data-testid': title === 'Oficina' ? 'online-workshop' : undefined }, h('header', {},
       h('div', { class: 'career-title' }, h('h1', {}, title)),
       this.garage && h('div', { class: 'career-status' },
         this.garage.profile.avatar_url && h('img', { class: 'online-avatar', src: this.garage.profile.avatar_url, alt: '', referrerpolicy: 'no-referrer' }),
         h('span', {}, this.garage.profile.nickname),
-        h('span', {}, `${this.garage.profile.cr_balance.toLocaleString('pt-BR')} CR`), h('span', {}, `${this.garage.profile.rp} RP`))),
+        h('span', { 'data-testid': 'online-status-cr' }, `${this.garage.profile.cr_balance.toLocaleString('pt-BR')} CR`),
+        h('span', { 'data-testid': 'online-status-rp' }, `${this.garage.profile.rp} RP`))),
     navigation, content));
   }
 
@@ -228,7 +238,10 @@ export class OnlineMode implements Mode {
 
   private navigation(): HTMLElement {
     return h('nav', { class: 'row online-nav', 'aria-label': 'Modo online' },
-      this.button('Buscar partida', () => { void this.queue(); }, true),
+      this.button('Buscar partida', () => {
+        if (this.workshopVisit?.view.state.value.busy) { toast('Aguarde a conclusão da operação da oficina.'); return; }
+        void this.queue();
+      }, true),
       (['Garagem', 'Classificados', 'Ranking', 'Histórico'] as const).map((screen) =>
         this.button(screen, () => this.navigate(screen), this.screen === screen)),
       this.button('Sair', () => { void this.run(() => this.client!.logout()); }));
@@ -254,17 +267,59 @@ export class OnlineMode implements Mode {
     let dispose: (() => void) | undefined;
     if (this.screen === 'Classificados') content = market(garage.profile.cr_balance, this.mutate);
     else if (this.screen === 'Ranking' || this.screen === 'Histórico') content = this.records();
-    else if (this.screen === 'Preparação' && car) content = preparationTree(car, this.mutate, this.focusNode);
-    else if (this.screen === 'Oficina' && car) content = workshop(garage, car, this.mutate, (node) => this.navigate('Preparação', car.id, node));
+    else if (this.screen === 'Preparação' && car) content = h('section', {},
+      this.button('Voltar à oficina', () => this.navigate('Oficina', car.id)), preparationTree(car, this.mutate, this.focusNode));
+    else if (this.screen === 'Oficina' && car && this.client) {
+      if (this.workshopVisit?.carId === car.id) {
+        this.workshopVisit.adapter.updateGarage(garage);
+        this.refreshWorkshopStatus();
+        return;
+      }
+      const state = this.workshopStates.get(car.id) ?? new WorkshopVisualState();
+      this.workshopStates.set(car.id, state);
+      const adapter = new OnlineWorkshopAdapter(garage, car.id, this.client, this.pendingWorkshopOperations, (next) => {
+        if (!this.mounted || this.room || this.workshopVisit?.adapter !== adapter) return;
+        this.garage = next ?? undefined;
+        if (!next) this.login();
+        else this.refreshWorkshopStatus();
+      });
+      const view = buildWorkshop(adapter, {
+        audio: this.ctx.audio,
+        guard: () => this.mounted && !this.busy && !this.room && this.workshopVisit?.adapter === adapter,
+        openDyno: () => this.navigate('Dinamômetro', car.id),
+        back: () => this.navigate('Garagem'),
+        openNode: (node) => this.navigate('Preparação', car.id, node),
+        changed: () => this.refreshWorkshopStatus(),
+        toast,
+      }, state);
+      this.show(this.screen, view.root, this.navigation());
+      this.workshopVisit = { carId: car.id, adapter, view };
+      this.disposeScreen = () => {
+        view.dispose();
+        if (this.workshopVisit?.view === view) this.workshopVisit = undefined;
+      };
+      const animation = new WorkshopAnimationController(view.root, matchMedia('(prefers-reduced-motion: reduce)').matches);
+      view.attach(animation);
+      animation.enter();
+      return;
+    }
     else if (this.screen === 'Dinamômetro' && car) {
       const view = onlineDyno(car, (tune) => this.mutate({ kind: 'tune', carId: car.id, buildRevision: car.build_revision, tune }));
-      content = view.element;
+      content = h('section', {}, this.button('Voltar à oficina', () => this.navigate('Oficina', car.id)), view.element);
       dispose = view.dispose;
     }
     else content = garageCards(garage, this.mutate, (chosen, project) => this.navigate(section.get(project)!, chosen.id));
     this.show(this.screen, content, this.navigation());
     this.disposeScreen = dispose;
     if (this.focusNode) requestAnimationFrame(() => document.getElementById(`online-node-${this.focusNode}`)?.scrollIntoView({ block: 'nearest' }));
+  }
+
+  private refreshWorkshopStatus(): void {
+    if (!this.garage) return;
+    const cr = this.root.querySelector('[data-testid="online-status-cr"]');
+    const rp = this.root.querySelector('[data-testid="online-status-rp"]');
+    if (cr) cr.textContent = `${this.garage.profile.cr_balance.toLocaleString('pt-BR')} CR`;
+    if (rp) rp.textContent = `${this.garage.profile.rp} RP`;
   }
 
   private async fetchPage(): Promise<void> {

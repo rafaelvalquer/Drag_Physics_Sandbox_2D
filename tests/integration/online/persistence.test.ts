@@ -10,6 +10,7 @@ import { TRACKS } from '../../../src/data/tracks';
 import { AuthoritativeRace } from '../../../src/game/online/AuthoritativeRace';
 import { COMPETITIVE_ROOM, type OnlineGearUpdate, type OnlineLoadingState, type OnlineLobbyState, type OnlineRaceSnapshot, type RaceInput } from '../../../src/game/online/contracts';
 import { ONLINE_STARTERS } from '../../../src/game/online/demoCatalog';
+import { findPart } from '../../../src/game/career/tuning/parts';
 import { PREPARATION_TREES } from '../../../src/game/online/preparation';
 import { createAuthenticator } from '../../../src/server/online/auth';
 import { competitiveRaceRoom } from '../../../src/server/online/CompetitiveRaceRoom';
@@ -133,6 +134,73 @@ it('protege cadastro, inventário, saldos, PP, histórico e liquidação da corr
     await tx`set local role authenticated`;
     await tx`update online_wallets set cr_balance = 999999`;
   })).rejects.toThrow('permission denied');
+});
+
+it('compra, instala conjuntos e restaura de forma atômica na oficina online', async () => {
+  const owner = randomUUID();
+  const other = randomUUID();
+  await sql`insert into auth.users values (${owner}), (${other})`;
+  const baseId = 'gm-chevette-sl-1988';
+  await garage.create(identity(owner), { ...onboarding, nickname: 'Oficina atômica', baseCarId: baseId });
+  await garage.create(identity(other), { ...onboarding, nickname: 'Outra oficina', baseCarId: baseId });
+  const first = (await garage.get(owner))!.cars[0]!;
+  const carId = first.id;
+  const tree = PREPARATION_TREES.get(baseId)!;
+  const kit = 'turbo-basic';
+  const clutch = 'clutch-reinforced';
+  const exhaust = 'exhaust-sport';
+  const refresh = () => garage.get(owner).then((saved) => saved!);
+  await sql`update online_wallets set cr_balance = 20000 where user_id = ${owner}`;
+  await sql`update online_car_progression set pp_balance = 500, pp_earned_total = 500 where car_id = ${carId}`;
+  const unlockPart = async (partId: string) => {
+    const visit = async (id: string): Promise<void> => {
+      const node = tree.nodes.find((entry) => entry.id === id)!;
+      for (const required of node.prerequisites) await visit(required);
+      await apply(owner, { kind: 'unlock', carId, nodeId: id });
+    };
+    await visit(tree.nodes.find((entry) => entry.unlocksPartIds.includes(partId))!.id);
+  };
+
+  const buyKit = { kind: 'buyAndInstall', carId, partId: kit, buildRevision: 0 } as const;
+  await expect(apply(owner, buyKit)).rejects.toThrow('bloqueada');
+  await expect(apply(other, buyKit)).rejects.toThrow('indisponível');
+  await unlockPart(kit);
+  await unlockPart(exhaust);
+  const before = await refresh();
+  await expect(apply(owner, buyKit)).rejects.toThrow(/embreagem/i);
+  await expect(apply(owner, { kind: 'installBundle', carId, partIds: [kit, clutch], buildRevision: 0 })).rejects.toThrow('bloqueada');
+  await expect(garage.apply(owner, { operation: buyKit, operationId: randomUUID() }, () => true)).rejects.toThrow('fila');
+  expect(await refresh()).toEqual(before);
+
+  await apply(owner, { kind: 'buyAndInstall', carId, partId: exhaust, buildRevision: 0 });
+  await unlockPart(clutch);
+  await apply(owner, { kind: 'buyPart', carId, partId: clutch });
+  const stocked = await refresh();
+  const bundle = { kind: 'installBundle' as const, carId, partIds: [kit, clutch], buildRevision: 1, maxCost: findPart(kit)!.price };
+  await expect(apply(owner, { ...bundle, partIds: [kit, kit] })).rejects.toThrow(/slot/);
+  await expect(apply(owner, { ...bundle, maxCost: 0 })).rejects.toThrow('custo do conjunto mudou');
+  expect(await refresh()).toEqual(stocked);
+  const id = randomUUID();
+  const [installed, repeated] = await Promise.all([apply(owner, bundle, id), apply(owner, bundle, id)]);
+  expect(installed).toEqual(repeated);
+  await expect(apply(owner, bundle)).rejects.toThrow('projeto foi atualizado');
+  const prepared = await refresh();
+  expect(prepared.cars[0]).toMatchObject({ parts: [clutch, exhaust, kit].sort(), build_revision: 2, unlocks: stocked.cars[0]!.unlocks });
+  expect(prepared.profile.cr_balance).toBe(stocked.profile.cr_balance - findPart(kit)!.price);
+  expect(prepared.inventory.find((it) => it.part_id === clutch)).toBeUndefined();
+  expect(await sql`select amount from online_currency_ledger where user_id = ${owner} and idempotency_key = ${id}`)
+    .toEqual([{ amount: -findPart(kit)!.price }]);
+
+  await expect(apply(owner, { kind: 'restoreStock', scope: 'slot', slotId: 'clutch', carId, buildRevision: 2 })).rejects.toThrow(/embreagem/i);
+  expect(await refresh()).toEqual(prepared);
+  await apply(owner, { kind: 'restoreStock', scope: 'slots', slotIds: ['clutch', 'turbo'], carId, buildRevision: 2 });
+  const restored = await refresh();
+  expect(restored.cars[0]).toMatchObject({ parts: [exhaust], build_revision: 3,
+    pp_balance: prepared.cars[0]!.pp_balance, unlocks: prepared.cars[0]!.unlocks });
+  expect(restored.profile).toEqual(prepared.profile);
+  expect(restored.inventory).toEqual(expect.arrayContaining([kit, clutch].map((part_id) => expect.objectContaining({ part_id, quantity: 1 }))));
+  await apply(owner, { kind: 'restoreStock', scope: 'all', carId, buildRevision: 3 });
+  expect((await refresh()).cars[0]).toMatchObject({ parts: [], build_revision: 4 });
 });
 
 it('liquida uma corrida realmente empatada uma única vez', async () => {

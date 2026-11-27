@@ -1,5 +1,5 @@
 import { gsap } from 'gsap';
-import { WorkshopAnimationController } from '../workshop-visual/WorkshopAnimationController';
+import { WorkshopAnimationController } from '../../workshop/WorkshopAnimationController';
 
 /**
  * Screen transitions of the campaign. The new screen is rendered synchronously by

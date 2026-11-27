@@ -1,11 +1,12 @@
 /** Logic of the visual workshop: preview without touching the save, search/filters, friendly copy, comparison numbers. */
 import { describe, expect, it } from 'vitest';
-import { findCampaignCar } from '../../../src/data/cars/campaign';
+import { CAREER_CARS, findCampaignCar } from '../../../src/data/cars/campaign';
 import { CareerController } from '../../../src/game/career/CareerController';
 import { CareerRepository } from '../../../src/game/career/CareerRepository';
 import { EVENTS } from '../../../src/game/career/CareerEvents';
-import { CATEGORY_LABEL, WORKSHOP_TABS, findPart, type PartCategory } from '../../../src/game/career/tuning/parts';
+import { ALL_PARTS, CATEGORY_LABEL, WORKSHOP_TABS, findPart, type PartCategory } from '../../../src/game/career/tuning/parts';
 import { resolveBuild } from '../../../src/game/career/tuning/BuildResolver';
+import { careerResolverVersion } from '../../../src/game/career/tuning/resolverVersion';
 import { MemoryStore } from '../../../src/storage/db';
 import { CATEGORY_HELP, COMPARE_FRIENDLY, FILTERS, L, TAB_COPY, friendlyIssue, friendlyOpError, layoutNote, stockSpec } from '../../../src/ui/career/workshop-visual/WorkshopCopy';
 import { comparisonRows, prosAndCons } from '../../../src/ui/career/workshop-visual/WorkshopComparisonPanel';
@@ -13,6 +14,7 @@ import { buildCatalog, fitsCar, visiblePartsOf } from '../../../src/ui/career/wo
 import { previewSelection, statusOf } from '../../../src/ui/career/workshop-visual/WorkshopPreviewModel';
 import { matchesFilter, matchesQuery, normalize } from '../../../src/ui/career/workshop-visual/WorkshopSearchFilters';
 import { WorkshopVisualState } from '../../../src/ui/career/workshop-visual/WorkshopVisualState';
+import { workshopCategoryOf, workshopLocation } from '../../../src/ui/workshop/WorkshopSlotMapping';
 
 type Internal = { commit(fn: (s: import('../../../src/game/career/CareerState').CareerSave) => void): Promise<unknown> };
 const win = (id: string) => ({
@@ -100,6 +102,30 @@ describe('preview before buying (V01-V12)', () => {
 });
 
 describe('catalogue, search and filters (V13-V20)', () => {
+  it('maps every part to one presentation location and separates turbo kits from turbine upgrades', () => {
+    for (const p of ALL_PARTS) {
+      const location = workshopLocation(p);
+      expect(workshopCategoryOf(location.slot), p.id).toBe(location.category);
+    }
+    expect(workshopLocation(findPart('turbo-basic')!)).toEqual({ category: 'turbo', slot: 'turbo' });
+    expect(workshopLocation(findPart('factory-turbo-bmw-n20-s1')!)).toEqual({ category: 'turbo', slot: 'turbo-turbine' });
+    expect(workshopCategoryOf('boost-control')).toBe('turbo');
+    expect(workshopCategoryOf('intercooler')).toBe('turbo');
+  });
+
+  it('retains an addressable, duplicate-free catalog for every campaign car', async () => {
+    const c = await chevette();
+    for (const base of CAREER_CARS) {
+      const owned = { ...c.activeCar!, baseCarId: base.id, installedParts: [], buildVersion: careerResolverVersion(base.id) };
+      const catalog = buildCatalog(c.save!, owned, (p) => statusOf(c.save!, owned, p));
+      const groups = catalog.tabs.flatMap((tab) => tab.groups);
+      const ids = groups.flatMap((g) => g.parts.map((p) => p.part.id));
+      expect(ids.length, base.id).toBeGreaterThan(0);
+      expect(ids.length, base.id).toBe(new Set(ids).size);
+      expect(new Set(ids), base.id).toEqual(new Set(visiblePartsOf(owned).map((p) => p.id)));
+      expect(new Set(groups.map((g) => g.category)).size, base.id).toBe(groups.length);
+    }
+  });
   it('tabs, groups and the factory slot come from the same data as the classic workshop', async () => {
     const c = await chevette();
     const cat = buildCatalog(c.save!, c.activeCar!, (p) => statusOf(c.save!, c.activeCar!, p));
@@ -127,7 +153,7 @@ describe('catalogue, search and filters (V13-V20)', () => {
     expect(matchesFilter('locked', 'locked', () => false)).toBe(true);
     expect(matchesFilter('compatible', 'available', () => true)).toBe(true);
     expect(matchesFilter('compatible', 'available', () => false)).toBe(false);
-    expect(FILTERS.map((f) => f.id)).toEqual(['all', 'available', 'equipped', 'stock', 'locked', 'compatible']);
+    expect(FILTERS.map((f) => f.id)).toEqual(['all', 'available', 'equipped', 'stock', 'locked', 'compatible', 'incompatible']);
   });
 
   it('"compatible" asks the resolver (a turbo part alone does not fit a car without the kit)', async () => {

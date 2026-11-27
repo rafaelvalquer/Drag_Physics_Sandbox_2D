@@ -4,7 +4,7 @@ import { findCampaignCar } from '../../data/cars/campaign';
 import { resolveBuild, type ResolverVersion } from '../../game/career/tuning/BuildResolver';
 import type { BuildTune } from '../../game/career/tuning/buildCommon';
 import { physicalSlotOf } from '../../game/career/tuning/partProgression';
-import { findPart } from '../../game/career/tuning/parts';
+import { CATEGORY_ORDER, findPart } from '../../game/career/tuning/parts';
 import { careerResolverVersion } from '../../game/career/tuning/resolverVersion';
 import { failureSpecFor, reconcileTune, validateTune } from '../../game/career/tuning/TuningCapabilities';
 import { ONLINE_MARKET } from '../../game/online/catalog';
@@ -12,6 +12,7 @@ import type { GarageRequest, Onboarding } from '../../game/online/contracts';
 import { ONLINE_STARTERS } from '../../game/online/demoCatalog';
 import { ONLINE_MAX_GARAGE, ONLINE_TERMS_VERSION } from '../../game/online/economy';
 import { PREPARATION_TREES } from '../../game/online/preparation';
+import { onlineWorkshopTree, replaceOnlinePart, restoreOnlineSlots } from '../../game/online/workshopBuild';
 import type { OnlineIdentity } from './auth';
 import { OnlineError } from './OnlineError';
 
@@ -103,7 +104,7 @@ export class OnlineGarage {
       const cars = await this.cars(tx, user);
       const inventory = await tx<{ base_car_id: string; part_id: string; quantity: number }[]>`
         select base_car_id, part_id, quantity from online_inventory where user_id = ${user} order by part_id`;
-      return { profile, inventory, cars: cars.map((car) => {
+      return { profile, inventory: [...inventory], cars: cars.map((car) => {
         const { result } = buildFor(car);
         return { ...car, config: result.car, peakPowerCv: result.peakPowerCv, peakTorqueNm: result.peakTorqueNm };
       }) };
@@ -171,6 +172,9 @@ export class OnlineGarage {
           case 'buyPart':
           case 'install':
           case 'remove': await this.part(tx, user, car, operation.kind, operation.partId, request.operationId); break;
+          case 'buyAndInstall': await this.installSet(tx, user, car, [operation.partId], 'buy', operation.kind, request.operationId); break;
+          case 'installBundle': await this.installSet(tx, user, car, operation.partIds, 'auto', operation.kind, request.operationId, operation.maxCost); break;
+          case 'restoreStock': await this.restore(tx, user, car, operation.scope === 'all' ? null : operation.slotIds ?? [operation.slotId!]); break;
           case 'tune': await this.updateBuild(tx, car, car.parts, operation.tune); break;
         }
       }
@@ -223,36 +227,77 @@ export class OnlineGarage {
   }
 
   private async part(sql: Sql, user: string, car: CarRow, kind: 'buyPart' | 'install' | 'remove', partId: string, operationId: string): Promise<void> {
-    const part = findPart(partId);
-    const tree = PREPARATION_TREES.get(car.base_car_id);
-    const node = tree?.nodes.find((item) => item.unlocksPartIds.includes(partId));
-    if (!part || (kind !== 'remove' && (!node || !car.unlocks.includes(node.id)))) throw new OnlineError(409, 'Peça indisponível ou bloqueada neste projeto.');
     if (kind === 'buyPart') {
+      const part = this.unlockedPart(car, partId);
       await this.changeCredits(sql, user, car.id, -part.price, kind, operationId);
       await this.stock(sql, user, car.base_car_id, partId);
       return;
     }
-    if (kind === 'remove' && !car.parts.includes(partId)) throw new OnlineError(404, 'Peça não instalada.');
-    if (kind === 'install' && car.parts.includes(partId)) return;
-    const slot = physicalSlotOf(part);
-    const replaced = kind === 'remove' ? partId : car.parts.find((id) => physicalSlotOf(findPart(id)!) === slot);
-    const next = car.parts.filter((id) => id !== replaced);
     if (kind === 'install') {
-      next.push(partId);
-      const removed = await sql`delete from online_inventory where user_id = ${user} and base_car_id = ${car.base_car_id} and part_id = ${partId} and quantity = 1 returning id`;
-      if (!removed.length) {
-        const reduced = await sql`update online_inventory set quantity = quantity - 1
-          where user_id = ${user} and base_car_id = ${car.base_car_id} and part_id = ${partId} and quantity > 1 returning id`;
-        if (!reduced.length) throw new OnlineError(409, 'Compre a peça antes de instalar.');
-      }
+      this.unlockedPart(car, partId);
+      if (!car.parts.includes(partId)) await this.installSet(sql, user, car, [partId], 'stock', kind, operationId);
+      return;
     }
+    if (!car.parts.includes(partId)) throw new OnlineError(404, 'Peça não instalada.');
+    await this.updateParts(sql, user, car, car.parts.filter((id) => id !== partId), [partId], []);
+  }
+
+  private unlockedPart(car: CarRow, id: string) {
+    const part = findPart(id);
+    const node = onlineWorkshopTree(car.base_car_id, car.tree_version)?.nodes.find((item) => item.unlocksPartIds.includes(id));
+    if (!part || !node || !car.unlocks.includes(node.id)) throw new OnlineError(409, 'Peça indisponível ou bloqueada neste projeto.');
+    return part;
+  }
+
+  private async consumeStock(sql: Sql, user: string, baseId: string, partId: string): Promise<boolean> {
+    const removed = await sql`delete from online_inventory
+      where user_id = ${user} and base_car_id = ${baseId} and part_id = ${partId} and quantity = 1 returning id`;
+    if (removed.length) return true;
+    const reduced = await sql`update online_inventory set quantity = quantity - 1
+      where user_id = ${user} and base_car_id = ${baseId} and part_id = ${partId} and quantity > 1 returning id`;
+    return reduced.length > 0;
+  }
+
+  private async installSet(sql: Sql, user: string, car: CarRow, ids: string[], source: 'stock' | 'buy' | 'auto', reason: string, operationId: string, maxCost?: number): Promise<void> {
+    const parts = ids.map((id) => this.unlockedPart(car, id));
+    if (new Set(parts.map(physicalSlotOf)).size !== parts.length) throw new OnlineError(409, 'Selecione apenas uma peça por slot.');
+    const added = parts.filter((p) => !car.parts.includes(p.id));
+    if (!added.length) return;
+    let next = [...car.parts];
+    const removed: string[] = [];
+    let cost = 0;
+    for (const p of added) {
+      const replacement = replaceOnlinePart(next, p.id);
+      next = replacement.parts;
+      if (replacement.replaced) removed.push(replacement.replaced);
+      const inStock = source !== 'buy' && await this.consumeStock(sql, user, car.base_car_id, p.id);
+      if (!inStock && source === 'stock') throw new OnlineError(409, 'Compre a peça antes de instalar.');
+      if (!inStock) cost += p.price;
+    }
+    if (maxCost !== undefined && cost > maxCost) throw new OnlineError(409, 'O custo do conjunto mudou. Confira o estoque e confirme novamente.');
+    // All inventory changes, build validation and the single CR movement use the surrounding transaction.
+    await this.updateParts(sql, user, car, next, removed, added.map((p) => p.id));
+    if (cost) await this.changeCredits(sql, user, car.id, -cost, reason, operationId);
+  }
+
+  private async restore(sql: Sql, user: string, car: CarRow, slots: readonly string[] | null): Promise<void> {
+    if (slots?.some((slot) => !(CATEGORY_ORDER as readonly string[]).includes(slot))) throw new OnlineError(400, 'Slot de preparação inválido.');
+    const next = slots ? restoreOnlineSlots(car.parts, slots) : { removed: car.parts, parts: [] };
+    if (!next.removed.length) return;
+    await this.updateParts(sql, user, car, next.parts, next.removed, []);
+  }
+
+  private async updateParts(sql: Sql, user: string, car: CarRow, next: string[], removed: readonly string[], added: readonly string[]): Promise<void> {
     const tune = reconcileTune(baseCar(car.base_car_id), next, careerResolverVersion(car.base_car_id, next, car.build_version), car.tune, { tunersUnlocked: true }).tune;
     await this.updateBuild(sql, car, next, tune);
-    if (replaced) {
-      await sql`delete from online_car_parts where car_id = ${car.id} and part_id = ${replaced}`;
-      await this.stock(sql, user, car.base_car_id, replaced);
+    for (const id of removed) {
+      await sql`delete from online_car_parts where car_id = ${car.id} and part_id = ${id}`;
+      await this.stock(sql, user, car.base_car_id, id);
     }
-    if (kind === 'install') await sql`insert into online_car_parts (user_id, car_id, part_id, physical_slot) values (${user}, ${car.id}, ${partId}, ${slot})`;
+    for (const id of added) {
+      const slot = physicalSlotOf(findPart(id)!);
+      await sql`insert into online_car_parts (user_id, car_id, part_id, physical_slot) values (${user}, ${car.id}, ${id}, ${slot})`;
+    }
   }
 
   private async stock(sql: Sql, user: string, baseId: string, partId: string): Promise<void> {

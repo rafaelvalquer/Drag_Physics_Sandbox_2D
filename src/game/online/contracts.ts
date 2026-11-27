@@ -46,13 +46,20 @@ const carId = z.uuid();
 const partId = z.string().min(1).max(120);
 const paint = z.string().regex(/^#[a-f0-9]{6}$/i);
 const buildRevision = z.int().min(0);
+const slotId = z.string().min(1).max(80);
 export const GarageOperationSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('buy'), baseCarId: z.string().max(80), paint: paint.optional() }),
   z.strictObject({ kind: z.literal('sell'), carId, confirmed: z.literal(true) }),
   z.strictObject({ kind: z.literal('select'), carId }),
   z.strictObject({ kind: z.literal('paint'), carId, paint }),
-  z.strictObject({ kind: z.literal('unlock'), carId, nodeId: z.string().max(80) }),
-  z.strictObject({ kind: z.literal('buyPart'), carId, partId }),
+  z.strictObject({ kind: z.literal('unlock'), carId, nodeId: z.string().max(80), buildRevision: buildRevision.optional() }),
+  z.strictObject({ kind: z.literal('buyPart'), carId, partId, buildRevision: buildRevision.optional() }),
+  z.strictObject({ kind: z.literal('buyAndInstall'), carId, partId, buildRevision }),
+  z.strictObject({ kind: z.literal('installBundle'), carId, partIds: z.array(partId).min(1).max(16), maxCost: z.int().min(0).optional(), buildRevision }),
+  z.strictObject({ kind: z.literal('restoreStock'), carId, buildRevision,
+    scope: z.enum(['all', 'slot', 'slots']), slotId: slotId.optional(), slotIds: z.array(slotId).min(2).max(16).optional(),
+  }).refine((op) => op.scope === 'all' ? !op.slotId && !op.slotIds :
+    op.scope === 'slot' ? !!op.slotId && !op.slotIds : !op.slotId && !!op.slotIds, 'Selecione os slots da restauração.'),
   z.strictObject({ kind: z.literal('install'), carId, partId, buildRevision }),
   z.strictObject({ kind: z.literal('remove'), carId, partId, buildRevision }),
   z.strictObject({ kind: z.literal('tune'), carId, tune: OnlineTuneSchema, buildRevision }),
