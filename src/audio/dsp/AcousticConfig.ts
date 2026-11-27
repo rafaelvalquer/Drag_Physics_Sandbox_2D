@@ -1,4 +1,5 @@
 import type { AcousticConfig, CarConfig, EngineConfig, ExhaustConfig } from '../../data/schema';
+import type { TurboAcousticModel } from './turbo/TurboAcousticTypes';
 
 /** Mixer channels produced by each vehicle voice (one mono AudioWorklet output each). */
 export const CHANNELS = ['intake', 'block', 'exhaust', 'turbo', 'tire', 'transmission', 'environment'] as const;
@@ -25,6 +26,7 @@ export interface AcousticVehicleConfig {
   engine: Pick<
     EngineConfig,
     | 'id'
+    | 'family'
     | 'cylinders'
     | 'firingAnglesDeg'
     | 'bankOfCylinder'
@@ -54,6 +56,23 @@ export interface AcousticVehicleConfig {
   quality: AcousticQuality;
   /** Seed of the noise generators (deterministic rendering for tests). */
   seed: number;
+  /** Turbo sound model (A/B comparison). Absent = 'v2'. */
+  turboModel?: TurboAcousticModel;
+  /** Dev isolation of the Turbo Acoustics 2.0 layers (TURBO_LAYER bits). Absent = all. */
+  turboLayers?: number;
+}
+
+let defaultTurboModel: TurboAcousticModel = 'v2';
+let defaultTurboLayers: number | undefined;
+
+/** Dev A/B switch: the turbo model (and layer mask) every new voice configuration uses. */
+export function setTurboAcousticDefaults(model: TurboAcousticModel, layers?: number): void {
+  defaultTurboModel = model;
+  defaultTurboLayers = layers;
+}
+
+export function turboAcousticDefaults(): { model: TurboAcousticModel; layers: number | undefined } {
+  return { model: defaultTurboModel, layers: defaultTurboLayers };
 }
 
 export function carToAcousticConfig(car: CarConfig, quality: AcousticQuality = 'high', seed = 1): AcousticVehicleConfig {
@@ -61,6 +80,7 @@ export function carToAcousticConfig(car: CarConfig, quality: AcousticQuality = '
   return {
     engine: {
       id: e.id,
+      family: e.family,
       cylinders: e.cylinders,
       firingAnglesDeg: [...e.firingAnglesDeg],
       bankOfCylinder: [...e.bankOfCylinder],
@@ -83,11 +103,13 @@ export function carToAcousticConfig(car: CarConfig, quality: AcousticQuality = '
       throttle: { ...e.throttle },
     },
     exhaust: { ...car.exhaust, mufflerChambersM: [...car.exhaust.mufflerChambersM] },
-    acoustic: { ...car.acoustic },
+    acoustic: { ...car.acoustic, ...(car.acoustic.turbo ? { turbo: { ...car.acoustic.turbo } } : {}) },
     gearRatios: [...car.transmission.gearRatios],
     finalDrive: car.transmission.finalDrive,
     tireRadiusM: car.tires.radiusM,
     quality,
     seed,
+    turboModel: defaultTurboModel,
+    ...(defaultTurboLayers !== undefined ? { turboLayers: defaultTurboLayers } : {}),
   };
 }

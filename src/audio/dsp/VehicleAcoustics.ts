@@ -57,6 +57,9 @@ export class VehicleAcoustics {
     transmissionTorque: 0,
     gear: 0,
     gearChanged: false,
+    load: 0,
+    exhaustTempK: 700,
+    combustion: true,
   };
   private readonly dc: DcBlocker[] = [];
   private readonly gains = new Float64Array(CHANNEL_COUNT);
@@ -68,6 +71,8 @@ export class VehicleAcoustics {
   exhaustTap: ((radiated: number, jet: number, combined: number, normalized: number, final: number) => void) | null = null;
   /** Offline diagnostics only: per sample tone, hiss, roar, combined (Pa), normalized (pre-softClip) and final intake samples. */
   intakeTap: ((tone: number, hiss: number, roar: number, combined: number, normalized: number, final: number) => void) | null = null;
+  /** Offline diagnostics only: called per sample after the turbo channel is written (aux sources + final turbo sample). */
+  turboTap: ((aux: AuxAcoustics, final: number) => void) | null = null;
   /** Peak absolute output per channel since the last `resetStats` (diagnostics, calibration). */
   readonly peak = new Float64Array(CHANNEL_COUNT);
   readonly sumSq = new Float64Array(CHANNEL_COUNT);
@@ -170,6 +175,9 @@ export class VehicleAcoustics {
       ac.transmissionTorque = c[AF.transmissionTorque]!;
       ac.gear = c[AF.gear]!;
       ac.gearChanged = s.gearChanged;
+      ac.load = ec.load;
+      ac.exhaustTempK = ec.exhaustTempK;
+      ac.combustion = ec.combustion;
       this.aux.process(ac);
 
       const e = this.engine;
@@ -191,7 +199,8 @@ export class VehicleAcoustics {
       this.write(outputs, CH.block, offset + j, raw1, fade);
       const yEx = this.write(outputs, CH.exhaust, offset + j, raw2, fade);
       if (this.exhaustTap) this.exhaustTap(e.exhaustRadiated, e.exhaustJet, raw2, raw2 * this.gains[CH.exhaust]!, yEx);
-      this.write(outputs, CH.turbo, offset + j, x.turboOut, fade);
+      const yTu = this.write(outputs, CH.turbo, offset + j, x.turboOut, fade);
+      if (this.turboTap) this.turboTap(x, yTu);
       this.write(outputs, CH.tire, offset + j, x.tireOut, fade);
       this.write(outputs, CH.transmission, offset + j, x.transmissionOut, fade);
       this.write(outputs, CH.environment, offset + j, x.environmentOut, fade);

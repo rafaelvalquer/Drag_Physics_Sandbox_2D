@@ -1,6 +1,8 @@
 import { Prng } from '../../core/prng';
 import type { AcousticVehicleConfig } from './AcousticConfig';
 import { Biquad, OnePole, ParamSmoother } from './Filters';
+import { LegacyTurboAcoustics } from './turbo/LegacyTurboAcoustics';
+import { TurboAcoustics } from './turbo/TurboAcoustics';
 
 const TWO_PI = 2 * Math.PI;
 
@@ -21,6 +23,11 @@ export interface AuxControl {
   transmissionTorque: number;
   gear: number;
   gearChanged: boolean;
+  /** Engine load 0..1 (turbo flow estimates; default: throttle). */
+  load?: number;
+  exhaustTempK?: number;
+  /** Engine burning (default true). */
+  combustion?: boolean;
 }
 
 function smoothstep(e0: number, e1: number, x: number): number {
@@ -83,9 +90,9 @@ export const DEFAULT_NOISE_TUNING: Readonly<NoiseTuning> = {
 
 /**
  * Non-engine sources of a vehicle (all new code, no third-party origin):
- * - turbo: compressor blade-pass whine f = N_shaft/60 · blades (faded out before Nyquist so it
- *   never aliases), broadband compressor hiss ∝ boost, blow-off valve vent noise ∝ BOV flow and
- *   compressor surge flutter when no BOV is fitted;
+ * - turbo: delegated to Turbo Acoustics 2.0 (src/audio/dsp/turbo/TurboAcoustics.ts) or, for the
+ *   A/B comparison, to the legacy model (turbo/LegacyTurboAcoustics.ts); each has its own noise
+ *   generator, independent of the transmission noise;
  * - tyres: two separate sources – continuous rolling noise (low/mid-weighted filtered noise whose
  *   level saturates with speed) and skid squeal (stick–slip narrow-band noise + scrub) gated by
  *   BOTH the slip ratio |slip|/max(|v|, 2) and the absolute slip speed with soft thresholds, so the
@@ -105,24 +112,15 @@ export class AuxAcoustics {
   private readonly rng: Prng;
   /** Separate stream for the tyre/wind noise so retuning them never changes the clunk and turbo randomness. */
   private readonly noiseRng: Prng;
-  private readonly hasTurbo: boolean;
-  private readonly blades: number;
-  private readonly bovFitted: boolean;
-  /** Factory diverter valve venting into the compressor inlet (heard through the intake duct). */
-  private readonly bovRecirculating: boolean;
-  private readonly bovDuctLp: OnePole;
+  /** Turbo Acoustics 2.0 voice (null without turbo or in legacy mode). */
+  readonly turbo: TurboAcoustics | null;
+  /** Legacy turbo model (A/B comparison only). */
+  readonly legacyTurbo: LegacyTurboAcoustics | null;
+  private readonly turboCtl = { shaftRpm: 0, shaftRpm2: 0, boostPa: 0, throttle: 0, engineLoad: 0, bovFlow: 0, omega: 0, exhaustTempK: 700, engineRunning: true };
   private readonly teeth: number;
   private readonly mech: number;
   private readonly gearRatios: number[];
-  private turboPhase = 0;
-  private turboPhase2 = 0;
-  /** Parallel-twin turbo: two compressors, each with its own blade-pass whine. */
-  private readonly twinTurbo: boolean;
   private gearPhase = 0;
-  private surgePhase = 0;
-  private readonly hissBp: Biquad;
-  private readonly bovBp: Biquad;
-  private readonly bovLp: OnePole;
   private readonly squealBp1: Biquad;
   private readonly squealBp2: Biquad;
   private readonly rollLp: Biquad;
@@ -179,18 +177,15 @@ export class AuxAcoustics {
     this.nyq = sampleRate / 2;
     this.rng = new Prng(cfg.seed * 104729 + 3);
     this.noiseRng = new Prng(cfg.seed * 7919 + 11);
-    this.hasTurbo = cfg.engine.induction === 'turbo' && !!cfg.engine.turbo;
-    this.blades = cfg.engine.turbo?.compressorBlades ?? 6;
-    this.twinTurbo = cfg.engine.turbo?.layout === 'parallel-twin';
-    this.bovFitted = cfg.engine.turbo?.bovEnabled ?? false;
-    this.bovRecirculating = cfg.engine.turbo?.bovVent === 'recirculating';
-    this.bovDuctLp = new OnePole(sampleRate, 1400);
+    const t = cfg.engine.induction === 'turbo' ? cfg.engine.turbo : undefined;
+    const legacy = !!t && cfg.turboModel === 'legacy';
+    this.turbo = t && !legacy ? new TurboAcoustics(sampleRate, cfg) : null;
+    this.legacyTurbo = t && legacy
+      ? new LegacyTurboAcoustics(sampleRate, cfg.seed * 104729 + 17, t.compressorBlades, t.layout === 'parallel-twin', t.bovEnabled, t.bovVent === 'recirculating')
+      : null;
     this.teeth = cfg.acoustic.gearTeeth;
     this.mech = cfg.acoustic.mechanicalNoise;
     this.gearRatios = cfg.gearRatios;
-    this.hissBp = new Biquad(sampleRate).setBandpass(5200, 0.7);
-    this.bovBp = new Biquad(sampleRate).setBandpass(2300, 1.1);
-    this.bovLp = new OnePole(sampleRate, 6000);
     this.squealBp1 = new Biquad(sampleRate).setBandpass(1050, 9);
     this.squealBp2 = new Biquad(sampleRate).setBandpass(2150, 7);
     this.rollLp = new Biquad(sampleRate).setLowpass(this.tune.rollLpMinHz, 0.7);
@@ -245,39 +240,19 @@ export class AuxAcoustics {
 
     // ---- turbo
     let turbo = 0;
-    if (this.hasTurbo) {
-      const f = (c.turboShaftRpm / 60) * this.blades;
-      const nyqFade = 1 - smoothstep(this.nyq * 0.8, this.nyq * 0.92, f);
-      this.turboPhase += f * dt;
-      this.turboPhase -= Math.floor(this.turboPhase);
-      const boostBar = Math.max(0, c.boostPa) / 1e5;
-      let whine = Math.sin(TWO_PI * this.turboPhase) * smoothstep(1500, 6000, f) * nyqFade * (0.25 + boostBar);
-      if (this.twinTurbo) {
-        // two rotors that never turn at exactly the same speed: the whines beat against each other,
-        // and each carries half the level (the air flow is shared), instead of one doubled voice
-        const f2 = ((c.turboShaftRpm2 ?? c.turboShaftRpm) / 60) * this.blades;
-        const nyqFade2 = 1 - smoothstep(this.nyq * 0.8, this.nyq * 0.92, f2);
-        this.turboPhase2 += f2 * dt;
-        this.turboPhase2 -= Math.floor(this.turboPhase2);
-        whine = 0.6 * (whine + Math.sin(TWO_PI * this.turboPhase2) * smoothstep(1500, 6000, f2) * nyqFade2 * (0.25 + boostBar));
-      }
-      const hiss = this.hissBp.process(rng.bipolar()) * boostBar * (0.4 + c.throttle);
-      let bov = 0;
-      if (c.bovFlow > 0.002) {
-        bov = this.bovBp.process(this.bovLp.lowpass(rng.bipolar())) * c.bovFlow * 3.2;
-        // recirculated: the jet stays inside the duct; only a low, muffled whoosh gets out
-        if (this.bovRecirculating) bov = this.bovDuctLp.lowpass(bov) * 0.35;
-      } else if (this.bovRecirculating) this.bovDuctLp.lowpass(0);
-      let surge = 0;
-      if (!this.bovFitted && boostBar > 0.15 && c.throttle < 0.12) {
-        // compressor surge: flow reversal cycles at ≈ 12–25 Hz while the trapped boost bleeds off
-        this.surgePhase += (12 + 10 * boostBar) * dt;
-        this.surgePhase -= Math.floor(this.surgePhase);
-        const gate = this.surgePhase < 0.35 ? Math.sin((Math.PI * this.surgePhase) / 0.35) : 0;
-        surge = this.bovBp.process(rng.bipolar()) * gate * boostBar * 2.5;
-      }
-      turbo = whine * 0.35 + hiss * 0.8 + bov + surge;
-    }
+    if (this.turbo) {
+      const tc = this.turboCtl;
+      tc.shaftRpm = c.turboShaftRpm;
+      tc.shaftRpm2 = c.turboShaftRpm2 ?? 0;
+      tc.boostPa = c.boostPa;
+      tc.throttle = c.throttle;
+      tc.engineLoad = c.load ?? c.throttle;
+      tc.bovFlow = c.bovFlow;
+      tc.omega = c.omega;
+      tc.exhaustTempK = c.exhaustTempK ?? 700;
+      tc.engineRunning = c.combustion ?? true;
+      turbo = this.turbo.process(tc);
+    } else if (this.legacyTurbo) turbo = this.legacyTurbo.process(c.turboShaftRpm, c.turboShaftRpm2, c.boostPa, c.throttle, c.bovFlow);
     this.turboOut = turbo;
 
     // ---- tyres: continuous rolling noise + (separate) skid squeal
