@@ -188,8 +188,10 @@ test('capítulo 3: liberação, cenários, rivais, revenda Elite, oficina dos V6
   await expect(page.getByTestId('ws-part-ecu-map-alfa-690t-s1')).toBeVisible();
   await expect(page.getByTestId('ws-part-ecu-stage1-na')).toHaveCount(0);
   await page.getByTestId('ws-part-ecu-map-alfa-690t-s1').click();
+  await page.getByTestId('ws-details-toggle').click();
   await expect(page.getByTestId('ws-compare')).toBeVisible();
   await shot(page, 'e2e-10-oficina-biturbo');
+  await page.getByRole('button', { name: 'Fechar detalhes' }).click();
   await page.getByTestId('ws-dyno').click();
   await expect(page.getByTestId('career-dyno-info')).toHaveAttribute('data-done', '1', { timeout: 60_000 });
   await expect(page.getByTestId('career-dyno-info')).toContainText('cv');

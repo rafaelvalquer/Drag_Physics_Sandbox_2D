@@ -183,9 +183,12 @@ test('capítulo 2: liberação, Caio, cenários, rivais, revenda, oficina compat
   await expect(page.getByTestId('ws-part-ecu-stage1')).toHaveCount(0);
   await expect(page.getByTestId('ws-part-ecu-stage1-na')).toHaveAttribute('data-state', 'available');
   await page.getByTestId('ws-part-ecu-stage1-na').click();
+  await page.getByTestId('ws-details-toggle').click();
   await expect(page.getByTestId('ws-compare')).toBeVisible();
   await shot(page, '10-oficina-eletronica');
+  await page.getByRole('button', { name: 'Fechar detalhes' }).click();
   await page.getByTestId('ws-buy').click();
+  await page.getByTestId('ws-confirm-accept').click();
   await expect(page.getByTestId('ws-pill-ecu-stage1-na')).toHaveText('Em uso');
   expect(await mode<number>(page, 'm.controller.activeCar.buildVersion')).toBe(2);
   await page.getByTestId('ws-tab-transmission').click();

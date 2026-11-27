@@ -71,9 +71,10 @@ import { buildFreeEvents } from '../ui/career/screens/CareerFreeEventsScreen';
 import { buildGarage, type GarageStats } from '../ui/career/screens/CareerGarageScreen';
 import { buildShell, type NavItem } from '../ui/career/screens/CareerShell';
 import { CareerTransitionManager } from '../ui/career/motion/CareerTransitionManager';
-import { buildWorkshopVisual, type WorkshopVisualView } from '../ui/career/workshop-visual/WorkshopVisualController';
-import { WorkshopVisualState } from '../ui/career/workshop-visual/WorkshopVisualState';
-import '../ui/career/workshop-visual/workshop-visual.css';
+import { buildWorkshop, type WorkshopVisualView } from '../ui/workshop/WorkshopController';
+import { CareerWorkshopAdapter } from '../ui/workshop/CareerWorkshopAdapter';
+import { WorkshopVisualState } from '../ui/workshop/WorkshopVisualState';
+
 import { menuViewModel } from '../ui/career/menu/CareerMenuProgress';
 
 type Screen = 'menu' | 'choose' | 'garage' | 'workshop' | 'dyno' | 'events' | 'free-events' | 'free-rival' | 'free-result' | 'free-history' | 'rival' | 'race' | 'result' | 'ending' | 'history' | 'market' | 'chapters';
@@ -730,17 +731,15 @@ export class CareerMode implements Mode {
 
   private workshopScreen(): HTMLElement {
     this.workshopView?.dispose();
-    const view = buildWorkshopVisual(
+    const view = buildWorkshop(
+      new CareerWorkshopAdapter(this.controller, () => chapterOf(this.chapter).number),
       {
-        controller: this.controller,
         guard: () => this.guard(),
         audio: this.ctx.audio,
-        chapterNumber: () => chapterOf(this.chapter).number,
         openDyno: () => this.show('dyno'),
         back: () => this.show('garage'),
-        saveChanged: () => this.refreshStatus(),
+        changed: () => this.refreshStatus(),
         toast,
-        confirm: (m) => confirm(m),
       },
       this.workshopState,
     );

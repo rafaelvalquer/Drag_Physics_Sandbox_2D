@@ -33,8 +33,9 @@ test('oficina: lista o que falta e instala com requisitos de uma vez', async ({ 
 
   // the turbo kit alone does not fit (clutch): the panel says what is missing
   await mode(page, `(m.workshopState.patch({ selected: 'turbo-basic', tab: 'turbo' }), m.show('workshop'))`);
-  await expect(page.getByTestId('ws-detail')).toContainText('Kit turbo básico');
   await expect(page.getByTestId('ws-buy')).toBeDisabled();
+  await page.getByTestId('ws-details-toggle').click();
+  await expect(page.getByTestId('ws-detail')).toContainText('Kit turbo básico');
   await expect(page.getByTestId('ws-req-list')).toBeVisible();
   await expect(page.getByTestId('ws-req-clutch-reinforced')).toBeVisible();
   const credits = await mode<number>(page, 'm.controller.save.credits');
@@ -75,12 +76,13 @@ test('oficina: remap aspirado com conversão turbo mostra o Mapa turbo equivalen
     `(() => { const s = m.controller.save; const c = s.ownedCars[0]; c.baseCarId = 'honda-civic-si-2008'; c.buildVersion = 2; c.installedParts = ['conversion-turbo-honda-k20-s1','conversion-compression-honda-k20','conversion-oil-honda-k20','fuel-honda-k20-s1','ignition-honda-k20-s1','rotating-assembly-honda-k20-s1','clutch-honda-k20-s3']; s.credits = 500000; })()`,
   );
   await mode(page, `(m.workshopState.patch({ selected: 'ecu-map-honda-k20-s2', tab: 'electronics' }), m.show('workshop'))`);
+  await expect(page.getByTestId('ws-install-bundle')).toBeVisible();
+  await page.getByTestId('ws-details-toggle').click();
   await expect(page.getByTestId('ws-detail')).toContainText('Remap');
   await expect(page.getByTestId('ws-req-list')).toBeVisible();
   await expect(page.getByTestId('ws-req-substitute')).toBeVisible();
   await expect(page.getByTestId('ws-req-ecu-conversion-honda-k20-s2')).toBeVisible();
   // the red "incompatible" line is replaced by the explanation
   await expect(page.getByTestId('ws-incompatible')).toHaveCount(0);
-  await expect(page.getByTestId('ws-install-bundle')).toBeVisible();
   await page.getByTestId('ws-detail').screenshot({ path: `${process.env.VISUAL_DIR ?? 'visual-captures'}/workshop-ecu-requirements.png` });
 });

@@ -139,6 +139,7 @@ test('campanha: escolha do carro, introdução, corrida visível, oficina, dinam
   await expect(page.getByTestId('career-workshop')).toBeVisible();
   await page.getByTestId('ws-tab-exhaust').click();
   await page.getByTestId('ws-part-exhaust-sport').click();
+  await page.getByTestId('ws-details-toggle').click();
   await expect(page.getByTestId('ws-compare')).toContainText('402 m (estimativa)');
   await expect(page.getByTestId('ws-compare')).not.toContainText('…', { timeout: 30_000 });
   // change markers: the freer exhaust raises power (green ▲) and nothing it changes gets worse
@@ -148,9 +149,11 @@ test('campanha: escolha do carro, introdução, corrida visível, oficina, dinam
   // the shop text and the physical effect are two different texts
   const texts = await page.getByTestId('ws-detail').locator('p').allTextContents();
   expect(texts[0]).not.toBe(texts[1]!.replace(/^Efeito físico:\s*/, ''));
+  await page.getByRole('button', { name: 'Fechar detalhes' }).click();
   await expect(page.getByTestId('ws-pill-exhaust-sport')).toHaveText('450 CR');
   const before = await credits(page);
   await page.getByTestId('ws-buy').click();
+  await page.getByTestId('ws-confirm-accept').click();
   await expect(page.getByTestId('ws-remove')).toBeVisible();
   expect(await credits(page)).toBe(before - 450);
   expect(await mode<string[]>(page, 'm.controller.activeCar.installedParts')).toContain('exhaust-sport');
@@ -167,6 +170,7 @@ test('campanha: escolha do carro, introdução, corrida visível, oficina, dinam
   expect(await credits(page)).toBe(before - 450);
   await page.getByTestId('ws-tab-intake').click();
   await expect(page.getByTestId('ws-pill-filter-sport')).toHaveText('250 CR');
+  await page.getByTestId('ws-subtab-intake-manifold').click();
   await expect(page.getByTestId('ws-pill-manifold-sport')).toContainText('Noite 2');
   await shot(page, '11b-oficina-admissao');
   await page.getByTestId('ws-tab-exhaust').click();
@@ -176,8 +180,11 @@ test('campanha: escolha do carro, introdução, corrida visível, oficina, dinam
   const stockPill = page.getByTestId('ws-stock-pill-exhaust');
   await expect(stockPill).toHaveText('Original');
   await page.getByTestId('ws-stock-exhaust').click();
+  await page.getByTestId('ws-details-toggle').click();
   await expect(page.getByTestId('ws-detail')).toContainText('Grátis');
+  await page.getByRole('button', { name: 'Fechar detalhes' }).click();
   await page.getByTestId('ws-install-stock').click();
+  await page.getByTestId('ws-confirm-accept').click();
   await expect(stockPill).toHaveText('Em uso');
   await expect(pill).toHaveText('Comprada');
   expect(await credits(page)).toBe(before - 450);
@@ -190,10 +197,10 @@ test('campanha: escolha do carro, introdução, corrida visível, oficina, dinam
   await expect(pill).toHaveText('Em uso');
   await expect(stockPill).toHaveText('Original');
   // restore everything to factory (confirmation dialog), then reinstall
-  page.once('dialog', (d) => void d.accept());
   await page.getByTestId('ws-restore-all').click();
+  await page.getByTestId('ws-confirm-accept').click();
   await expect(stockPill).toHaveText('Em uso');
-  await expect(page.getByTestId('ws-restore-all')).toHaveCount(0);
+  await expect(page.getByTestId('ws-restore-all')).toBeHidden();
   expect(await mode<string[]>(page, 'm.controller.activeCar.installedParts')).toEqual([]);
   await page.getByTestId('ws-part-exhaust-sport').click();
   await page.getByTestId('ws-install').click();

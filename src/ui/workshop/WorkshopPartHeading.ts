@@ -1,6 +1,6 @@
 import { h } from '../dom';
 
-type PartStatusStyle = 'stock' | 'installed' | 'owned' | 'available' | 'unaffordable' | 'locked';
+type PartStatusStyle = 'stock' | 'installed' | 'owned' | 'available' | 'unaffordable' | 'locked' | 'incompatible';
 
 export function workshopPartHeading(name: HTMLElement, state: PartStatusStyle, label: string, testId?: string): HTMLElement {
   return h('div', { class: 'ws-part-head' }, name,
