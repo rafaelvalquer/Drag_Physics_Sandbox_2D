@@ -5,7 +5,7 @@ import { incompatibility, familyOf } from './BuildResolverV2';
 import { resolveBuild, type ResolverVersion } from './BuildResolver';
 import type { BuildTune } from './buildCommon';
 import { issuesOf, type BuildIssue } from './buildIssues';
-import { ALL_PARTS, findPart, type EcuPart, type PartDef } from './parts';
+import { ALL_PARTS, findPart, type EcuPart, type PartCategory, type PartDef } from './parts';
 import { reconcileTune } from './TuningCapabilities';
 
 /** The part of the owned car list that planning reads (an OwnedCar fits). */
@@ -71,8 +71,32 @@ const entry = (partId: string, baseCarId: string): string => `${partId}@${baseCa
  * stay in `openIssues`.
  */
 export function planInstall(args: { base: CarConfig; car: PlanCar; save: PlanSave; partId: string; versionOf: (parts: readonly string[]) => ResolverVersion }): InstallPlan {
-  const { base, car, save, partId, versionOf } = args;
+  const { base, car, save } = args;
   const family = familyOf(base);
+  return planWithPolicy(args, {
+    credits: save.credits,
+    catalog: ALL_PARTS,
+    status: (p) => partStatus(save, car, p, family),
+    unlocked: (p) => isPartUnlocked(save, p, family),
+    inStock: (id) => save.inventoryPartIds.includes(entry(id, car.baseCarId)),
+    slotOf: (p) => p.category,
+    replace: withPartId,
+  });
+}
+
+export interface InstallPolicy {
+  credits: number;
+  catalog: readonly PartDef[];
+  status(part: PartDef): PartStatus;
+  unlocked(part: PartDef): boolean;
+  inStock(partId: string): boolean;
+  slotOf(part: PartDef): PartCategory;
+  replace(installed: readonly string[], partId: string): { parts: string[]; replaced: string | null };
+}
+
+/** Mechanics of proposing a compatible set. Callers supply their own inventory and progression rules. */
+export function planWithPolicy(args: { base: CarConfig; car: PlanCar; partId: string; versionOf: (parts: readonly string[]) => ResolverVersion }, policy: InstallPolicy): InstallPlan {
+  const { base, car, partId, versionOf } = args;
   const tuneOf = (parts: readonly string[]): BuildTune => (car.tune ? reconcileTune(base, parts, versionOf(parts), car.tune).tune : {});
   const resolve = (parts: readonly string[]) => resolveBuild(base, parts, tuneOf(parts), versionOf(parts));
   const fits = (p: PartDef, parts: readonly string[]): boolean => {
@@ -81,12 +105,12 @@ export function planInstall(args: { base: CarConfig; car: PlanCar; save: PlanSav
   };
   const step = (id: string, replaces: string | null, resolves: BuildIssue | null): PlanStep => {
     const p = findPart(id)!;
-    const status = partStatus(save, car, p, family);
-    const inStock = save.inventoryPartIds.includes(entry(id, car.baseCarId));
+    const status = policy.status(p);
+    const inStock = policy.inStock(id);
     return { partId: id, name: p.name, price: p.price, source: inStock ? 'stock' : 'buy', state: status.state, status, replaces, resolves };
   };
 
-  let first = withPartId(car.installedParts, partId);
+  let first = policy.replace(car.installedParts, partId);
   let parts = first.parts;
   let steps: PlanStep[] = [step(partId, first.replaced, null)];
   let open: BuildIssue[] = [];
@@ -99,15 +123,15 @@ export function planInstall(args: { base: CarConfig; car: PlanCar; save: PlanSav
     const r0 = resolve(parts);
     if (!r0.ok && issuesOf(r0.errors).some((x) => x.code === 'na-remap-on-conversion')) {
       const want = ({ stage1: 1, stage2: 2, stage3: 3 } as Record<string, number>)[(req as EcuPart).level] ?? 0;
-      const maps = ALL_PARTS.filter((q): q is EcuPart => q.category === 'ecu' && !!(q as EcuPart).conversionTier && fits(q, car.installedParts));
+      const maps = policy.catalog.filter((q): q is EcuPart => q.category === 'ecu' && !!(q as EcuPart).conversionTier && fits(q, car.installedParts));
       maps.sort((a, b) => Math.abs(a.conversionTier! - want) - Math.abs(b.conversionTier! - want) || a.conversionTier! - b.conversionTier!);
       const conflicts = (ps: readonly string[]): boolean => {
         const rr = resolve(ps);
         return !rr.ok && issuesOf(rr.errors).some((x) => x.code === 'na-remap-on-conversion');
       };
-      const pick = maps.find((m) => !conflicts(withPartId(car.installedParts, m.id).parts));
+      const pick = maps.find((m) => !conflicts(policy.replace(car.installedParts, m.id).parts));
       if (pick) {
-        first = withPartId(car.installedParts, pick.id);
+        first = policy.replace(car.installedParts, pick.id);
         parts = first.parts;
         steps = [step(pick.id, first.replaced, null)];
         substitutes = { requested: partId, reason: `${req.name} é um remap para motor aspirado e não funciona com a conversão turbo.` };
@@ -128,17 +152,16 @@ export function planInstall(args: { base: CarConfig; car: PlanCar; save: PlanSav
     // ids the ECU asks for (requiresParts) join the candidates of a "needs part" issue
     const ecu = parts.map(findPart).find((p) => p?.category === 'ecu') as EcuPart | undefined;
     const wanted = new Set<string>(target.code === 'needs-part' ? (ecu?.requiresParts ?? []).flatMap((q) => q.ids) : []);
-    const cands = ALL_PARTS.filter(
+    const cands = policy.catalog.filter(
       (p) => !parts.includes(p.id) && (target.fixCategories.includes(p.category) || wanted.has(p.id)) && fits(p, parts) && p.id !== steps[0]!.partId && (target.code !== 'na-remap-on-conversion' || !!(p as EcuPart).conversionTier),
     ).filter((p) => {
       // the NA remap goes to the stock whatever it cost; otherwise never swap out an installed part for a cheaper one
       if (target.code === 'na-remap-on-conversion') return true;
-      const cur = parts.map(findPart).find((q) => q?.category === p.category);
+      const cur = parts.map(findPart).find((q) => q && policy.slotOf(q) === policy.slotOf(p));
       return !cur || p.price > cur.price;
     });
     const rank = (p: PartDef): number[] => {
-      const st = partStatus(save, car, p, family);
-      return [st.state === 'owned' ? 0 : 1, isPartUnlocked(save, p, family) ? 0 : 1, p.price];
+      return [policy.status(p).state === 'owned' ? 0 : 1, policy.unlocked(p) ? 0 : 1, p.price];
     };
     cands.sort((a, b) => {
       const ra = rank(a);
@@ -147,7 +170,8 @@ export function planInstall(args: { base: CarConfig; car: PlanCar; save: PlanSav
     });
     let chosen: { id: string; replaced: string | null; next: string[] } | null = null;
     for (const c of cands) {
-      const t = withPartId(parts, c.id);
+      const t = policy.replace(parts, c.id);
+      if (t.replaced === steps[0]!.partId) continue;
       const rr = resolve(t.parts);
       const still = rr.ok ? [] : issuesOf(rr.errors);
       const fixed = !still.some((x) => x.code === target.code);
@@ -172,6 +196,6 @@ export function planInstall(args: { base: CarConfig; car: PlanCar; save: PlanSav
     if (s.source === 'buy') cost += s.price;
     if (s.state === 'locked') blockers.push(`${s.name}: ${s.status.detail}`);
   }
-  if (cost > save.credits) blockers.push(`Créditos insuficientes: faltam ${(cost - save.credits).toLocaleString('pt-BR')} CR.`);
+  if (cost > policy.credits) blockers.push(`Créditos insuficientes: faltam ${(cost - policy.credits).toLocaleString('pt-BR')} CR.`);
   return { ok: final.ok && blockers.length === 0, parts, steps, cost, blockers, openIssues: open, ...(substitutes ? { substitutes } : {}) };
 }

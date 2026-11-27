@@ -9,7 +9,7 @@ import { startOnlineServer } from '../../src/server/online/server';
 
 const auth = 'http://127.0.0.1:54751';
 const ui = 'http://127.0.0.1:54750';
-const accounts = [randomUUID(), randomUUID()];
+const accounts = [randomUUID(), randomUUID(), randomUUID()];
 const codes = new Map<string, { id: string; challenge: string }>();
 const keyId = randomUUID();
 const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
@@ -28,18 +28,29 @@ async function startFixtureDatabase() {
     try {
       await sql.unsafe(authSchema).simple();
       await sql.unsafe(migration).simple();
-      await sql`insert into auth.users values (${accounts[0]}), (${accounts[1]})`;
+      await sql`insert into auth.users values (${accounts[0]}), (${accounts[1]}), (${accounts[2]})`;
     } finally { await sql.end(); }
-    return { url: databaseUrl, poolSize: 12, close: undefined };
+    return { url: databaseUrl, poolSize: 12, close: undefined, fundWorkshop: async () => {
+      const local = postgres(databaseUrl, { max: 1 });
+      try {
+        await local`update online_wallets set cr_balance = 20000 where user_id = ${accounts[2]!}`;
+        await local`update online_car_progression set pp_balance = 500, pp_earned_total = 500
+          where car_id in (select id from online_cars where user_id = ${accounts[2]!})`;
+      } finally { await local.end(); }
+    } };
   }
 
   const db = await PGlite.create();
   await db.exec(authSchema);
   await db.exec(migration);
-  await db.query('insert into auth.users values ($1), ($2)', accounts);
+  await db.query('insert into auth.users values ($1), ($2), ($3)', accounts);
   const socket = new PGLiteSocketServer({ db, port: 0, maxConnections: 1 });
   await socket.start();
   return { url: `postgresql://postgres@${socket.getServerConn()}/postgres`, poolSize: 1,
+    fundWorkshop: async () => {
+      await db.query('update online_wallets set cr_balance = 20000 where user_id = $1', [accounts[2]]);
+      await db.query('update online_car_progression set pp_balance = 500, pp_earned_total = 500 where car_id in (select id from online_cars where user_id = $1)', [accounts[2]]);
+    },
     close: async () => { await socket.stop(); await db.close(); } };
 }
 
@@ -67,7 +78,10 @@ const provider = createServer(async (request, response) => {
   response.setHeader('Content-Type', 'application/json');
   if (request.method === 'OPTIONS') { response.writeHead(204).end(); return; }
   const url = new URL(request.url ?? '/', auth);
-  if (url.pathname === '/auth/v1/.well-known/jwks.json') {
+  if (url.pathname === '/fixture/workshop' && request.method === 'POST') {
+    await database.fundWorkshop();
+    response.writeHead(204).end();
+  } else if (url.pathname === '/auth/v1/.well-known/jwks.json') {
     response.end(JSON.stringify({ keys: [{ ...publicKey.export({ format: 'jwk' }), kid: keyId, alg: 'ES256', use: 'sig', key_ops: ['verify'] }] }));
   } else if (url.pathname === '/auth/v1/authorize') {
     const id = accounts[Number(request.headers['x-fixture-account'])];

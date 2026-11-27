@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { OnlineGearUpdate, OnlineRaceSnapshot } from '../../src/game/online/contracts';
+import { findPart } from '../../src/game/career/tuning/parts';
 
 async function login(page: Page, account: number): Promise<void> {
   await page.route('**/auth/v1/authorize?**', (route) => route.continue({
@@ -147,11 +148,14 @@ async function checkProgress(page: Page, won: boolean, pilot: string, rival: str
 
   await nav.getByRole('button', { name: 'Garagem', exact: true }).click();
   await screen.getByRole('button', { name: 'Oficina', exact: true }).click();
-  await expect(screen.getByRole('heading', { name: 'Componentes de fábrica', exact: true })).toBeVisible();
-  await expect(screen.getByText('Original', { exact: true })).toBeVisible();
-  const blocked = screen.getByRole('article').filter({ hasText: 'Bloqueada por preparação' }).filter({ hasText: /Requer / }).first();
-  await expect(blocked.getByText(/PP disponíveis/)).toBeVisible();
-  await blocked.getByRole('button', { name: 'Ver preparação', exact: true }).click();
+  await expect(screen.getByTestId('ws-stage')).toBeVisible();
+  await expect(screen.getByTestId('ws-overview')).toContainText('Original');
+  await screen.getByTestId('ws-search-panel').locator('summary').click();
+  await screen.getByTestId('ws-search').fill('turbina grande');
+  await screen.getByTestId('ws-part-turbine-large').click();
+  await screen.getByTestId('ws-search-panel').locator('summary').click();
+  await expect(screen.getByTestId('ws-unlock')).toBeDisabled();
+  await screen.getByRole('button', { name: 'Ver preparação', exact: true }).click();
   await expect(screen.getByRole('heading', { name: 'Preparação', exact: true })).toBeVisible();
   const focused = screen.locator('.online-focused');
   await expect(focused).toHaveCount(1);
@@ -163,6 +167,8 @@ async function checkProgress(page: Page, won: boolean, pilot: string, rival: str
   const branches = screen.getByRole('navigation', { name: 'Ramos da preparação' });
   await branches.getByRole('button', { name: 'Pneus e aderência', exact: true }).click();
   await expect(screen.getByRole('heading', { name: 'Pneus e aderência', exact: true })).toBeFocused();
+  await screen.getByRole('button', { name: 'Voltar à oficina', exact: true }).click();
+  await expect(screen.getByTestId('ws-part-turbine-large')).toHaveAttribute('aria-pressed', 'true');
 
   await nav.getByRole('button', { name: 'Ranking', exact: true }).click();
   const position = won ? '1' : '2';
@@ -219,4 +225,73 @@ test('duas sessões de navegador completam PKCE, garagem e corrida 1v1', async (
       checkProgress(right!, !leftWon, 'Piloto Ouro', 'Piloto Azul'),
     ]);
   } finally { await Promise.allSettled(contexts.map((context) => context.close())); }
+});
+
+test('oficina compartilhada confirma PP, compra, conjunto e restauração pelo servidor', async ({ page }) => {
+  await login(page, 2);
+  const base = 'gm-chevette-sl-1988';
+  await enroll(page, 'Piloto Oficina', base);
+  expect((await page.request.post('http://127.0.0.1:54751/fixture/workshop')).ok()).toBe(true);
+  await page.reload();
+  await page.getByRole('button', { name: 'Online', exact: true }).click();
+  await page.getByRole('button', { name: 'Oficina', exact: true }).click();
+  const workshop = page.getByTestId('ws-visual');
+  await expect(workshop).toHaveAttribute('data-mode', 'online');
+  await expect(workshop.getByTestId('ws-overview')).toContainText('20.000 CR');
+  await expect(workshop.getByTestId('ws-stage')).toHaveAttribute('data-painted', /[1-9]/);
+  await workshop.evaluate((element) => { element.dataset.identity = 'same'; });
+  const captures = `${process.env.VISUAL_DIR ?? 'visual-captures'}/workshop-online`;
+  const shot = (name: string) => page.screenshot({ path: `${captures}/${name}.png`, fullPage: true });
+  const choose = async (tab: string, slot: string, id: string) => {
+    await workshop.getByTestId(`ws-tab-${tab}`).click();
+    await workshop.getByTestId(`ws-subtab-${slot}`).click();
+    await workshop.getByTestId(`ws-part-${id}`).click();
+  };
+  const open = () => workshop.getByTestId('ws-details-toggle').click();
+  const close = () => workshop.getByRole('button', { name: 'Fechar detalhes' }).click();
+  const unlock = async () => {
+    await workshop.getByTestId('ws-unlock').click();
+    await page.getByTestId('ws-confirm-accept').click();
+    await expect(workshop.getByTestId('ws-unlock')).toHaveCount(0);
+  };
+  await choose('turbo', 'turbo', 'turbo-basic');
+  await expect(workshop.getByTestId('ws-part-turbo-basic')).toHaveAttribute('data-state', 'locked');
+  await shot('01-desbloqueio');
+  await unlock();
+  await expect(workshop.getByTestId('ws-part-turbo-basic')).toHaveAttribute('aria-pressed', 'true');
+  await expect(workshop.getByTestId('ws-overview')).toContainText('20.000 CR');
+  await expect(workshop.getByTestId('ws-buy')).toBeDisabled();
+  await open();
+  await expect(workshop.getByTestId('ws-req-clutch-reinforced')).toBeVisible();
+  await shot('02-requisitos-mecanicos');
+  await close();
+
+  await choose('transmission', 'clutch', 'clutch-reinforced');
+  await unlock();
+  await workshop.getByTestId('ws-buy-stock').click();
+  await page.getByTestId('ws-confirm-accept').click();
+  await expect(workshop.getByTestId('ws-part-clutch-reinforced')).toHaveAttribute('data-state', 'owned');
+  await choose('turbo', 'turbo', 'turbo-basic');
+  await workshop.getByTestId('ws-install-bundle').click();
+  await expect(page.getByTestId('ws-bundle-modal')).toContainText('do estoque');
+  await page.getByTestId('ws-bundle-confirm').click();
+  await expect(workshop.getByTestId('ws-part-turbo-basic')).toHaveAttribute('data-state', 'installed');
+  await expect(workshop).toHaveAttribute('data-identity', 'same');
+  const balance = 20000 - findPart('turbo-basic')!.price - findPart('clutch-reinforced')!.price;
+  await expect(workshop.getByTestId('ws-overview')).toContainText(`${balance.toLocaleString('pt-BR')} CR`);
+  await workshop.getByTestId('ws-version-slide').click();
+  await expect(workshop.getByTestId('ws-slider')).toBeVisible();
+  await shot('03-conjunto-e-comparacao');
+
+  await workshop.getByTestId('ws-restore-all').click();
+  await page.getByTestId('ws-confirm-accept').click();
+  await expect(workshop.getByTestId('ws-part-turbo-basic')).toHaveAttribute('data-state', 'owned');
+  await expect(workshop.getByTestId('ws-overview')).toContainText(`${balance.toLocaleString('pt-BR')} CR`);
+  await choose('exhaust', 'exhaust', 'exhaust-sport');
+  await unlock();
+  await workshop.getByTestId('ws-buy').click();
+  await page.getByTestId('ws-confirm-accept').click();
+  await expect(workshop.getByTestId('ws-part-exhaust-sport')).toHaveAttribute('data-state', 'installed');
+  await expect(workshop.getByTestId('ws-overview')).toContainText(`${(balance - findPart('exhaust-sport')!.price).toLocaleString('pt-BR')} CR`);
+  await shot('04-compra-e-instalacao');
 });
