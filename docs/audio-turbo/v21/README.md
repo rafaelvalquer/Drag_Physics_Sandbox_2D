@@ -85,9 +85,10 @@ A posição de medição no duto também influencia a energia medida na passagem
 Os valores publicados servem de referência qualitativa para a relação entre compressor
 e admissão. [Sriganesh et al., medições na admissão do compressor](https://saemobilus.sae.org/articles/circumferential-variation-noise-blade-pass-frequency-a-turbocharger-compressor-ported-shroud-2021-01-1044)
 
-Os limites de aceitação perceptiva dependem da escuta do proprietário. Compare o
-assobio em subida de pressão, o caráter de sino ou sirene, a textura em carga estabilizada
-e a presença do motor no áudio completo. A aprovação auditiva precede o merge na `main`.
+O proprietário do jogo aprovou o modelo D (rotor híbrido) em 27 de novembro de 2026.
+A aprovação se refere à revisão de áudio `d2a3884`. Os arquivos A/B/C/D ficam
+disponíveis para comparar o assobio em subida de pressão, a textura em carga
+estabilizada e a presença do motor na mixagem completa.
 
 Para regenerar os arquivos e os ganhos do Sandbox:
 
