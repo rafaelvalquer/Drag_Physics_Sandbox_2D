@@ -19,6 +19,8 @@ export class TurboDuctResonance {
   private readonly dryGain: number;
   private readonly bypassLp: boolean;
   out = 0;
+  /** Consecutive near-silent samples (input and output); after the filter tails die the path idles. */
+  private quiet = 0;
 
   constructor(sampleRate: number, p: ResolvedTurboProfile, lowQuality: boolean, enabled = true) {
     const list = enabled ? p.resonance.slice(0, lowQuality ? 1 : 3) : [];
@@ -35,6 +37,19 @@ export class TurboDuctResonance {
   }
 
   process(x: number): number {
+    if (x > -1e-9 && x < 1e-9) {
+      if (this.quiet > 2048) {
+        this.out = 0;
+        return 0;
+      }
+      this.quiet++;
+    } else if (this.quiet > 2048) {
+      // waking up: the filter states have decayed to ~0, restart them cleanly
+      for (const r of this.res) r.reset();
+      this.lp1.reset();
+      this.lp2.reset();
+      this.quiet = 0;
+    } else this.quiet = 0;
     let y = x;
     for (let i = 0; i < this.res.length; i++) y += this.res[i]!.process(x) * this.gains[i]!;
     if (!this.bypassLp) y = this.lp2.process(this.lp1.process(y));

@@ -39,8 +39,9 @@ export const FLUTTER_TUNING = {
  */
 export function reliefCapacity(p: ResolvedTurboProfile): number {
   if (p.ventType === 'none') return 0;
-  const base = p.ventType === 'recirculating' ? 0.9 : 0.85;
-  const slow = Math.min(0.3, Math.max(0, (p.bovVentTimeS - 0.08) / 0.6));
+  // a healthy valve takes almost all of the back-flow; a slow (soft) one leaves a short residual flutter
+  const base = p.ventType === 'recirculating' ? 0.98 : 0.96;
+  const slow = Math.min(0.3, Math.max(0, (p.bovVentTimeS - 0.12) / 0.5));
   return base * (1 - slow);
 }
 

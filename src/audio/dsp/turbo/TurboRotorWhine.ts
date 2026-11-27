@@ -131,20 +131,42 @@ export class TurboRotorWhine {
     this.a3 += this.d3;
     this.aB += this.dB;
     this.am += this.dAm;
+    if (this.a1 + this.a2 + this.a3 + this.aB < 1e-9 && this.d1 <= 0 && this.d2 <= 0 && this.d3 <= 0 && this.dB <= 0) {
+      // all partials silent (idle, engine off, faded above Nyquist): keep the phase, skip the trig
+      this.out1 = this.outH = this.outB = this.out = 0;
+      return 0;
+    }
     const x = TWO_PI * this.phase;
     const s1 = Math.sin(x);
     const c1 = Math.cos(x);
     const s2 = 2 * s1 * c1;
     const s3 = s1 * (3 - 4 * s1 * s1);
-    const pb = this.blades * this.phase;
-    const sB = Math.sin(TWO_PI * (pb - Math.floor(pb)));
+    // blade pass = sin(blades · x): imaginary part of (c1 + i·s1)^blades, by repeated squaring
+    let br = 1;
+    let bi = 0;
+    let pr = c1;
+    let pi = s1;
+    for (let k = this.blades; k > 0; k >>= 1) {
+      if (k & 1) {
+        const t = br * pr - bi * pi;
+        bi = br * pi + bi * pr;
+        br = t;
+      }
+      const t = pr * pr - pi * pi;
+      pi = 2 * pr * pi;
+      pr = t;
+    }
+    const sB = bi;
     let pulse = 1;
     if (this.pulseDepth > 0) {
       this.pulsePhase += this.pulseHz * this.dt;
       this.pulsePhase -= Math.floor(this.pulsePhase);
       // exhaust pulses load the turbine once per firing: a soft, asymmetric modulation
       const q = this.pulsePhase;
-      pulse = 1 + this.pulseDepth * (q < 0.3 ? Math.sin((Math.PI * q) / 0.3) : -0.25 * Math.sin((Math.PI * (q - 0.3)) / 0.7));
+      // (half-sine lobes approximated by parabolas 4u(1 − u): same shape within 5%, no trig per sample)
+      const u = q < 0.3 ? q / 0.3 : (q - 0.3) / 0.7;
+      const lobe = 4 * u * (1 - u);
+      pulse = 1 + this.pulseDepth * (q < 0.3 ? lobe : -0.25 * lobe);
     }
     const g = this.am * pulse;
     this.out1 = this.a1 * s1 * g;

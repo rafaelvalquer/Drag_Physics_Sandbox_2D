@@ -63,7 +63,8 @@ const MODERN_SMALL = p('modern-small-oem', {
   flutter: { enabled: true, gain: 0.5, damping: 0.68, basePulseRateHz: 17, bodyHz: 360, attackHz: 2500 },
   wastegate: { gain: 0.4 },
   intakeAttenuation: 0.55,
-  overallGain: 0.85,
+  // factory turbos (airbox, recirculating valve) sit ~4-6 dBA under an open aftermarket kit
+  overallGain: 1.5,
 });
 
 const MODERN_MEDIUM = p('modern-medium-oem', {
@@ -85,7 +86,7 @@ const MODERN_PERFORMANCE = p('modern-performance-oem', {
   blowOff: { gain: 0.9, attackMs: 6, releaseMs: 90, spectralColor: 0.45, resonanceHz: 2200, tonalGain: 0.2 },
   flutter: { ...MODERN_MEDIUM.flutter, gain: 0.7 },
   intakeAttenuation: 0.4,
-  overallGain: 1,
+  overallGain: 1.3,
 });
 
 const MODERN_TWIN_SCROLL = p('modern-twin-scroll', {
@@ -93,6 +94,7 @@ const MODERN_TWIN_SCROLL = p('modern-twin-scroll', {
   housing: 'twin-scroll',
   rotor: { ...MODERN_MEDIUM.rotor, order1Gain: 0.22, order2Gain: 0.45, order3Gain: 0.3, bladePassGain: 0.8, pulseModulation: 0.07, onsetShaft: 0.3, spoolEmphasis: 0.55 },
   intakeAttenuation: 0.55,
+  overallGain: 1.6,
 });
 
 const MODERN_HYBRID = p('modern-hybrid-turbo', {
@@ -142,7 +144,7 @@ const V6_TWIN_OEM = p('v6-parallel-twin-oem', {
   compressor: { ...MODERN_MEDIUM.compressor, bodyGain: 0.32, turbulenceGain: 0.26, highFrequencyGain: 0.16 },
   resonance: [{ frequencyHz: 1100, q: 2.5, gain: 0.25 }],
   intakeAttenuation: 0.55,
-  overallGain: 0.85,
+  overallGain: 1.7,
 });
 
 const V6_TWIN_UPGRADED = p('v6-parallel-twin-upgraded', {
@@ -212,7 +214,7 @@ export const FAMILY_ACOUSTICS: Readonly<Record<string, FamilyAcoustics>> = {
   'psa-prince-thp': { label: 'PSA/BMW Prince THP 1.6', factory: 'modern-small-oem', upgraded: ['modern-hybrid-turbo', 'modern-big-turbo'], patch: { blowOff: { gain: 0.55 } } },
   'vw-ea113': { label: 'VW EA113 1.8T', factory: 'modern-medium-oem', upgraded: ['modern-hybrid-turbo', 'modern-big-turbo'] },
   'vw-ea888': { label: 'VW EA888 2.0 TSI', factory: 'modern-medium-oem', upgraded: ['modern-hybrid-turbo', 'modern-big-turbo'], patch: { resonance: [{ frequencyHz: 1180, q: 2.5, gain: 0.25 }] } },
-  'mb-m274': { label: 'Mercedes M274', factory: 'modern-small-oem', upgraded: ['modern-hybrid-turbo', 'modern-big-turbo'], patch: { intakeAttenuation: 0.7, overallGain: 0.7 } },
+  'mb-m274': { label: 'Mercedes M274', factory: 'modern-small-oem', upgraded: ['modern-hybrid-turbo', 'modern-big-turbo'], patch: { intakeAttenuation: 0.7, overallGain: 1.25 } },
   'bmw-n20': { label: 'BMW N20 (twin-scroll)', factory: 'modern-twin-scroll', upgraded: ['modern-hybrid-turbo', 'modern-big-turbo'], patch: { housing: 'twin-scroll' } },
   'bmw-n55': {
     label: 'BMW N55 (twin-scroll I6)',
@@ -233,9 +235,9 @@ export const FAMILY_ACOUSTICS: Readonly<Record<string, FamilyAcoustics>> = {
   // Lexus IS 350 (2GR-FSE) stays NA in this project: a future conversion maps here.
   'toyota-2gr-fse': { label: 'Toyota 2GR-FSE (sem conversão)', conversion: 'v6-single-conversion' },
   // ---- Chapter 3 parallel twins
-  'mercedes-m276': { label: 'Mercedes M276 biturbo', factory: 'v6-parallel-twin-oem', upgraded: ['v6-parallel-twin-upgraded', 'v6-parallel-twin-upgraded'], patch: { blowOff: { gain: 0.6 }, overallGain: 0.8 } },
+  'mercedes-m276': { label: 'Mercedes M276 biturbo', factory: 'v6-parallel-twin-oem', upgraded: ['v6-parallel-twin-upgraded', 'v6-parallel-twin-upgraded'], patch: { blowOff: { gain: 0.6 }, overallGain: 1.6 } },
   'kia-lambda33': { label: 'Kia Lambda II 3.3 T-GDi', factory: 'v6-parallel-twin-oem', upgraded: ['v6-parallel-twin-upgraded', 'v6-parallel-twin-upgraded'], patch: { resonance: [{ frequencyHz: 1080, q: 2.5, gain: 0.26 }] } },
-  'maserati-f160': { label: 'Maserati F160', factory: 'v6-parallel-twin-oem', upgraded: ['v6-parallel-twin-upgraded', 'v6-parallel-twin-upgraded'], patch: { intakeAttenuation: 0.6, overallGain: 0.7 } },
+  'maserati-f160': { label: 'Maserati F160', factory: 'v6-parallel-twin-oem', upgraded: ['v6-parallel-twin-upgraded', 'v6-parallel-twin-upgraded'], patch: { intakeAttenuation: 0.6, overallGain: 1.4 } },
   'alfa-690t': { label: 'Alfa Romeo 690T', factory: 'v6-parallel-twin-oem', upgraded: ['v6-parallel-twin-upgraded', 'v6-parallel-twin-upgraded'], patch: { rotor: { onsetShaft: 0.26, spoolEmphasis: 0.65, level: 0.9 } } },
   'nissan-vr38dett': {
     label: 'Nissan VR38DETT',
