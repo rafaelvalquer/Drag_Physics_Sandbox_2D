@@ -241,7 +241,7 @@ test('oficina compartilhada confirma PP, compra, conjunto e restauração pelo s
   await expect(workshop.getByTestId('ws-stage')).toHaveAttribute('data-painted', /[1-9]/);
   await workshop.evaluate((element) => { element.dataset.identity = 'same'; });
   const captures = `${process.env.VISUAL_DIR ?? 'visual-captures'}/workshop-online`;
-  const shot = (name: string) => page.screenshot({ path: `${captures}/${name}.png`, fullPage: true });
+  const shot = (name: string) => page.screenshot({ path: `${captures}/${name}.png`, fullPage: true, animations: 'disabled' });
   const choose = async (tab: string, slot: string, id: string) => {
     await workshop.getByTestId(`ws-tab-${tab}`).click();
     await workshop.getByTestId(`ws-subtab-${slot}`).click();

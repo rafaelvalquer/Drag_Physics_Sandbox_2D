@@ -340,14 +340,22 @@ test('setas navegam nas três regiões e a oficina libera os canvases ao sair', 
   await expect(page.getByTestId('ws-details-drawer')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('ws-details-drawer')).toBeHidden();
+  const cdp = await page.context().newCDPSession(page);
+  const heapMb: number[] = [];
+  await cdp.send('Performance.enable');
   for (let cycle = 0; cycle < 3; cycle++) {
     await page.getByTestId('ws-back').click();
     await expect(page.getByTestId('ws-canvas-before')).toHaveCount(0);
+    await cdp.send('HeapProfiler.collectGarbage');
+    const { metrics } = await cdp.send('Performance.getMetrics');
+    heapMb.push(metrics.find((metric) => metric.name === 'JSHeapUsedSize')!.value / (1024 * 1024));
     await mode(page, "m.show('workshop')");
     await waitPainted(page);
     await expect(page.getByTestId('ws-canvas-before')).toHaveCount(1);
     await expect(page.getByTestId('ws-part-manifold-sport')).toHaveAttribute('aria-pressed', 'true');
   }
+  await cdp.detach();
+  console.log(`JS heap after closing: ${heapMb.map((value) => value.toFixed(2)).join(', ')} MiB`);
 });
 
 test('toque seleciona Motor, Comando e Stage no celular sem gravar alterações', async ({ browser }) => {
@@ -384,11 +392,16 @@ test('V43b layout responsivo: 1920, 1366, tablet e celular sem rolagem horizonta
   for (const [w, h, name] of sizes) {
     await page.setViewportSize({ width: w, height: h });
     await page.waitForTimeout(250);
+    await page.getByTestId('ws-overview').scrollIntoViewIfNeeded();
     const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(over, `${name} horizontal overflow`).toBeLessThanOrEqual(1);
     await expect(page.getByTestId('ws-stage')).toBeVisible();
     await expect(page.getByTestId('ws-part-exhaust-sport')).toBeVisible();
     await page.screenshot({ path: `${OUT}/layout-${name}.png`, fullPage: true });
+    if (name === '430x900' || name === '844x390') {
+      await page.getByTestId('ws-buy').scrollIntoViewIfNeeded();
+      await page.screenshot({ path: `${OUT}/layout-${name}-catalogo.png` });
+    }
   }
   const cols = await page.getByTestId('ws-grid').evaluate((el) => getComputedStyle(el).display);
   expect(['flex', 'grid']).toContain(cols);
@@ -409,7 +422,7 @@ for (const car of CARS) {
     await page.setViewportSize({ width: 1600, height: 900 });
     await newCampaign(page);
     await openWorkshopWith(page, car.id);
-    const shot = (name: string): Promise<Buffer> => page.screenshot({ path: `${OUT}/${car.label}-${name}.png` });
+    const shot = (name: string): Promise<Buffer> => page.screenshot({ path: `${OUT}/${car.label}-${name}.png`, animations: 'disabled' });
     await shot('01-sem-selecao');
     await pick(page, car.turbo);
     await shot('02-turbina');
